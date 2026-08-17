@@ -1,0 +1,29 @@
+name: NexCode Android Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+      - run: npm install
+      - run: npm run validate:content
+      - run: npm run typecheck
+      - run: npx expo export --platform android --output-dir dist
+      - run: npx eas-cli build --platform android --profile ${{ inputs.profile }} --non-interactive --wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
