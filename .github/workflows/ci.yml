@@ -1,0 +1,19 @@
+name: NexCode CI
+
+on:
+  push:
+    branches: [main, feat/v1.5-core]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: npm
+      - run: npm install
+      - run: npm run validate:content
+      - run: npm run typecheck
