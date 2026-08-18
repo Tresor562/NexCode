@@ -35,6 +35,13 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+      - name: Resolve one-time production trigger
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ -f release-production.flag ]; then
+            echo "BUILD_PROFILE=production" >> "$GITHUB_ENV"
+            echo "One-time production AAB trigger detected."
+          fi
       - uses: actions/setup-node@v6
         with:
           node-version: 22.13.1
