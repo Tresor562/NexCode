@@ -9,7 +9,8 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
-    "validate:content": "node scripts/validate-content.mjs"
+    "validate:content": "node scripts/validate-content.mjs",
+    "audit:curriculum": "node scripts/audit-curriculum.mjs"
   },
   "dependencies": {
     "expo": "~57.0.9",
