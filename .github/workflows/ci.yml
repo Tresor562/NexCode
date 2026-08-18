@@ -5,15 +5,23 @@ on:
     branches: [main, feat/v1.5-core]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: 22.13.1
       - run: npm install
+      - name: Check Expo dependency compatibility
+        run: npx expo install --check
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
       - run: npm run validate:content
       - run: npm run audit:curriculum
       - run: npm run audit:mastery
