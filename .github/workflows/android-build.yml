@@ -11,19 +11,34 @@ on:
         options:
           - preview
           - production
+  push:
+    branches:
+      - feat/v1.5-core
+    paths:
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'assets/**'
+      - '.github/workflows/android-build.yml'
 
 permissions:
   contents: read
 
+env:
+  BUILD_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'preview' }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6
         with:
           node-version: 22.13.1
+          cache: npm
       - run: npm install
       - name: Check Expo dependency compatibility
         run: npx expo install --check
@@ -48,13 +63,18 @@ jobs:
           node - <<'NODE'
           const app = require('./app.json');
           const projectId = app?.expo?.extra?.eas?.projectId;
+          const owner = app?.expo?.owner;
           if (!projectId) {
-            console.error('::error::Expo EAS projectId is missing at expo.extra.eas.projectId. Initialize/link the project once with EAS before CI native builds.');
+            console.error('::error::Expo EAS projectId is missing at expo.extra.eas.projectId.');
             process.exit(1);
           }
-          console.log(`EAS project binding configured: ${projectId}`);
+          console.log(`EAS project binding configured: @${owner}/${app.expo.slug} (${projectId})`);
           NODE
+      - name: Verify Expo identity
+        run: npx eas-cli whoami --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       - name: Build Android with EAS
-        run: npx eas-cli build --platform android --profile ${{ inputs.profile }} --non-interactive --wait
+        run: npx eas-cli build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
