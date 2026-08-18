@@ -51,6 +51,8 @@ jobs:
       - run: npm run audit:product
       - run: npm run typecheck
       - run: npx expo export --platform android --output-dir dist
+      - name: Expo Doctor
+        run: npx expo-doctor
       - name: Verify EAS credentials and project binding
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
