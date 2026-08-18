@@ -84,5 +84,5 @@ for (const kind of ['mcq','predict-output','fill-code','order-steps','debug','wr
   if (!exercise.includes(`'${kind}'`)) throw new Error(`Rich exercise model missing ${kind}`);
 }
 
-console.log(`Learning quality audit OK: ${requiredEngines ? Object.keys(requiredEngines).length : 0} engines checked, 12 catalog tracks wired, >=${deepActivitiesMinimum} mastery activities across the 8 deep-expanded tracks before base/integration additions.`);
-console.log('Bot tracks are intentionally audited for real wiring and production topics, not falsely declared at 500+ yet.');
+console.log(`Learning quality audit OK: ${Object.keys(requiredEngines).length} engines checked, 12 catalog tracks wired, >=${deepActivitiesMinimum} mastery activities across the 8 deep-expanded tracks before base/integration additions.`);
+console.log('Bot tracks are quality-audited here for wiring and production topics; their >=500 structured-activity depth is enforced separately by audit:bots.');
