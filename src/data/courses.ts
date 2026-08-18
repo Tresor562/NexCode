@@ -11,6 +11,14 @@ import { gitMasteryLessons } from './gitMastery';
 import { nodeApiMasteryLessons } from './nodeApiMastery';
 import { webIntegrationMasteryLessons, htmlIntegrationMasteryLessons, cssIntegrationMasteryLessons } from './frontendIntegrationMastery';
 import { javascriptIntegrationMasteryLessons, pythonIntegrationMasteryLessons, sqlIntegrationMasteryLessons } from './programmingIntegrationMastery';
+import {
+  gitIntegrationMasteryLessons,
+  nodeIntegrationMasteryLessons,
+  botFoundationIntegrationMasteryLessons,
+  telegramIntegrationMasteryLessons,
+  discordIntegrationMasteryLessons,
+  whatsappIntegrationMasteryLessons,
+} from './systemsBotsIntegrationMastery';
 import { guidedProjects } from './projects';
 import { Course, Lesson, makeCourse } from './curriculumCore';
 
@@ -24,8 +32,12 @@ function expansionFor(courseId: string): Lesson[] {
   if (courseId === 'javascript-foundations') return [...javascriptMasteryLessons, ...javascriptIntegrationMasteryLessons];
   if (courseId === 'python-foundations') return [...pythonMasteryLessons, ...pythonIntegrationMasteryLessons];
   if (courseId === 'sql-foundations') return [...sqlMasteryLessons, ...sqlIntegrationMasteryLessons];
-  if (courseId === 'git-github-foundations') return gitMasteryLessons;
-  if (courseId === 'node-api-foundations') return nodeApiMasteryLessons;
+  if (courseId === 'git-github-foundations') return [...gitMasteryLessons, ...gitIntegrationMasteryLessons];
+  if (courseId === 'node-api-foundations') return [...nodeApiMasteryLessons, ...nodeIntegrationMasteryLessons];
+  if (courseId === 'bot-foundations') return botFoundationIntegrationMasteryLessons;
+  if (courseId === 'telegram-bots') return telegramIntegrationMasteryLessons;
+  if (courseId === 'discord-bots') return discordIntegrationMasteryLessons;
+  if (courseId === 'whatsapp-bots') return whatsappIntegrationMasteryLessons;
   return [];
 }
 
