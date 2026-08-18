@@ -224,6 +224,7 @@ export const guidedProjects: GuidedProject[] = [
 ];
 
 export const practiceTemplates = {
+  'HTML/CSS': '<main>\n  <h1>NexCode</h1>\n  <p>J’apprends à construire.</p>\n</main>\n\n<style>\n  h1 { color: royalblue; }\n</style>',
   JavaScript: 'const greet = (name) => `Bonjour ${name}`;\n\nconsole.log(greet("NexCode"));',
   Python: 'def greet(name):\n    return f"Bonjour {name}"\n\nprint(greet("NexCode"))',
   SQL: 'SELECT title, author\nFROM books\nWHERE published = 1\nORDER BY title;',
