@@ -13,7 +13,8 @@
     "audit:curriculum": "node scripts/audit-curriculum.mjs",
     "audit:mastery": "node scripts/audit-mastery-expansion.mjs",
     "audit:bots": "node scripts/audit-bot-completion.mjs",
-    "audit:quality": "node scripts/audit-learning-quality.mjs"
+    "audit:quality": "node scripts/audit-learning-quality.mjs",
+    "audit:product": "node scripts/audit-product-readiness.mjs"
   },
   "dependencies": {
     "expo": "~57.0.9",
