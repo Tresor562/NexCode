@@ -22,6 +22,11 @@ jobs:
           node-version: 22.13.1
       - run: npm install
       - run: npm run validate:content
+      - run: npm run audit:curriculum
+      - run: npm run audit:mastery
+      - run: npm run audit:bots
+      - run: npm run audit:quality
+      - run: npm run audit:product
       - run: npm run typecheck
       - run: npx expo export --platform android --output-dir dist
       - run: npx eas-cli build --platform android --profile ${{ inputs.profile }} --non-interactive --wait
