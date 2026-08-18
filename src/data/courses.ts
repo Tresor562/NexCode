@@ -10,6 +10,7 @@ import { sqlMasteryLessons } from './sqlMastery';
 import { gitMasteryLessons } from './gitMastery';
 import { nodeApiMasteryLessons } from './nodeApiMastery';
 import { webIntegrationMasteryLessons, htmlIntegrationMasteryLessons, cssIntegrationMasteryLessons } from './frontendIntegrationMastery';
+import { javascriptIntegrationMasteryLessons, pythonIntegrationMasteryLessons, sqlIntegrationMasteryLessons } from './programmingIntegrationMastery';
 import { guidedProjects } from './projects';
 import { Course, Lesson, makeCourse } from './curriculumCore';
 
@@ -20,9 +21,9 @@ function expansionFor(courseId: string): Lesson[] {
   if (courseId === 'web-internet-foundations') return [...webInternetMasteryLessons, ...webIntegrationMasteryLessons];
   if (courseId === 'html-foundations') return [...htmlMasteryLessons, ...htmlIntegrationMasteryLessons];
   if (courseId === 'css-foundations') return [...cssMasteryLessons, ...cssIntegrationMasteryLessons];
-  if (courseId === 'javascript-foundations') return javascriptMasteryLessons;
-  if (courseId === 'python-foundations') return pythonMasteryLessons;
-  if (courseId === 'sql-foundations') return sqlMasteryLessons;
+  if (courseId === 'javascript-foundations') return [...javascriptMasteryLessons, ...javascriptIntegrationMasteryLessons];
+  if (courseId === 'python-foundations') return [...pythonMasteryLessons, ...pythonIntegrationMasteryLessons];
+  if (courseId === 'sql-foundations') return [...sqlMasteryLessons, ...sqlIntegrationMasteryLessons];
   if (courseId === 'git-github-foundations') return gitMasteryLessons;
   if (courseId === 'node-api-foundations') return nodeApiMasteryLessons;
   return [];
