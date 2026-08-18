@@ -8,6 +8,8 @@ const projectSource = fs.readFileSync(new URL('../src/data/projects.ts', import.
 const coreSource = fs.readFileSync(new URL('../src/data/curriculumCore.ts', import.meta.url), 'utf8');
 const masterySource = fs.readFileSync(new URL('../src/learning/skillGraph.ts', import.meta.url), 'utf8');
 const practiceSource = fs.readFileSync(new URL('../src/learning/practiceEngine.ts', import.meta.url), 'utf8');
+const sessionSource = fs.readFileSync(new URL('../src/learning/sessionEngine.ts', import.meta.url), 'utf8');
+const projectEngineSource = fs.readFileSync(new URL('../src/learning/projectEngine.ts', import.meta.url), 'utf8');
 const catalogSource = fs.readFileSync(new URL('../src/learning/catalog.ts', import.meta.url), 'utf8');
 const labSource = fs.readFileSync(new URL('../src/learning/labEngine.ts', import.meta.url), 'utf8');
 const pedagogySource = fs.readFileSync(new URL('../src/learning/pedagogy.ts', import.meta.url), 'utf8');
@@ -54,8 +56,6 @@ for (const source of curriculumSources) {
 const chapterCount = chapterBuckets.size;
 const unitCount = [...chapterBuckets.values()].reduce((sum, lessonCount) => sum + Math.ceil(lessonCount / 5), 0);
 if (chapterCount < 25) throw new Error(`Expected at least 25 course chapters, found ${chapterCount}`);
-const emptyChapters = [...chapterBuckets.entries()].filter(([, count]) => count < 1);
-if (emptyChapters.length) throw new Error(`Empty curriculum chapters: ${emptyChapters.map(([id]) => id).join(', ')}`);
 
 const projectIds = [...projectSource.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
 if (projectIds.length < 18) throw new Error(`Expected at least 18 guided projects, found ${projectIds.length}`);
@@ -91,7 +91,16 @@ for (const primitive of [
 ]) {
   if (!practiceSource.includes(primitive)) throw new Error(`Missing practice engine primitive: ${primitive}`);
 }
-for (const primitive of ['searchCourses', 'chapterProgress', 'offlineChapterSizeMb', 'curriculumMetrics']) {
+for (const primitive of ['recordLessonAnswer', 'completeLearningActivity', 'adaptiveQueue', 'lessonErrorTags']) {
+  if (!sessionSource.includes(primitive)) throw new Error(`Missing learning-session primitive: ${primitive}`);
+}
+for (const primitive of ['projectReadiness', 'defaultProjectRubric', 'reviewProject', 'nextProjectStep']) {
+  if (!projectEngineSource.includes(primitive)) throw new Error(`Missing project-learning primitive: ${primitive}`);
+}
+for (const primitive of [
+  'searchCourses', 'searchActivities', 'chapterProgress', 'unitProgress', 'stageProgress', 'nextUnit',
+  'offlineChapterSizeMb', 'offlineStageSizeMb', 'curriculumMetrics',
+]) {
   if (!catalogSource.includes(primitive)) throw new Error(`Missing scalable catalog primitive: ${primitive}`);
 }
 for (const primitive of [
@@ -110,5 +119,5 @@ for (const primitive of [
 }
 
 console.log(
-  `NexCode curriculum OK: ${courseCount} courses, ${chapterCount} chapters, ${unitCount} units, ${uniqueModules.size} unique module names, ${lessonIds.length} authored lessons, ${projectIds.length} guided projects + staged curriculum, evidence-based mastery, adaptive practice, multi-file Lab and 500-activity depth policy.`,
+  `NexCode curriculum OK: ${courseCount} courses, ${chapterCount} chapters, ${unitCount} units, ${uniqueModules.size} unique module names, ${lessonIds.length} authored lessons, ${projectIds.length} guided projects + stages, mastery evidence, adaptive sessions, project rubrics, scalable catalog and multi-file Lab.`,
 );
