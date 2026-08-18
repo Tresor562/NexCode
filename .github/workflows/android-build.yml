@@ -73,6 +73,10 @@ jobs:
         run: npx eas-cli whoami --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Reproduce EAS prebuild locally
+        run: npx eas-cli build:inspect --platform android --profile "$BUILD_PROFILE" --stage pre-build --output /tmp/nexcode-eas-prebuild --force --verbose
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       - name: Build Android with EAS
         run: npx eas-cli build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait
         env:
