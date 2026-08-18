@@ -53,7 +53,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('Accueil');
   const [state, setState] = useState<LocalState>(() => loadLocalState());
   const [draftName, setDraftName] = useState('');
-  const [draftGoal, setDraftGoal] = useState(learningGoals[0]);
+  const [draftGoal, setDraftGoal] = useState(learningGoals[0]!);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -81,10 +81,10 @@ export default function App() {
     guidedProjects.find((project) => project.id === selectedProjectId) ?? null;
 
   const recentCourse =
-    courses.find((course) => course.id === state.recentCourseId) ?? courses[0];
+    courses.find((course) => course.id === state.recentCourseId) ?? courses[0]!;
   const recentLesson =
     recentCourse.starterLessons.find((lesson) => !state.completedLessons.includes(lesson.id)) ??
-    recentCourse.starterLessons[0];
+    recentCourse.starterLessons[0]!;
 
   const goalProgress = Math.min(100, Math.round((state.dailyCompleted / state.dailyGoal) * 100));
 
@@ -400,7 +400,7 @@ function HomeScreen({
   onProject: (project: GuidedProject) => void;
 }) {
   const name = state.name || 'développeur';
-  const currentProject = guidedProjects.find((item) => (state.projectProgress[item.id] ?? 0) < 100) ?? guidedProjects[0];
+  const currentProject = guidedProjects.find((item) => (state.projectProgress[item.id] ?? 0) < 100) ?? guidedProjects[0]!;
   const projectProgress = state.projectProgress[currentProject.id] ?? 0;
 
   return (
