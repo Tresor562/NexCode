@@ -11,9 +11,9 @@ on:
         options:
           - preview
           - production
-  push:
+  pull_request:
     branches:
-      - feat/v1.5-core
+      - main
     paths:
       - 'app.json'
       - 'eas.json'
