@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "NexCode",
+    "slug": "nexcode",
+    "owner": "nexus-tech01",
+    "version": "1.5.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "android": {
+      "package": "com.nexustech.nexcode",
+      "versionCode": 15,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0B1020"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.nexustech.nexcode",
+      "buildNumber": "15"
+    },
+    "plugins": ["expo-file-system"],
+    "extra": {
+      "eas": {
+        "projectId": "b1e3e19f-09c6-4249-80ee-b9c992c8e04b"
+      }
+    }
+  }
+}

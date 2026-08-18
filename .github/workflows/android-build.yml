@@ -1,0 +1,85 @@
+name: NexCode Android Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - production
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app.json'
+      - 'eas.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'assets/**'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+env:
+  BUILD_PROFILE: ${{ github.event_name == 'workflow_dispatch' && inputs.profile || 'preview' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.13.1
+      - run: npm install
+      - name: Check Expo dependency compatibility
+        run: npx expo install --check
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=critical
+      - run: npm run validate:content
+      - run: npm run audit:curriculum
+      - run: npm run audit:mastery
+      - run: npm run audit:bots
+      - run: npm run audit:quality
+      - run: npm run audit:product
+      - run: npm run typecheck
+      - run: npx expo export --platform android --output-dir dist
+      - name: Expo Doctor
+        run: npx expo-doctor
+      - name: Verify EAS credentials and project binding
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -z "${EXPO_TOKEN:-}" ]; then
+            echo "::error::EXPO_TOKEN is not configured in repository secrets."
+            exit 1
+          fi
+          node - <<'NODE'
+          const app = require('./app.json');
+          const projectId = app?.expo?.extra?.eas?.projectId;
+          const owner = app?.expo?.owner;
+          if (!projectId) {
+            console.error('::error::Expo EAS projectId is missing at expo.extra.eas.projectId.');
+            process.exit(1);
+          }
+          console.log(`EAS project binding configured: @${owner}/${app.expo.slug} (${projectId})`);
+          NODE
+      - name: Verify Expo identity
+        run: npx eas-cli whoami --non-interactive
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Reproduce EAS prebuild locally
+        run: npx eas-cli build:inspect --platform android --profile "$BUILD_PROFILE" --stage pre-build --output /tmp/nexcode-eas-prebuild --force --verbose
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      - name: Build Android with EAS
+        run: npx eas-cli build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

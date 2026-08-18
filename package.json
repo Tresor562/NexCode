@@ -1,0 +1,30 @@
+{
+  "name": "nexcode",
+  "version": "1.5.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "validate:content": "node scripts/validate-content.mjs",
+    "audit:curriculum": "node scripts/audit-curriculum.mjs",
+    "audit:mastery": "node scripts/audit-mastery-expansion.mjs",
+    "audit:bots": "node scripts/audit-bot-completion.mjs",
+    "audit:quality": "node scripts/audit-learning-quality.mjs",
+    "audit:product": "node scripts/audit-product-readiness.mjs"
+  },
+  "dependencies": {
+    "expo": "~57.0.9",
+    "expo-file-system": "~57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  }
+}
