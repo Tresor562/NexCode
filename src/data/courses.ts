@@ -19,6 +19,12 @@ import {
   discordIntegrationMasteryLessons,
   whatsappIntegrationMasteryLessons,
 } from './systemsBotsIntegrationMastery';
+import {
+  botFoundationCompletionLessons,
+  telegramCompletionLessons,
+  discordCompletionLessons,
+  whatsappCompletionLessons,
+} from './botCompletionMastery';
 import { guidedProjects } from './projects';
 import { Course, Lesson, makeCourse } from './curriculumCore';
 
@@ -34,10 +40,10 @@ function expansionFor(courseId: string): Lesson[] {
   if (courseId === 'sql-foundations') return [...sqlMasteryLessons, ...sqlIntegrationMasteryLessons];
   if (courseId === 'git-github-foundations') return [...gitMasteryLessons, ...gitIntegrationMasteryLessons];
   if (courseId === 'node-api-foundations') return [...nodeApiMasteryLessons, ...nodeIntegrationMasteryLessons];
-  if (courseId === 'bot-foundations') return botFoundationIntegrationMasteryLessons;
-  if (courseId === 'telegram-bots') return telegramIntegrationMasteryLessons;
-  if (courseId === 'discord-bots') return discordIntegrationMasteryLessons;
-  if (courseId === 'whatsapp-bots') return whatsappIntegrationMasteryLessons;
+  if (courseId === 'bot-foundations') return [...botFoundationIntegrationMasteryLessons, ...botFoundationCompletionLessons];
+  if (courseId === 'telegram-bots') return [...telegramIntegrationMasteryLessons, ...telegramCompletionLessons];
+  if (courseId === 'discord-bots') return [...discordIntegrationMasteryLessons, ...discordCompletionLessons];
+  if (courseId === 'whatsapp-bots') return [...whatsappIntegrationMasteryLessons, ...whatsappCompletionLessons];
   return [];
 }
 
