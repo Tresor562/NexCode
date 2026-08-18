@@ -2,6 +2,7 @@
   "expo": {
     "name": "NexCode",
     "slug": "nexcode",
+    "owner": "nexus-tech01",
     "version": "1.5.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
@@ -19,6 +20,11 @@
       "bundleIdentifier": "com.nexustech.nexcode",
       "buildNumber": "15"
     },
-    "plugins": ["expo-file-system"]
+    "plugins": ["expo-file-system"],
+    "extra": {
+      "eas": {
+        "projectId": "b1e3e19f-09c6-4249-80ee-b9c992c8e04b"
+      }
+    }
   }
 }
