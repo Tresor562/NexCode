@@ -4,6 +4,7 @@ import { webCourses } from './coursesWeb';
 import { htmlMasteryLessons } from './htmlMastery';
 import { cssMasteryLessons } from './cssMastery';
 import { javascriptMasteryLessons } from './javascriptMastery';
+import { pythonMasteryLessons } from './pythonMastery';
 import { guidedProjects } from './projects';
 import { Course, Lesson, makeCourse } from './curriculumCore';
 
@@ -14,6 +15,7 @@ function expansionFor(courseId: string): Lesson[] {
   if (courseId === 'html-foundations') return htmlMasteryLessons;
   if (courseId === 'css-foundations') return cssMasteryLessons;
   if (courseId === 'javascript-foundations') return javascriptMasteryLessons;
+  if (courseId === 'python-foundations') return pythonMasteryLessons;
   return [];
 }
 
