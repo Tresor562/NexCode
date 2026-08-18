@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "validate:content": "node scripts/validate-content.mjs",
     "audit:curriculum": "node scripts/audit-curriculum.mjs",
-    "audit:mastery": "node scripts/audit-mastery-expansion.mjs"
+    "audit:mastery": "node scripts/audit-mastery-expansion.mjs",
+    "audit:quality": "node scripts/audit-learning-quality.mjs"
   },
   "dependencies": {
     "expo": "~57.0.9",
