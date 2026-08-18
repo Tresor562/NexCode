@@ -1,34 +1,75 @@
 import fs from 'node:fs';
 
-const courseSource = fs.readFileSync(new URL('../src/data/courses.ts', import.meta.url), 'utf8');
-const required = ['html-foundations', 'css-foundations', 'javascript-foundations', 'python-foundations', 'sql-foundations'];
-
-for (const id of required) {
-  if (!courseSource.includes(`id: '${id}'`)) {
-    throw new Error(`Missing required V1.5 course: ${id}`);
-  }
-}
-
-const requiredLearningPrimitives = [
-  'starterLessons',
-  'guidedProjects',
-  'practiceTemplates',
-  "'HTML/CSS'",
-  'correctIndex',
-  'explanation',
+const dataFiles = [
+  '../src/data/coursesWeb.ts',
+  '../src/data/coursesDev.ts',
+  '../src/data/coursesBots.ts',
 ];
 
-for (const primitive of requiredLearningPrimitives) {
-  if (!courseSource.includes(primitive)) {
-    throw new Error(`Missing V1.5 learning primitive: ${primitive}`);
+const curriculumSource = dataFiles
+  .map((path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8'))
+  .join('\n');
+const aggregatorSource = fs.readFileSync(new URL('../src/data/courses.ts', import.meta.url), 'utf8');
+const projectSource = fs.readFileSync(new URL('../src/data/projects.ts', import.meta.url), 'utf8');
+
+const requiredCourses = [
+  'web-internet-foundations',
+  'html-foundations',
+  'css-foundations',
+  'javascript-foundations',
+  'python-foundations',
+  'sql-foundations',
+  'git-github-foundations',
+  'node-api-foundations',
+  'bot-foundations',
+  'telegram-bots',
+  'discord-bots',
+  'whatsapp-bots',
+];
+
+for (const id of requiredCourses) {
+  if (!curriculumSource.includes(`id: '${id}'`)) {
+    throw new Error(`Missing required NexCode course: ${id}`);
   }
 }
 
-const projectCount = (courseSource.match(/difficulty: '(Facile|Moyen)'/g) ?? []).length;
-if (projectCount < 4) {
-  throw new Error(`Expected at least 4 guided projects, found ${projectCount}`);
+const courseCount = (curriculumSource.match(/makeCourse\(\{/g) ?? []).length;
+if (courseCount < requiredCourses.length) {
+  throw new Error(`Expected at least ${requiredCourses.length} real courses, found ${courseCount}`);
+}
+
+const lessonIds = [...curriculumSource.matchAll(/lesson\('([^']+)'/g)].map((match) => match[1]);
+if (lessonIds.length < 160) {
+  throw new Error(`Expected at least 160 authored interactive lessons, found ${lessonIds.length}`);
+}
+
+const duplicateLessonIds = lessonIds.filter((id, index) => lessonIds.indexOf(id) !== index);
+if (duplicateLessonIds.length) {
+  throw new Error(`Duplicate lesson ids: ${[...new Set(duplicateLessonIds)].join(', ')}`);
+}
+
+const projectIds = [...projectSource.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
+if (projectIds.length < 18) {
+  throw new Error(`Expected at least 18 guided projects, found ${projectIds.length}`);
+}
+
+const duplicateProjectIds = projectIds.filter((id, index) => projectIds.indexOf(id) !== index);
+if (duplicateProjectIds.length) {
+  throw new Error(`Duplicate guided project ids: ${[...new Set(duplicateProjectIds)].join(', ')}`);
+}
+
+for (const requiredPrimitive of ["'HTML/CSS'", 'JavaScript', 'Python', 'SQL']) {
+  if (!aggregatorSource.includes(requiredPrimitive)) {
+    throw new Error(`Missing Lab practice primitive: ${requiredPrimitive}`);
+  }
+}
+
+for (const botProject of ['telegram-revision-bot', 'discord-community-bot', 'whatsapp-utility-bot']) {
+  if (!projectSource.includes(`id: '${botProject}'`)) {
+    throw new Error(`Missing guided bot project: ${botProject}`);
+  }
 }
 
 console.log(
-  `NexCode content OK: ${required.length} foundation courses, interactive lesson primitives, Web/JS/Python/SQL practice and ${projectCount} guided projects.`,
+  `NexCode curriculum OK: ${courseCount} real courses, ${lessonIds.length} authored interactive lessons and ${projectIds.length} guided projects.`,
 );
