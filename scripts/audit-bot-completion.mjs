@@ -22,7 +22,7 @@ function baseCount(courseId) {
 }
 function countBank(source, seedName, nextToken) {
   const block = source.split(`const ${seedName}: DeepBotSeed[] = [`)[1]?.split(nextToken)[0] ?? '';
-  return (block.match(/\{\s*id:'[^']+'/g) ?? []).length;
+  return (block.match(/\{\s*id\s*:\s*'[^']+'/g) ?? []).length;
 }
 
 let minimum = 0;
