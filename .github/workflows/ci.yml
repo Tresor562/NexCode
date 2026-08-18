@@ -17,6 +17,7 @@ jobs:
       - run: npm run validate:content
       - run: npm run audit:curriculum
       - run: npm run audit:mastery
+      - run: npm run audit:bots
       - run: npm run audit:quality
       - run: npm run typecheck
       - run: npx expo export --platform android --output-dir dist
