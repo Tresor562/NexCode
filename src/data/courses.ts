@@ -2,22 +2,31 @@ import { botCourses } from './coursesBots';
 import { devCourses } from './coursesDev';
 import { webCourses } from './coursesWeb';
 import { htmlMasteryLessons } from './htmlMastery';
+import { cssMasteryLessons } from './cssMastery';
 import { guidedProjects } from './projects';
-import { Course, makeCourse } from './curriculumCore';
+import { Course, Lesson, makeCourse } from './curriculumCore';
 
 export type { Course, CourseCategory, GuidedProject, Lesson } from './curriculumCore';
 export { guidedProjects };
 
-function extendCourse(course: Course, extraLessons = course.id === 'html-foundations' ? htmlMasteryLessons : []) {
+function expansionFor(courseId: string): Lesson[] {
+  if (courseId === 'html-foundations') return htmlMasteryLessons;
+  if (courseId === 'css-foundations') return cssMasteryLessons;
+  return [];
+}
+
+function extendCourse(course: Course) {
+  const extraLessons = expansionFor(course.id);
   if (extraLessons.length === 0) return course;
+  const totalLessons = course.starterLessons.length + extraLessons.length;
   return makeCourse({
     id: course.id,
     title: course.title,
     language: course.language,
     category: course.category,
     level: course.level,
-    offlineSizeMb: Math.max(course.offlineSizeMb, Math.ceil((course.starterLessons.length + extraLessons.length) / 24)),
-    estimatedHours: Math.max(course.estimatedHours, Math.ceil((course.starterLessons.length + extraLessons.length) * 8 / 60)),
+    offlineSizeMb: Math.max(course.offlineSizeMb, Math.ceil(totalLessons / 24)),
+    estimatedHours: Math.max(course.estimatedHours, Math.ceil(totalLessons * 8 / 60)),
     description: course.description,
     color: course.color,
     icon: course.icon,
@@ -26,7 +35,7 @@ function extendCourse(course: Course, extraLessons = course.id === 'html-foundat
   });
 }
 
-export const courses = [...webCourses, ...devCourses, ...botCourses].map((course) => extendCourse(course));
+export const courses = [...webCourses, ...devCourses, ...botCourses].map(extendCourse);
 
 export const practiceTemplates = {
   'HTML/CSS': '<main class="card">\n  <h1>NexCode</h1>\n  <p>J’apprends à construire.</p>\n</main>\n\n<style>\n  .card {\n    max-width: 32rem;\n    padding: 1.5rem;\n    border-radius: 1rem;\n  }\n</style>',
