@@ -9,6 +9,7 @@ import { pythonMasteryLessons } from './pythonMastery';
 import { sqlMasteryLessons } from './sqlMastery';
 import { gitMasteryLessons } from './gitMastery';
 import { nodeApiMasteryLessons } from './nodeApiMastery';
+import { webIntegrationMasteryLessons, htmlIntegrationMasteryLessons, cssIntegrationMasteryLessons } from './frontendIntegrationMastery';
 import { guidedProjects } from './projects';
 import { Course, Lesson, makeCourse } from './curriculumCore';
 
@@ -16,9 +17,9 @@ export type { Course, CourseCategory, GuidedProject, Lesson } from './curriculum
 export { guidedProjects };
 
 function expansionFor(courseId: string): Lesson[] {
-  if (courseId === 'web-internet-foundations') return webInternetMasteryLessons;
-  if (courseId === 'html-foundations') return htmlMasteryLessons;
-  if (courseId === 'css-foundations') return cssMasteryLessons;
+  if (courseId === 'web-internet-foundations') return [...webInternetMasteryLessons, ...webIntegrationMasteryLessons];
+  if (courseId === 'html-foundations') return [...htmlMasteryLessons, ...htmlIntegrationMasteryLessons];
+  if (courseId === 'css-foundations') return [...cssMasteryLessons, ...cssIntegrationMasteryLessons];
   if (courseId === 'javascript-foundations') return javascriptMasteryLessons;
   if (courseId === 'python-foundations') return pythonMasteryLessons;
   if (courseId === 'sql-foundations') return sqlMasteryLessons;
