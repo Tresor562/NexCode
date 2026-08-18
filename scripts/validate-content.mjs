@@ -1,11 +1,6 @@
 import fs from 'node:fs';
 
-const dataFiles = [
-  '../src/data/coursesWeb.ts',
-  '../src/data/coursesDev.ts',
-  '../src/data/coursesBots.ts',
-];
-
+const dataFiles = ['../src/data/coursesWeb.ts', '../src/data/coursesDev.ts', '../src/data/coursesBots.ts'];
 const curriculumSources = dataFiles.map((path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8'));
 const curriculumSource = curriculumSources.join('\n');
 const aggregatorSource = fs.readFileSync(new URL('../src/data/courses.ts', import.meta.url), 'utf8');
@@ -16,6 +11,7 @@ const practiceSource = fs.readFileSync(new URL('../src/learning/practiceEngine.t
 const catalogSource = fs.readFileSync(new URL('../src/learning/catalog.ts', import.meta.url), 'utf8');
 const labSource = fs.readFileSync(new URL('../src/learning/labEngine.ts', import.meta.url), 'utf8');
 const pedagogySource = fs.readFileSync(new URL('../src/learning/pedagogy.ts', import.meta.url), 'utf8');
+const localStateSource = fs.readFileSync(new URL('../src/lib/localState.ts', import.meta.url), 'utf8');
 
 const requiredCourses = [
   'web-internet-foundations', 'html-foundations', 'css-foundations', 'javascript-foundations',
@@ -43,16 +39,10 @@ for (const source of curriculumSources) {
   let currentCourseId = null;
   let waitingForCourseId = false;
   for (const line of source.split('\n')) {
-    if (line.includes('makeCourse({')) {
-      waitingForCourseId = true;
-      continue;
-    }
+    if (line.includes('makeCourse({')) { waitingForCourseId = true; continue; }
     if (waitingForCourseId) {
       const courseMatch = line.match(/id: '([^']+)'/);
-      if (courseMatch) {
-        currentCourseId = courseMatch[1];
-        waitingForCourseId = false;
-      }
+      if (courseMatch) { currentCourseId = courseMatch[1]; waitingForCourseId = false; }
     }
     const lessonMatch = line.match(/lesson\('([^']+)',\s*'([^']+)'/);
     if (lessonMatch && currentCourseId) {
@@ -64,6 +54,8 @@ for (const source of curriculumSources) {
 const chapterCount = chapterBuckets.size;
 const unitCount = [...chapterBuckets.values()].reduce((sum, lessonCount) => sum + Math.ceil(lessonCount / 5), 0);
 if (chapterCount < 25) throw new Error(`Expected at least 25 course chapters, found ${chapterCount}`);
+const emptyChapters = [...chapterBuckets.entries()].filter(([, count]) => count < 1);
+if (emptyChapters.length) throw new Error(`Empty curriculum chapters: ${emptyChapters.map(([id]) => id).join(', ')}`);
 
 const projectIds = [...projectSource.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
 if (projectIds.length < 18) throw new Error(`Expected at least 18 guided projects, found ${projectIds.length}`);
@@ -78,23 +70,45 @@ for (const requiredPrimitive of ["'HTML/CSS'", 'JavaScript', 'Python', 'SQL']) {
 for (const botProject of ['telegram-revision-bot', 'discord-community-bot', 'whatsapp-utility-bot']) {
   if (!projectSource.includes(`id: '${botProject}'`)) throw new Error(`Missing guided bot project: ${botProject}`);
 }
-for (const architecturePrimitive of ['Chapter', 'LearningUnit', 'skillIds', 'prerequisiteSkillIds', 'LabMission', 'buildChapters']) {
-  if (!coreSource.includes(architecturePrimitive)) throw new Error(`Missing structured curriculum primitive: ${architecturePrimitive}`);
+for (const primitive of [
+  'Chapter', 'LearningUnit', 'CourseStage', 'ExerciseSpec', 'ExerciseKind', 'skillIds', 'prerequisiteSkillIds',
+  'LabMission', 'buildChapters', 'buildStages', 'activityCycle', 'checkpointLessonIds', 'masteryGate',
+]) {
+  if (!coreSource.includes(primitive)) throw new Error(`Missing structured curriculum primitive: ${primitive}`);
 }
-for (const masteryPrimitive of ['SkillMastery', 'nextReviewAt', 'errorTags', 'recordSkillAttempt']) {
-  if (!masterySource.includes(masteryPrimitive)) throw new Error(`Missing mastery primitive: ${masteryPrimitive}`);
+for (const kind of ["'learn'", "'practice'", "'lab'", "'review'", "'checkpoint'", "'boss'"]) {
+  if (!coreSource.includes(kind)) throw new Error(`Missing activity kind in curriculum sequencing: ${kind}`);
 }
-for (const practicePrimitive of ['due-review', 'weak-skill', 'new-skill', 'recommendPractice', 'interleaving']) {
-  if (!practiceSource.includes(practicePrimitive)) throw new Error(`Missing practice engine primitive: ${practicePrimitive}`);
+for (const primitive of [
+  'SkillMastery', 'confidence', 'consecutiveCorrect', 'nextReviewAt', 'errorTags', 'evidence',
+  'recordSkillAttempt', 'prerequisitesReady', 'skillNeedsEvidence', 'weakSkillIds',
+]) {
+  if (!masterySource.includes(primitive)) throw new Error(`Missing mastery primitive: ${primitive}`);
 }
-for (const catalogPrimitive of ['searchCourses', 'chapterProgress', 'offlineChapterSizeMb', 'curriculumMetrics']) {
-  if (!catalogSource.includes(catalogPrimitive)) throw new Error(`Missing scalable catalog primitive: ${catalogPrimitive}`);
+for (const primitive of [
+  'due-review', 'weak-skill', 'repair-misconception', 'new-skill', 'lab-transfer', 'checkpoint',
+  'recommendPractice', 'interleaving', 'nextSessionPlan',
+]) {
+  if (!practiceSource.includes(primitive)) throw new Error(`Missing practice engine primitive: ${primitive}`);
 }
-for (const labPrimitive of ['missionForLesson', 'openLabWorkspace', 'updateLabFile']) {
-  if (!labSource.includes(labPrimitive)) throw new Error(`Missing lesson-linked Lab primitive: ${labPrimitive}`);
+for (const primitive of ['searchCourses', 'chapterProgress', 'offlineChapterSizeMb', 'curriculumMetrics']) {
+  if (!catalogSource.includes(primitive)) throw new Error(`Missing scalable catalog primitive: ${primitive}`);
 }
-for (const pedagogyPrimitive of ['targetActivitiesPerCourse: 500', "kind: 'lab'", "kind: 'review'", "kind: 'checkpoint'", "kind: 'boss'", 'masteryGate']) {
-  if (!pedagogySource.includes(pedagogyPrimitive)) throw new Error(`Missing deep-course pedagogy primitive: ${pedagogyPrimitive}`);
+for (const primitive of [
+  'missionForLesson', 'openLabWorkspace', 'updateLabFile', 'addLabFile', 'removeLabFile',
+  'validateLabDraft', 'stampLabValidation', 'starterFiles',
+]) {
+  if (!labSource.includes(primitive)) throw new Error(`Missing lesson-linked Lab primitive: ${primitive}`);
+}
+for (const primitive of ['labDrafts', 'downloadedChapters', 'lessonAttempts', 'lessonErrorTags', 'normalizeMastery']) {
+  if (!localStateSource.includes(primitive)) throw new Error(`Missing persisted learning-state primitive: ${primitive}`);
+}
+for (const primitive of [
+  'targetActivitiesPerCourse: 500', "kind: 'lab'", "kind: 'review'", "kind: 'checkpoint'", "kind: 'boss'", 'masteryGate',
+]) {
+  if (!pedagogySource.includes(primitive)) throw new Error(`Missing deep-course pedagogy primitive: ${primitive}`);
 }
 
-console.log(`NexCode curriculum OK: ${courseCount} courses, ${chapterCount} chapters, ${unitCount} units, ${uniqueModules.size} unique module names, ${lessonIds.length} authored lessons, ${projectIds.length} guided projects + mastery, adaptive practice, Lab and 500-activity course policy.`);
+console.log(
+  `NexCode curriculum OK: ${courseCount} courses, ${chapterCount} chapters, ${unitCount} units, ${uniqueModules.size} unique module names, ${lessonIds.length} authored lessons, ${projectIds.length} guided projects + staged curriculum, evidence-based mastery, adaptive practice, multi-file Lab and 500-activity depth policy.`,
+);
