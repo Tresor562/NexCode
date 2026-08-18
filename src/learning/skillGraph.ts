@@ -1,10 +1,12 @@
 import { Course, Lesson, MasteryBand } from '../data/curriculumCore';
+import { prerequisiteRuleMap } from './skillPrerequisites';
 
 export type SkillNode = {
   id: string;
   title: string;
   courseIds: string[];
   prerequisiteIds: string[];
+  prerequisiteGate: number;
   lessonIds: string[];
   evidenceLessonIds: string[];
 };
@@ -43,16 +45,19 @@ export function masteryBand(score: number): MasteryBand {
 
 export function buildSkillGraph(courses: Course[]): SkillNode[] {
   const nodes = new Map<string, SkillNode>();
+  const policy = prerequisiteRuleMap();
   for (const course of courses) {
     for (const lesson of course.starterLessons) {
       for (const skillId of lesson.skillIds ?? []) {
         const current = nodes.get(skillId);
-        const prerequisiteIds = lesson.prerequisiteSkillIds ?? [];
+        const policyRule = policy.get(skillId);
+        const prerequisiteIds = [...new Set([...(lesson.prerequisiteSkillIds ?? []), ...(policyRule?.requires ?? [])])];
         const isEvidence = ['lab', 'checkpoint', 'boss', 'project'].includes(lesson.activityKind ?? 'learn');
         if (current) {
           current.lessonIds = [...new Set([...current.lessonIds, lesson.id])];
           current.courseIds = [...new Set([...current.courseIds, course.id])];
           current.prerequisiteIds = [...new Set([...current.prerequisiteIds, ...prerequisiteIds])];
+          current.prerequisiteGate = Math.max(current.prerequisiteGate, policyRule?.minimumScore ?? 55);
           if (isEvidence) current.evidenceLessonIds = [...new Set([...current.evidenceLessonIds, lesson.id])];
         } else {
           nodes.set(skillId, {
@@ -60,6 +65,7 @@ export function buildSkillGraph(courses: Course[]): SkillNode[] {
             title: lesson.module,
             courseIds: [course.id],
             prerequisiteIds,
+            prerequisiteGate: policyRule?.minimumScore ?? 55,
             lessonIds: [lesson.id],
             evidenceLessonIds: isEvidence ? [lesson.id] : [],
           });
@@ -144,8 +150,13 @@ export function recordSkillAttempt(
   return next;
 }
 
-export function prerequisitesReady(node: SkillNode, mastery: MasteryMap, gate = 55) {
-  return node.prerequisiteIds.every((id) => (mastery[id]?.score ?? 0) >= gate);
+export function prerequisitesReady(node: SkillNode, mastery: MasteryMap, gate?: number) {
+  const requiredScore = gate ?? node.prerequisiteGate;
+  return node.prerequisiteIds.every((id) => (mastery[id]?.score ?? 0) >= requiredScore);
+}
+
+export function missingPrerequisites(node: SkillNode, mastery: MasteryMap) {
+  return node.prerequisiteIds.filter((id) => (mastery[id]?.score ?? 0) < node.prerequisiteGate);
 }
 
 export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
