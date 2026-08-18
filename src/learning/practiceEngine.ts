@@ -1,4 +1,5 @@
 import { Course, Lesson } from '../data/curriculumCore';
+import { missionForLesson } from './labEngine';
 import { MasteryMap, SkillNode, prerequisitesReady, skillNeedsEvidence } from './skillGraph';
 
 export type PracticeReason =
@@ -48,7 +49,7 @@ function recommendationForLesson(
       courseId: course.id,
       reason: 'repair-misconception',
       priority: 118 - weakest,
-      message: 'Réparation ciblée : une erreur revient plusieurs fois sur cette compétence.',
+      message: 'Réparation ciblée : une erreur revient plusieurs fois. Reprends une variante plutôt que relire passivement.',
       skillIds: skills,
     };
   }
@@ -68,26 +69,26 @@ function recommendationForLesson(
       courseId: course.id,
       reason: 'weak-skill',
       priority: 95 - weakest,
-      message: 'Renforcement : varie l’exercice jusqu’à pouvoir expliquer la notion sans aide.',
+      message: 'Renforcement : varie l’exercice jusqu’à pouvoir expliquer et réutiliser la notion sans aide.',
       skillIds: skills,
     };
   }
-  if (needsEvidence && kind === 'lab' && prereqsReady) {
+  if (!completed && kind === 'lab' && prereqsReady) {
     return {
       lesson,
       courseId: course.id,
       reason: 'lab-transfer',
-      priority: 82,
-      message: 'Passe dans le Lab : il faut maintenant prouver la compétence dans du code manipulable.',
+      priority: needsEvidence ? 86 : 80,
+      message: 'Passe dans le Lab : transforme la notion en code manipulable et produis une preuve de maîtrise.',
       skillIds: skills,
     };
   }
-  if (['checkpoint', 'boss'].includes(kind) && prereqsReady) {
+  if (!completed && ['checkpoint', 'boss'].includes(kind) && prereqsReady) {
     return {
       lesson,
       courseId: course.id,
       reason: 'checkpoint',
-      priority: 72,
+      priority: kind === 'boss' ? 76 : 72,
       message: kind === 'boss'
         ? 'Boss challenge : combine plusieurs acquis sans solution guidée.'
         : 'Checkpoint : vérifie tes acquis avant d’ouvrir de nouvelles notions.',
@@ -127,7 +128,6 @@ export function recommendPractice(
     if (!deduped.has(item.lesson.id)) deduped.set(item.lesson.id, item);
   }
 
-  // Interleaving: first pass favors different courses and different skills.
   const result: PracticeRecommendation[] = [];
   const usedCourses = new Set<string>();
   const usedSkills = new Set<string>();
@@ -152,24 +152,12 @@ export function recommendPractice(
 
 export function shouldRecommendLab(lesson: Lesson, attempts: number, correct: boolean) {
   if (lesson.activityKind === 'lab' || lesson.labMission) return true;
+  if (lesson.activityKind === 'checkpoint' || lesson.activityKind === 'boss') return correct;
   return attempts >= 2 || correct;
 }
 
 export function labPromptForLesson(lesson: Lesson) {
-  if (lesson.labMission) return lesson.labMission;
-  return {
-    id: `${lesson.id}.lab`,
-    title: `Pratique : ${lesson.title}`,
-    instructions: `Ferme l’exemple, reconstruis la notion « ${lesson.title} » dans le Lab, modifie-la puis explique le résultat.`,
-    language: 'JavaScript' as const,
-    starterCode: lesson.example,
-    successCriteria: [
-      'Reproduire la notion sans copier mot pour mot',
-      'Modifier au moins une valeur ou branche de logique',
-      'Obtenir un résultat cohérent',
-      'Pouvoir expliquer pourquoi le résultat change',
-    ],
-  };
+  return missionForLesson(lesson);
 }
 
 export function nextSessionPlan(recommendations: PracticeRecommendation[], minutes: 5 | 10 | 20 | 45) {
