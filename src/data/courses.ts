@@ -7,6 +7,7 @@ import { javascriptMasteryLessons } from './javascriptMastery';
 import { pythonMasteryLessons } from './pythonMastery';
 import { sqlMasteryLessons } from './sqlMastery';
 import { gitMasteryLessons } from './gitMastery';
+import { nodeApiMasteryLessons } from './nodeApiMastery';
 import { guidedProjects } from './projects';
 import { Course, Lesson, makeCourse } from './curriculumCore';
 
@@ -20,6 +21,7 @@ function expansionFor(courseId: string): Lesson[] {
   if (courseId === 'python-foundations') return pythonMasteryLessons;
   if (courseId === 'sql-foundations') return sqlMasteryLessons;
   if (courseId === 'git-github-foundations') return gitMasteryLessons;
+  if (courseId === 'node-api-foundations') return nodeApiMasteryLessons;
   return [];
 }
 
