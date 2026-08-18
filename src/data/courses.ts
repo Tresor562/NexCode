@@ -1,6 +1,7 @@
 import { botCourses } from './coursesBots';
 import { devCourses } from './coursesDev';
 import { webCourses } from './coursesWeb';
+import { webInternetMasteryLessons } from './webInternetMastery';
 import { htmlMasteryLessons } from './htmlMastery';
 import { cssMasteryLessons } from './cssMastery';
 import { javascriptMasteryLessons } from './javascriptMastery';
@@ -15,6 +16,7 @@ export type { Course, CourseCategory, GuidedProject, Lesson } from './curriculum
 export { guidedProjects };
 
 function expansionFor(courseId: string): Lesson[] {
+  if (courseId === 'web-internet-foundations') return webInternetMasteryLessons;
   if (courseId === 'html-foundations') return htmlMasteryLessons;
   if (courseId === 'css-foundations') return cssMasteryLessons;
   if (courseId === 'javascript-foundations') return javascriptMasteryLessons;
