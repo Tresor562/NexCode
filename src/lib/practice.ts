@@ -1,13 +1,23 @@
-export type PracticeLanguage = 'JavaScript' | 'Python' | 'SQL';
+export type PracticeLanguage = 'HTML/CSS' | 'JavaScript' | 'Python' | 'SQL';
 
 export function checkPractice(language: PracticeLanguage, source: string): string {
   const normalized = source.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  if (!source.trim()) return 'Écris une réponse avant de lancer la vérification.';
+
+  if (language === 'HTML/CSS') {
+    const hasMarkup = /<(h1|main|section|p|div|button)[\s>]/i.test(source);
+    const hasStyle = /<style[\s>]/i.test(source) || /style\s*=|\{\s*[a-z-]+\s*:/i.test(source);
+    return hasMarkup && hasStyle
+      ? '✓ Structure Web détectée : HTML et style sont présents. Bien joué.'
+      : 'Presque. Ajoute au moins une vraie balise HTML et une règle CSS pour valider cette pratique.';
+  }
 
   if (language === 'Python') {
     const hasFunction = /def\s+\w+\s*\(/.test(source);
     const hasReturn = /\breturn\b/.test(source);
     return hasFunction && hasReturn
-      ? '✓ Structure Python valide pour cet exercice : fonction + return détectés.'
+      ? '✓ Structure Python valide : fonction + return détectés.'
       : 'À revoir : crée une fonction avec def puis renvoie une valeur avec return.';
   }
 
