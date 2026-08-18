@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: theme.colors.text,
     fontSize: 13,
-    fontWeight: '750',
+    fontWeight: '700',
   },
   pressed: { opacity: 0.82, transform: [{ scale: 0.99 }] },
   disabled: { opacity: 0.45 },
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
   pillSuccess: { backgroundColor: theme.colors.successSoft, borderColor: '#235A40' },
   pillPrimary: { backgroundColor: theme.colors.primarySoft, borderColor: '#39499A' },
   pillWarning: { backgroundColor: '#2B2413', borderColor: '#624F1D' },
-  pillText: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: '750' },
+  pillText: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: '700' },
   pillTextSuccess: { color: theme.colors.success },
   pillTextPrimary: { color: '#AAB4FF' },
   pillTextWarning: { color: theme.colors.warning },
@@ -214,6 +214,6 @@ const styles = StyleSheet.create({
     marginTop: theme.space.xl,
     marginBottom: theme.space.sm,
   },
-  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '850' },
+  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '800' },
   sectionAction: { color: '#98A4FF', fontSize: 12, fontWeight: '700' },
 });
