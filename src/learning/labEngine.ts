@@ -7,6 +7,7 @@ export type LabValidation = {
   passedCriteria: string[];
   missingCriteria: string[];
   feedback: string;
+  checks: Array<{ id: string; label: string; passed: boolean; detail?: string }>;
 };
 
 function inferLanguage(lesson: Lesson): LabMission['language'] {
@@ -56,9 +57,9 @@ export function missionForLesson(lesson: Lesson): LabMission {
     starterFiles,
     successCriteria: [
       'Le travail contient une modification volontaire par rapport au code de départ',
-      'Le résultat reste cohérent avec la notion étudiée',
+      'Le résultat démontre la notion étudiée avec une structure valide pour ce langage',
       'La solution ne contient pas de secret ou token réel en clair',
-      'Tu peux expliquer ce qui change et pourquoi',
+      'Le travail est suffisamment complet pour être relu et expliqué',
     ],
   };
 }
@@ -105,24 +106,81 @@ export function removeLabFile(draft: LabDraft, filename: string) {
 
 function containsLikelySecret(files: Record<string, string>) {
   const text = Object.values(files).join('\n');
-  return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test)[A-Za-z0-9_-]{12,}/i.test(text);
+  return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test|changeme)[A-Za-z0-9_-]{12,}/i.test(text);
+}
+
+function meaningfulChange(mission: LabMission, files: Record<string, string>) {
+  const allText = Object.values(files).join('\n').trim();
+  const starter = (mission.starterCode ?? '').trim();
+  if (!starter) return allText.length >= 20;
+  const normalized = (value: string) => value.replace(/\s+/g, ' ').trim();
+  return normalized(allText) !== normalized(starter) && allText.length >= Math.min(20, starter.length + 3);
+}
+
+function languageStructureCheck(language: LabMission['language'], files: Record<string, string>) {
+  const joined = Object.values(files).join('\n');
+  const lower = joined.toLowerCase();
+  if (language === 'HTML/CSS') {
+    const html = files['index.html'] ?? joined;
+    const css = files['styles.css'] ?? joined;
+    return /<([a-z][\w-]*)(\s[^>]*)?>[\s\S]*<\/\1>/i.test(html) && /[.#]?[a-z][\w-]*\s*\{[^}]+\}/i.test(css);
+  }
+  if (language === 'JavaScript') {
+    return /\b(const|let|var|function|class)\b/.test(joined) && /[;)}\]]/.test(joined);
+  }
+  if (language === 'Python') {
+    const hasStatement = /^(\s*)(def|class|if|for|while|print|[a-zA-Z_]\w*\s*=)/m.test(joined);
+    const suspiciousBraceStyle = /\b(def|if|for|while)\b[^\n]*\{/.test(joined);
+    return hasStatement && !suspiciousBraceStyle;
+  }
+  if (language === 'SQL') {
+    return /\b(select|insert|update|delete|create)\b/i.test(joined) && /\b(from|into|table|set)\b/i.test(joined);
+  }
+  if (language === 'Git') {
+    return joined.split(/\r?\n/).some((line) => /^\s*git\s+(status|add|commit|branch|switch|checkout|merge|rebase|log|diff|restore|reset)\b/.test(line));
+  }
+  if (language === 'Node/API') {
+    return /\b(require|import|export|async|function|const|let)\b/.test(joined) && /(http|express|request|response|req\b|res\b|listen\s*\()/i.test(joined);
+  }
+  if (language === 'Bots') {
+    return /(message|update|interaction|command|handler|on\s*\(|bot\.|client\.|reply|send)/i.test(lower);
+  }
+  return joined.trim().length >= 20;
+}
+
+function completenessCheck(language: LabMission['language'], files: Record<string, string>) {
+  const nonEmptyFiles = Object.entries(files).filter(([, value]) => value.trim().length > 0);
+  if (language === 'HTML/CSS') return nonEmptyFiles.some(([name]) => name.endsWith('.html')) && nonEmptyFiles.some(([name]) => name.endsWith('.css'));
+  if (language === 'Node/API' || language === 'Bots') return nonEmptyFiles.some(([name]) => /\.(js|ts)$/.test(name));
+  return nonEmptyFiles.length >= 1 && nonEmptyFiles.some(([, value]) => value.trim().length >= 20);
 }
 
 export function validateLabDraft(mission: LabMission, draft: LabDraft): LabValidation {
   const allText = Object.values(draft.files).join('\n').trim();
-  const nonEmpty = allText.length >= 12;
-  const modified = mission.starterCode ? !allText.includes(mission.starterCode.trim()) || allText.length !== mission.starterCode.trim().length : nonEmpty;
+  const nonEmpty = allText.length >= 20;
+  const modified = meaningfulChange(mission, draft.files);
+  const structureValid = languageStructureCheck(mission.language, draft.files);
   const secretSafe = !containsLikelySecret(draft.files);
-  const criteriaChecks = [nonEmpty, modified, secretSafe, nonEmpty];
-  const passedCriteria = mission.successCriteria.filter((_, index) => criteriaChecks[index] ?? nonEmpty);
-  const missingCriteria = mission.successCriteria.filter((_, index) => !(criteriaChecks[index] ?? nonEmpty));
-  const passed = missingCriteria.length === 0;
+  const completeEnough = completenessCheck(mission.language, draft.files);
+
+  const checks = [
+    { id: 'modified', label: mission.successCriteria[0] ?? 'Modification réelle', passed: modified },
+    { id: 'structure', label: mission.successCriteria[1] ?? 'Structure valide', passed: structureValid },
+    { id: 'secret-safe', label: mission.successCriteria[2] ?? 'Aucun secret réel', passed: secretSafe },
+    { id: 'complete', label: mission.successCriteria[3] ?? 'Travail suffisamment complet', passed: nonEmpty && completeEnough },
+  ];
+
+  const passedCriteria = checks.filter((item) => item.passed).map((item) => item.label);
+  const missingCriteria = checks.filter((item) => !item.passed).map((item) => item.label);
+  const passed = checks.every((item) => item.passed);
+
   return {
     passed,
     passedCriteria,
     missingCriteria,
+    checks,
     feedback: passed
-      ? 'Mission prête pour la revue : le travail est modifié, non vide et ne contient pas de secret évident.'
+      ? 'Mission validée localement : modification réelle, structure cohérente, travail complet et aucun secret évident détecté.'
       : `À améliorer avant validation : ${missingCriteria.join(' • ')}`,
   };
 }
