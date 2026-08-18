@@ -1,4 +1,13 @@
 import { File, Paths } from 'expo-file-system';
+import { MasteryMap } from '../learning/skillGraph';
+
+export type LabDraft = {
+  missionId?: string;
+  language: string;
+  files: Record<string, string>;
+  activeFile: string;
+  updatedAt: string;
+};
 
 export type LocalState = {
   xp: number;
@@ -6,8 +15,12 @@ export type LocalState = {
   dailyGoal: number;
   dailyCompleted: number;
   downloadedCourses: string[];
+  downloadedChapters: string[];
   completedLessons: string[];
   projectProgress: Record<string, number>;
+  mastery: MasteryMap;
+  lessonAttempts: Record<string, number>;
+  labDrafts: Record<string, LabDraft>;
   onboardingComplete: boolean;
   name: string;
   learningGoal: string;
@@ -20,6 +33,7 @@ const initialState: LocalState = {
   dailyGoal: 30,
   dailyCompleted: 12,
   downloadedCourses: ['html-foundations'],
+  downloadedChapters: [],
   completedLessons: ['html-structure'],
   projectProgress: {
     portfolio: 35,
@@ -27,6 +41,9 @@ const initialState: LocalState = {
     'python-quiz': 0,
     'sql-library': 0,
   },
+  mastery: {},
+  lessonAttempts: {},
+  labDrafts: {},
   onboardingComplete: false,
   name: '',
   learningGoal: 'Créer des sites Web',
@@ -42,6 +59,9 @@ function normalizeState(value: Partial<LocalState>): LocalState {
     downloadedCourses: Array.isArray(value.downloadedCourses)
       ? value.downloadedCourses
       : initialState.downloadedCourses,
+    downloadedChapters: Array.isArray(value.downloadedChapters)
+      ? value.downloadedChapters
+      : initialState.downloadedChapters,
     completedLessons: Array.isArray(value.completedLessons)
       ? value.completedLessons
       : initialState.completedLessons,
@@ -49,6 +69,9 @@ function normalizeState(value: Partial<LocalState>): LocalState {
       ...initialState.projectProgress,
       ...(value.projectProgress ?? {}),
     },
+    mastery: value.mastery ?? initialState.mastery,
+    lessonAttempts: value.lessonAttempts ?? initialState.lessonAttempts,
+    labDrafts: value.labDrafts ?? initialState.labDrafts,
   };
 }
 
