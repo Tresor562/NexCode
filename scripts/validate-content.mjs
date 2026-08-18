@@ -6,7 +6,8 @@ const dataFiles = [
   '../src/data/coursesBots.ts',
 ];
 
-const curriculumSource = dataFiles.map((path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8')).join('\n');
+const curriculumSources = dataFiles.map((path) => fs.readFileSync(new URL(path, import.meta.url), 'utf8'));
+const curriculumSource = curriculumSources.join('\n');
 const aggregatorSource = fs.readFileSync(new URL('../src/data/courses.ts', import.meta.url), 'utf8');
 const projectSource = fs.readFileSync(new URL('../src/data/projects.ts', import.meta.url), 'utf8');
 const coreSource = fs.readFileSync(new URL('../src/data/curriculumCore.ts', import.meta.url), 'utf8');
@@ -37,10 +38,39 @@ const modules = [...curriculumSource.matchAll(/lesson\('[^']+',\s*'([^']+)'/g)].
 const uniqueModules = new Set(modules);
 if (uniqueModules.size < 25) throw new Error(`Curriculum is too flat: expected at least 25 authored modules, found ${uniqueModules.size}`);
 
+const chapterBuckets = new Map();
+for (const source of curriculumSources) {
+  let currentCourseId = null;
+  let waitingForCourseId = false;
+  for (const line of source.split('\n')) {
+    if (line.includes('makeCourse({')) {
+      waitingForCourseId = true;
+      continue;
+    }
+    if (waitingForCourseId) {
+      const courseMatch = line.match(/id: '([^']+)'/);
+      if (courseMatch) {
+        currentCourseId = courseMatch[1];
+        waitingForCourseId = false;
+      }
+    }
+    const lessonMatch = line.match(/lesson\('([^']+)',\s*'([^']+)'/);
+    if (lessonMatch && currentCourseId) {
+      const key = `${currentCourseId}::${lessonMatch[2]}`;
+      chapterBuckets.set(key, (chapterBuckets.get(key) ?? 0) + 1);
+    }
+  }
+}
+const chapterCount = chapterBuckets.size;
+const unitCount = [...chapterBuckets.values()].reduce((sum, lessonCount) => sum + Math.ceil(lessonCount / 5), 0);
+if (chapterCount < 25) throw new Error(`Expected at least 25 course chapters, found ${chapterCount}`);
+
 const projectIds = [...projectSource.matchAll(/id: '([^']+)'/g)].map((match) => match[1]);
 if (projectIds.length < 18) throw new Error(`Expected at least 18 guided projects, found ${projectIds.length}`);
 const duplicateProjectIds = projectIds.filter((id, index) => projectIds.indexOf(id) !== index);
 if (duplicateProjectIds.length) throw new Error(`Duplicate guided project ids: ${[...new Set(duplicateProjectIds)].join(', ')}`);
+const projectSkillLists = (projectSource.match(/skills:\s*\[/g) ?? []).length;
+if (projectSkillLists < projectIds.length) throw new Error(`Every guided project must declare skills: ${projectSkillLists}/${projectIds.length}`);
 
 for (const requiredPrimitive of ["'HTML/CSS'", 'JavaScript', 'Python', 'SQL']) {
   if (!aggregatorSource.includes(requiredPrimitive)) throw new Error(`Missing Lab practice primitive: ${requiredPrimitive}`);
@@ -67,4 +97,4 @@ for (const pedagogyPrimitive of ['targetActivitiesPerCourse: 500', "kind: 'lab'"
   if (!pedagogySource.includes(pedagogyPrimitive)) throw new Error(`Missing deep-course pedagogy primitive: ${pedagogyPrimitive}`);
 }
 
-console.log(`NexCode curriculum OK: ${courseCount} courses, ${uniqueModules.size} modules, ${lessonIds.length} authored lessons, ${projectIds.length} guided projects + structured chapters, mastery, adaptive practice, Lab and 500-activity course policy.`);
+console.log(`NexCode curriculum OK: ${courseCount} courses, ${chapterCount} chapters, ${unitCount} units, ${uniqueModules.size} unique module names, ${lessonIds.length} authored lessons, ${projectIds.length} guided projects + mastery, adaptive practice, Lab and 500-activity course policy.`);
