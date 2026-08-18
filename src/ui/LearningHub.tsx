@@ -13,7 +13,7 @@ export type LearningHubProps = {
   courses: Course[];
   state: LocalState;
   onOpenLesson: (course: Course, lesson: Lesson) => void;
-  onToggleChapterOffline: (course: Course, chapterId: string, kind: OfflinePackKind) => void;
+  onToggleChapterOffline: (courseId: string, chapterId: string, kind: OfflinePackKind) => void;
 };
 
 const budgets = [5, 10, 20, 45] as const;
@@ -30,7 +30,7 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
   const selected = courses.find((course) => course.id === selectedCourseId) ?? null;
 
   if (selected) {
-    return <CourseJourney course={selected} state={state} packKind={packKind} onPackKind={setPackKind} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected, chapterId, kind)} />;
+    return <CourseJourney course={selected} state={state} packKind={packKind} onPackKind={setPackKind} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)} />;
   }
 
   const results = searchLearningActivities(courses, { query, onlyDueReview: onlyDue || undefined, onlyIncomplete: true }, state.completedLessons, state.mastery).slice(0, query || onlyDue ? 40 : 12);
