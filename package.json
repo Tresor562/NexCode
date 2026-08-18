@@ -12,6 +12,7 @@
     "validate:content": "node scripts/validate-content.mjs",
     "audit:curriculum": "node scripts/audit-curriculum.mjs",
     "audit:mastery": "node scripts/audit-mastery-expansion.mjs",
+    "audit:bots": "node scripts/audit-bot-completion.mjs",
     "audit:quality": "node scripts/audit-learning-quality.mjs"
   },
   "dependencies": {
