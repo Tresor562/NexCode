@@ -1,5 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import { MasteryMap, SkillMastery, masteryBand } from '../learning/skillGraph';
+import type { OfflinePack } from '../learning/offlineEngine';
+import type { PortfolioProof } from '../learning/projectPortfolioEngine';
 
 export type LabDraft = {
   missionId?: string;
@@ -18,8 +20,10 @@ export type LocalState = {
   dailyCompleted: number;
   downloadedCourses: string[];
   downloadedChapters: string[];
+  installedOfflinePacks: OfflinePack[];
   completedLessons: string[];
   projectProgress: Record<string, number>;
+  portfolioProofs: PortfolioProof[];
   mastery: MasteryMap;
   lessonAttempts: Record<string, number>;
   lessonErrorTags: Record<string, string[]>;
@@ -37,6 +41,7 @@ const initialState: LocalState = {
   dailyCompleted: 12,
   downloadedCourses: ['html-foundations'],
   downloadedChapters: [],
+  installedOfflinePacks: [],
   completedLessons: ['html-structure'],
   projectProgress: {
     portfolio: 35,
@@ -44,6 +49,7 @@ const initialState: LocalState = {
     'python-quiz': 0,
     'sql-library': 0,
   },
+  portfolioProofs: [],
   mastery: {},
   lessonAttempts: {},
   lessonErrorTags: {},
@@ -86,8 +92,10 @@ function normalizeState(value: Partial<LocalState>): LocalState {
     ...value,
     downloadedCourses: Array.isArray(value.downloadedCourses) ? value.downloadedCourses : initialState.downloadedCourses,
     downloadedChapters: Array.isArray(value.downloadedChapters) ? value.downloadedChapters : initialState.downloadedChapters,
+    installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks : initialState.installedOfflinePacks,
     completedLessons: Array.isArray(value.completedLessons) ? value.completedLessons : initialState.completedLessons,
     projectProgress: { ...initialState.projectProgress, ...(value.projectProgress ?? {}) },
+    portfolioProofs: Array.isArray(value.portfolioProofs) ? value.portfolioProofs : initialState.portfolioProofs,
     mastery: normalizeMastery(value.mastery),
     lessonAttempts: value.lessonAttempts ?? initialState.lessonAttempts,
     lessonErrorTags: value.lessonErrorTags ?? initialState.lessonErrorTags,
