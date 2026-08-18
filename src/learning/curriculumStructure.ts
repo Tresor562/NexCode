@@ -14,7 +14,7 @@ export type CurriculumUnitNode = LearningUnit & {
   activities: CurriculumActivityRef[];
 };
 
-export type CurriculumChapterNode = Chapter & {
+export type CurriculumChapterNode = Omit<Chapter, 'units'> & {
   order: number;
   units: CurriculumUnitNode[];
 };
@@ -37,14 +37,14 @@ function lessonMap(course: Course) {
 export function buildCurriculumTree(course: Course): CurriculumTree {
   const byLesson = lessonMap(course);
   let order = 0;
-  const stages = course.stages.map((stage) => {
-    const chapters = stage.chapterIds
+  const stages: CurriculumStageNode[] = course.stages.map((stage) => {
+    const chapters: CurriculumChapterNode[] = stage.chapterIds
       .map((id) => course.chapters.find((chapter) => chapter.id === id))
       .filter((chapter): chapter is Chapter => Boolean(chapter))
       .map((chapter, chapterIndex) => ({
         ...chapter,
         order: chapterIndex + 1,
-        units: chapter.units.map((unit) => ({
+        units: chapter.units.map((unit): CurriculumUnitNode => ({
           ...unit,
           activities: unit.lessonIds
             .map((lessonId) => byLesson.get(lessonId))
