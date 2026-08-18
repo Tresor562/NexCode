@@ -42,6 +42,8 @@ export type Chapter = {
   title: string;
   units: LearningUnit[];
   lessonIds: string[];
+  skillIds: string[];
+  prerequisiteSkillIds: string[];
   estimatedMinutes: number;
 };
 
@@ -88,15 +90,34 @@ function slug(value: string) {
     .replace(/(^-|-$)/g, '');
 }
 
-function normalizeLesson(courseId: string, value: Lesson): Lesson {
-  const fallbackSkill = `${courseId}.${slug(value.module)}.${slug(value.title)}`;
-  return {
-    ...value,
-    skillIds: value.skillIds?.length ? value.skillIds : [fallbackSkill],
-    prerequisiteSkillIds: value.prerequisiteSkillIds ?? [],
-    activityKind: value.activityKind ?? 'learn',
-    difficulty: value.difficulty ?? 1,
-  };
+function skillIdForModule(courseId: string, module: string) {
+  return `${courseId}.${slug(module)}`;
+}
+
+function normalizeLessons(courseId: string, lessons: Lesson[]): Lesson[] {
+  const moduleOrder = [...new Set(lessons.map((item) => item.module))];
+  const previousSkillByModule = new Map<string, string | undefined>();
+  moduleOrder.forEach((module, index) => {
+    const previousModule = moduleOrder[index - 1];
+    previousSkillByModule.set(module, previousModule ? skillIdForModule(courseId, previousModule) : undefined);
+  });
+
+  return lessons.map((value) => {
+    const fallbackSkill = skillIdForModule(courseId, value.module);
+    const previousSkill = previousSkillByModule.get(value.module);
+    return {
+      ...value,
+      skillIds: value.skillIds?.length ? value.skillIds : [fallbackSkill],
+      prerequisiteSkillIds:
+        value.prerequisiteSkillIds?.length
+          ? value.prerequisiteSkillIds
+          : previousSkill
+            ? [previousSkill]
+            : [],
+      activityKind: value.activityKind ?? 'learn',
+      difficulty: value.difficulty ?? 1,
+    };
+  });
 }
 
 export function buildChapters(courseId: string, lessons: Lesson[]): Chapter[] {
@@ -110,6 +131,8 @@ export function buildChapters(courseId: string, lessons: Lesson[]): Chapter[] {
   return [...grouped.entries()].map(([module, moduleLessons], chapterIndex) => {
     const unitSize = 5;
     const units: LearningUnit[] = [];
+    const skillIds = [...new Set(moduleLessons.flatMap((item) => item.skillIds ?? []))];
+    const prerequisiteSkillIds = [...new Set(moduleLessons.flatMap((item) => item.prerequisiteSkillIds ?? []))];
     for (let start = 0; start < moduleLessons.length; start += unitSize) {
       const slice = moduleLessons.slice(start, start + unitSize);
       units.push({
@@ -124,13 +147,15 @@ export function buildChapters(courseId: string, lessons: Lesson[]): Chapter[] {
       title: module,
       units,
       lessonIds: moduleLessons.map((item) => item.id),
+      skillIds,
+      prerequisiteSkillIds,
       estimatedMinutes: moduleLessons.reduce((total, item) => total + item.durationMin, 0),
     };
   });
 }
 
 export function makeCourse(draft: CourseDraft): Course {
-  const normalizedLessons = draft.starterLessons.map((item) => normalizeLesson(draft.id, item));
+  const normalizedLessons = normalizeLessons(draft.id, draft.starterLessons);
   return {
     ...draft,
     starterLessons: normalizedLessons,
