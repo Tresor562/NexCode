@@ -1,19 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { WebView } from 'react-native-webview';
 import { Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
 import { openLabWorkspace, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
 import { runBehavioralSuite, secretSafetyIssues } from '../learning/labBehavioralTests';
-import { Card, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
+import { Card, Pill, PrimaryButton, ProgressBar } from './components';
 import { theme } from './theme';
 
-export function LabWorkspaceScreen({
-  lesson,
-  stored,
-  onSave,
-  onComplete,
-  onBack,
-}: {
+type Panel = 'files' | 'code' | 'preview' | 'console' | 'tools';
+type Tool = 'format' | 'minify' | 'obfuscate' | 'deobfuscate';
+
+const symbols = ['{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
+
+export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack }: {
   lesson: Lesson;
   stored?: LabDraft;
   onSave: (draft: LabDraft) => void;
@@ -23,24 +24,38 @@ export function LabWorkspaceScreen({
   const initial = useMemo(() => openLabWorkspace(lesson, stored), [lesson.id]);
   const [draft, setDraft] = useState(initial.draft);
   const [attempts, setAttempts] = useState(0);
-  const [feedback, setFeedback] = useState('Modifie réellement le workspace, puis lance les tests.');
+  const [feedback, setFeedback] = useState('Prêt. Modifie le code puis lance les tests.');
   const [validated, setValidated] = useState(false);
+  const [panel, setPanel] = useState<Panel>('code');
+  const [tool, setTool] = useState<Tool>('format');
+  const [toolInput, setToolInput] = useState('');
+  const [toolOutput, setToolOutput] = useState('');
   const mission = initial.mission;
   const files = Object.keys(draft.files);
   const content = draft.files[draft.activeFile] ?? '';
   const secrets = secretSafetyIssues(draft);
+  const progress = Math.round(((draft.passedCriteria?.length ?? 0) / Math.max(1, mission.successCriteria.length)) * 100);
+  const htmlPreview = useMemo(() => buildPreview(draft.files), [draft.files]);
 
-  function changeFile(filename: string) {
-    const next = { ...draft, activeFile: filename, updatedAt: new Date().toISOString() };
+  function save(next: LabDraft) {
     setDraft(next);
     onSave(next);
   }
 
+  function changeFile(filename: string) {
+    save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });
+    setPanel('code');
+    Haptics.selectionAsync().catch(() => undefined);
+  }
+
   function changeContent(value: string) {
-    const next = updateLabFile(draft, draft.activeFile, value);
-    setDraft(next);
-    onSave(next);
+    save(updateLabFile(draft, draft.activeFile, value));
     setValidated(false);
+  }
+
+  function insertSymbol(value: string) {
+    changeContent(`${content}${value}`);
+    Haptics.selectionAsync().catch(() => undefined);
   }
 
   function runTests() {
@@ -50,108 +65,147 @@ export function LabWorkspaceScreen({
     const behavioral = runBehavioralSuite(mission, draft, nextAttempts);
     const passed = structural.passed && behavioral.passed;
     const stamped = stampLabValidation(draft, structural);
-    setDraft(stamped);
-    onSave(stamped);
+    save(stamped);
     setValidated(passed);
     const failed = behavioral.visible.filter((item) => !item.passed).map((item) => item.label);
-    const pieces = [
-      structural.feedback,
-      failed.length ? `Tests à corriger : ${failed.join(' • ')}` : 'Tests visibles : OK.',
-      behavioral.hiddenTotal ? `Tests cachés : ${behavioral.hiddenPassed}/${behavioral.hiddenTotal}.` : '',
-      behavioral.hint ?? '',
-    ].filter(Boolean);
+    const pieces = [structural.feedback, failed.length ? `À corriger : ${failed.join(' • ')}` : 'Tests visibles : OK', behavioral.hiddenTotal ? `Tests cachés : ${behavioral.hiddenPassed}/${behavioral.hiddenTotal}` : '', behavioral.hint ?? ''].filter(Boolean);
     setFeedback(pieces.join('\n'));
+    setPanel('console');
+    Haptics.notificationAsync(passed ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
   }
 
-  const progress = Math.round(((draft.passedCriteria?.length ?? 0) / Math.max(1, mission.successCriteria.length)) * 100);
+  function runTool() {
+    const source = toolInput || content;
+    const result = transformCode(source, tool);
+    setToolOutput(result);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+  }
+
+  function applyToolResult() {
+    if (!toolOutput) return;
+    changeContent(toolOutput);
+    setPanel('code');
+  }
 
   return (
     <View>
-      <Pressable onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹ Retour au cours</Text></Pressable>
-      <Text style={styles.eyebrow}>NEXCODE LAB • {mission.language.toUpperCase()}</Text>
-      <Text style={styles.title}>{mission.title}</Text>
-      <Text style={styles.lead}>{mission.instructions}</Text>
+      <View style={styles.topbar}>
+        <Pressable onPress={onBack} style={styles.iconButton}><Text style={styles.iconText}>‹</Text></Pressable>
+        <View style={styles.titleWrap}><Text style={styles.eyebrow}>NEXCODE LAB</Text><Text style={styles.title} numberOfLines={1}>{mission.title}</Text></View>
+        <Pressable onPress={runTests} style={styles.run}><Text style={styles.runText}>▶ Run</Text></Pressable>
+      </View>
 
-      <Card tone="primary">
-        <View style={styles.rowBetween}>
-          <View style={styles.flex}>
-            <Text style={styles.kicker}>CRITÈRES DE RÉUSSITE</Text>
-            <Text style={styles.cardTitle}>{draft.passedCriteria?.length ?? 0}/{mission.successCriteria.length} validés</Text>
-          </View>
-          <Pill label={validated ? '✓ Mission validée' : 'En cours'} tone={validated ? 'success' : 'primary'} />
-        </View>
-        <View style={styles.spacer10} />
+      <Card tone="primary" style={styles.progressCard}>
+        <View style={styles.rowBetween}><Text style={styles.progressLabel}>{draft.passedCriteria?.length ?? 0}/{mission.successCriteria.length} critères</Text><Pill label={validated ? 'Validé ✓' : `${progress}%`} tone={validated ? 'success' : 'primary'} /></View>
         <ProgressBar value={progress} />
-        {mission.successCriteria.map((criterion, index) => (
-          <Text key={criterion} style={styles.criterion}>{draft.passedCriteria?.includes(criterion) ? '✓' : '•'} {index + 1}. {criterion}</Text>
-        ))}
       </Card>
 
-      <SectionHeader title="Workspace" action={`${files.length} fichier${files.length > 1 ? 's' : ''}`} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-        {files.map((filename) => (
-          <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileTab, draft.activeFile === filename && styles.fileTabActive]}>
-            <Text style={[styles.fileTabText, draft.activeFile === filename && styles.fileTabTextActive]}>{filename}</Text>
-          </Pressable>
-        ))}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.nav}>
+        <NavItem active={panel === 'files'} label="Fichiers" icon="☷" onPress={() => setPanel('files')} />
+        <NavItem active={panel === 'code'} label="Code" icon="</>" onPress={() => setPanel('code')} />
+        <NavItem active={panel === 'preview'} label="Preview" icon="◉" onPress={() => setPanel('preview')} />
+        <NavItem active={panel === 'console'} label="Console" icon=">_" onPress={() => setPanel('console')} />
+        <NavItem active={panel === 'tools'} label="Outils" icon="✦" onPress={() => setPanel('tools')} />
       </ScrollView>
 
-      <View style={styles.editor}>
-        <View style={styles.editorBar}>
-          <Text style={styles.editorFile}>{draft.activeFile}</Text>
-          <Text style={styles.saved}>autosave local</Text>
+      {panel === 'files' ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Explorateur</Text>
+          {files.map((filename) => <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileRow, draft.activeFile === filename && styles.fileRowActive]}><View style={styles.fileIcon}><Text style={styles.fileIconText}>#</Text></View><Text style={styles.fileName}>{filename}</Text><Text style={styles.chevron}>›</Text></Pressable>)}
+          <Text style={styles.helper}>Les fichiers du projet restent sauvegardés automatiquement.</Text>
         </View>
-        <TextInput
-          multiline
-          value={content}
-          onChangeText={changeContent}
-          autoCapitalize="none"
-          autoCorrect={false}
-          spellCheck={false}
-          textAlignVertical="top"
-          style={styles.code}
-          accessibilityLabel={`Éditeur ${draft.activeFile}`}
-        />
-      </View>
-
-      {mission.language === 'HTML/CSS' ? (
-        <Card style={styles.preview}>
-          <Text style={styles.kicker}>PREVIEW WEB</Text>
-          <Text style={styles.previewText}>La V1.5 conserve le HTML/CSS/JS en fichiers séparés et vérifie la structure localement. Le rendu natif complet sera validé sur l’APK final.</Text>
-        </Card>
       ) : null}
 
-      {secrets.length ? (
-        <Card>
-          <Pill label="Secret potentiel détecté" tone="warning" />
-          {secrets.map((issue) => <Text key={issue} style={styles.warning}>{issue}</Text>)}
-          <Text style={styles.body}>Remplace toute vraie clé par une variable d’environnement ou une valeur d’exemple avant de poursuivre.</Text>
-        </Card>
+      {panel === 'code' ? (
+        <View style={styles.panel}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>{files.map((filename) => <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileTab, draft.activeFile === filename && styles.fileTabActive]}><Text style={[styles.fileTabText, draft.activeFile === filename && styles.fileTabTextActive]}>{filename}</Text></Pressable>)}</ScrollView>
+          <View style={styles.editor}>
+            <View style={styles.editorBar}><Text style={styles.editorFile}>{draft.activeFile}</Text><Text style={styles.saved}>● sauvegardé</Text></View>
+            <TextInput multiline value={content} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} accessibilityLabel={`Éditeur ${draft.activeFile}`} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.symbolBar}>{symbols.map((item) => <Pressable key={item} onPress={() => insertSymbol(item)} style={styles.symbol}><Text style={styles.symbolText}>{item}</Text></Pressable>)}</ScrollView>
+          </View>
+        </View>
       ) : null}
 
-      <View style={styles.actions}>
-        <PrimaryButton label={`▶ Tester la mission${attempts ? ` • essai ${attempts + 1}` : ''}`} onPress={runTests} />
-      </View>
+      {panel === 'preview' ? (
+        <View style={styles.panel}>
+          <View style={styles.previewTop}><Text style={styles.panelTitle}>Aperçu</Text><Pill label="Live" tone="success" /></View>
+          {htmlPreview ? <View style={styles.webWrap}><WebView originWhitelist={['*']} source={{ html: htmlPreview }} style={styles.web} javaScriptEnabled /></View> : <Card><Text style={styles.emptyTitle}>Aucun aperçu visuel pour ce projet.</Text><Text style={styles.helper}>Le preview Web s’active quand le workspace contient un fichier HTML.</Text></Card>}
+        </View>
+      ) : null}
 
-      <Card tone={validated ? 'success' : 'default'}>
-        <Text style={styles.kicker}>FEEDBACK</Text>
-        <Text style={styles.feedback}>{feedback}</Text>
-      </Card>
+      {panel === 'console' ? (
+        <View style={styles.panel}>
+          <View style={styles.consoleHeader}><Text style={styles.panelTitle}>Console</Text><Pressable onPress={runTests} style={styles.smallRun}><Text style={styles.smallRunText}>Relancer</Text></Pressable></View>
+          <View style={styles.console}><Text style={styles.consolePrompt}>$ nexcode test</Text><Text style={styles.consoleText}>{feedback}</Text>{secrets.map((issue) => <Text key={issue} style={styles.consoleWarning}>⚠ {issue}</Text>)}</View>
+          {validated ? <PrimaryButton label="Terminer la mission" icon="✓" onPress={() => onComplete(draft)} /> : null}
+        </View>
+      ) : null}
 
-      <View style={styles.actions}>
-        <PrimaryButton
-          label={validated ? 'Valider le Lab et retourner au cours' : 'Valide tous les tests pour continuer'}
-          disabled={!validated}
-          onPress={() => onComplete(draft)}
-        />
-      </View>
+      {panel === 'tools' ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Code Tools</Text>
+          <Text style={styles.helper}>Utilise ces outils sur le fichier actuel ou colle un autre extrait.</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolTabs}>
+            {(['format','minify','obfuscate','deobfuscate'] as Tool[]).map((item) => <Pressable key={item} onPress={() => setTool(item)} style={[styles.toolChip, tool === item && styles.toolChipActive]}><Text style={[styles.toolChipText, tool === item && styles.toolChipTextActive]}>{toolLabel(item)}</Text></Pressable>)}
+          </ScrollView>
+          <TextInput multiline value={toolInput} onChangeText={setToolInput} placeholder="Laisse vide pour utiliser le fichier actuel…" placeholderTextColor={theme.colors.textMuted} style={styles.toolInput} autoCapitalize="none" autoCorrect={false} />
+          <PrimaryButton label={toolLabel(tool)} icon="✦" onPress={runTool} />
+          {toolOutput ? <View style={styles.toolResult}><Text style={styles.resultLabel}>RÉSULTAT</Text><ScrollView style={styles.resultScroll}><Text style={styles.resultCode}>{toolOutput}</Text></ScrollView><PrimaryButton label="Remplacer le fichier actuel" onPress={applyToolResult} /></View> : null}
+        </View>
+      ) : null}
     </View>
   );
 }
 
+function NavItem({ active, label, icon, onPress }: { active: boolean; label: string; icon: string; onPress: () => void }) {
+  return <Pressable onPress={() => { onPress(); Haptics.selectionAsync().catch(() => undefined); }} style={[styles.navItem, active && styles.navItemActive]}><Text style={[styles.navIcon, active && styles.navTextActive]}>{icon}</Text><Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text></Pressable>;
+}
+
+function buildPreview(files: Record<string, string>) {
+  const htmlName = Object.keys(files).find((name) => name.endsWith('.html'));
+  if (!htmlName) return '';
+  const css = Object.entries(files).filter(([name]) => name.endsWith('.css')).map(([,value]) => value).join('\n');
+  const js = Object.entries(files).filter(([name]) => name.endsWith('.js')).map(([,value]) => value).join('\n');
+  let html = files[htmlName] ?? '';
+  if (css) html = html.includes('</head>') ? html.replace('</head>', `<style>${css}</style></head>`) : `<style>${css}</style>${html}`;
+  if (js) html = html.includes('</body>') ? html.replace('</body>', `<script>${js}<\/script></body>`) : `${html}<script>${js}<\/script>`;
+  return html;
+}
+
+function toolLabel(tool: Tool) {
+  return tool === 'format' ? 'Formatter' : tool === 'minify' ? 'Minifier' : tool === 'obfuscate' ? 'Obfusquer' : 'Déobfusquer';
+}
+
+function transformCode(source: string, tool: Tool) {
+  if (!source.trim()) return '';
+  if (tool === 'minify') return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '$1').replace(/\s+/g, ' ').replace(/\s*([{}();,:=+<>])\s*/g, '$1').trim();
+  if (tool === 'format') return simpleFormat(source);
+  if (tool === 'obfuscate') {
+    const codes = Array.from(source).map((char) => char.charCodeAt(0)).join(',');
+    return `eval(String.fromCharCode(${codes}))`;
+  }
+  const match = source.match(/String\.fromCharCode\(([^)]+)\)/);
+  if (!match) return 'Déobfuscation automatique impossible pour ce format. Utilise Analyzer pour inspecter manuellement le code.';
+  return match[1].split(',').map((value) => String.fromCharCode(Number(value.trim()))).join('');
+}
+
+function simpleFormat(source: string) {
+  const clean = source.replace(/\r/g, '').replace(/\s*{\s*/g, ' {\n').replace(/;\s*/g, ';\n').replace(/}\s*/g, '\n}\n');
+  let depth = 0;
+  return clean.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    if (line.startsWith('}')) depth = Math.max(0, depth - 1);
+    const out = `${'  '.repeat(depth)}${line}`;
+    if (line.endsWith('{')) depth += 1;
+    return out;
+  }).join('\n');
+}
+
 const styles = StyleSheet.create({
-  flex:{flex:1}, back:{color:'#9DA8FF',fontSize:13,fontWeight:'800',paddingVertical:10}, eyebrow:{color:'#8A98FF',fontSize:11,fontWeight:'800',letterSpacing:1.2,marginTop:4,marginBottom:8}, title:{color:theme.colors.text,fontSize:28,fontWeight:'900',lineHeight:34}, lead:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:7,marginBottom:14},
-  rowBetween:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10}, kicker:{color:'#8F9CFF',fontSize:10,fontWeight:'900',letterSpacing:1}, cardTitle:{color:theme.colors.text,fontSize:16,fontWeight:'800',marginTop:4}, spacer10:{height:10}, criterion:{color:theme.colors.textSecondary,fontSize:12,lineHeight:18,marginTop:7}, tabs:{gap:7,paddingBottom:8}, fileTab:{paddingHorizontal:12,paddingVertical:8,borderRadius:10,borderWidth:1,borderColor:theme.colors.border,backgroundColor:theme.colors.surface}, fileTabActive:{backgroundColor:'#1B2552',borderColor:'#4D62CC'}, fileTabText:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'700'}, fileTabTextActive:{color:'#fff'},
-  editor:{borderWidth:1,borderColor:theme.colors.border,borderRadius:16,overflow:'hidden',backgroundColor:'#080D18'}, editorBar:{height:42,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:theme.colors.border}, editorFile:{color:theme.colors.text,fontSize:12,fontWeight:'800'}, saved:{color:theme.colors.success,fontSize:9,fontWeight:'800'}, code:{minHeight:280,padding:14,color:'#E6EBFF',fontFamily:'monospace',fontSize:13,lineHeight:20},
-  preview:{marginTop:10}, previewText:{color:theme.colors.textSecondary,fontSize:12,lineHeight:18,marginTop:7}, warning:{color:theme.colors.warning,fontSize:12,fontWeight:'700',marginTop:8}, body:{color:theme.colors.textSecondary,fontSize:12,lineHeight:18,marginTop:8}, actions:{marginVertical:10}, feedback:{color:theme.colors.textSecondary,fontSize:12,lineHeight:19,marginTop:8},
+  topbar:{flexDirection:'row',alignItems:'center',gap:10,marginBottom:12},iconButton:{width:40,height:40,borderRadius:15,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,.06)',borderWidth:1,borderColor:'rgba(255,255,255,.1)'},iconText:{color:theme.colors.text,fontSize:27},titleWrap:{flex:1},eyebrow:{color:'#8392FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},title:{color:theme.colors.text,fontSize:17,fontWeight:'900',marginTop:2},run:{paddingHorizontal:15,height:40,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#6878FF',shadowColor:'#6878FF',shadowOpacity:.25,shadowRadius:12,elevation:6},runText:{color:'#fff',fontWeight:'900',fontSize:12},
+  progressCard:{padding:12,marginBottom:10},rowBetween:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},progressLabel:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},nav:{gap:7,paddingVertical:8},navItem:{minWidth:68,paddingHorizontal:10,paddingVertical:9,borderRadius:15,alignItems:'center',gap:3,backgroundColor:'rgba(255,255,255,.04)',borderWidth:1,borderColor:'rgba(255,255,255,.07)'},navItemActive:{backgroundColor:'rgba(104,120,255,.16)',borderColor:'rgba(104,120,255,.5)'},navIcon:{color:theme.colors.textMuted,fontSize:13,fontWeight:'900'},navText:{color:theme.colors.textMuted,fontSize:9,fontWeight:'800'},navTextActive:{color:'#C9D0FF'},
+  panel:{marginTop:8,gap:10},panelTitle:{color:theme.colors.text,fontSize:21,fontWeight:'900'},helper:{color:theme.colors.textMuted,fontSize:11,lineHeight:17},fileRow:{height:54,borderRadius:15,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'rgba(255,255,255,.035)',borderWidth:1,borderColor:theme.colors.border},fileRowActive:{borderColor:'#5E70E8',backgroundColor:'rgba(94,112,232,.12)'},fileIcon:{width:30,height:30,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#172038'},fileIconText:{color:'#8EA0FF',fontWeight:'900'},fileName:{flex:1,color:theme.colors.text,fontFamily:'monospace',fontSize:12},chevron:{color:theme.colors.textMuted,fontSize:20},
+  tabs:{gap:6},fileTab:{paddingHorizontal:11,paddingVertical:8,borderRadius:10,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,.035)'},fileTabActive:{backgroundColor:'#1A2451',borderColor:'#5267DB'},fileTabText:{color:theme.colors.textSecondary,fontSize:10,fontWeight:'700'},fileTabTextActive:{color:'#fff'},editor:{borderWidth:1,borderColor:theme.colors.border,borderRadius:18,overflow:'hidden',backgroundColor:'#070B13'},editorBar:{height:42,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#1E2637'},editorFile:{color:theme.colors.text,fontSize:11,fontWeight:'800',fontFamily:'monospace'},saved:{color:theme.colors.success,fontSize:9,fontWeight:'800'},code:{minHeight:320,padding:14,color:'#E7EDFF',fontFamily:'monospace',fontSize:13,lineHeight:20},symbolBar:{gap:5,padding:8,borderTopWidth:1,borderTopColor:'#1E2637'},symbol:{minWidth:34,height:34,borderRadius:9,alignItems:'center',justifyContent:'center',backgroundColor:'#151D2D'},symbolText:{color:'#D9E0F8',fontFamily:'monospace',fontSize:12,fontWeight:'800'},
+  previewTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},webWrap:{height:500,borderRadius:18,overflow:'hidden',borderWidth:1,borderColor:theme.colors.border,backgroundColor:'#fff'},web:{flex:1,backgroundColor:'#fff'},emptyTitle:{color:theme.colors.text,fontSize:15,fontWeight:'800'},consoleHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},smallRun:{paddingHorizontal:12,paddingVertical:7,borderRadius:10,backgroundColor:'#1B2550'},smallRunText:{color:'#AEB9FF',fontSize:10,fontWeight:'900'},console:{minHeight:280,borderRadius:18,padding:15,backgroundColor:'#060A10',borderWidth:1,borderColor:'#20283A'},consolePrompt:{color:'#77E8A9',fontFamily:'monospace',fontSize:12,fontWeight:'800'},consoleText:{color:'#CBD4E9',fontFamily:'monospace',fontSize:12,lineHeight:19,marginTop:12},consoleWarning:{color:'#F1BE6D',fontFamily:'monospace',fontSize:11,lineHeight:18,marginTop:9},
+  toolTabs:{gap:6},toolChip:{paddingHorizontal:12,paddingVertical:8,borderRadius:12,borderWidth:1,borderColor:theme.colors.border},toolChipActive:{backgroundColor:'rgba(104,120,255,.16)',borderColor:'#6173EF'},toolChipText:{color:theme.colors.textMuted,fontSize:10,fontWeight:'800'},toolChipTextActive:{color:'#C8D0FF'},toolInput:{minHeight:120,borderRadius:16,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'#080D16',padding:12,color:theme.colors.text,fontFamily:'monospace',fontSize:12,textAlignVertical:'top'},toolResult:{gap:8,borderRadius:16,padding:12,backgroundColor:'#080D16',borderWidth:1,borderColor:theme.colors.border},resultLabel:{color:'#8E9BFF',fontSize:9,fontWeight:'900',letterSpacing:1},resultScroll:{maxHeight:260},resultCode:{color:'#DDE5FA',fontFamily:'monospace',fontSize:11,lineHeight:18},
 });
