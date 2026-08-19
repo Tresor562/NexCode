@@ -185,9 +185,9 @@ function transformCode(source: string, tool: Tool) {
     const codes = Array.from(source).map((char) => char.charCodeAt(0)).join(',');
     return `eval(String.fromCharCode(${codes}))`;
   }
-  const match = source.match(/String\.fromCharCode\(([^)]+)\)/);
-  if (!match) return 'Déobfuscation automatique impossible pour ce format. Utilise Analyzer pour inspecter manuellement le code.';
-  return match[1].split(',').map((value) => String.fromCharCode(Number(value.trim()))).join('');
+  const encoded = source.match(/String\.fromCharCode\(([^)]+)\)/)?.[1];
+  if (!encoded) return 'Déobfuscation automatique impossible pour ce format. Utilise Analyzer pour inspecter manuellement le code.';
+  return encoded.split(',').map((value) => String.fromCharCode(Number(value.trim()))).join('');
 }
 
 function simpleFormat(source: string) {
