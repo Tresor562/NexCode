@@ -88,7 +88,7 @@ function CourseJourney({ course, state, onBack, onOpenLesson }: { course: Course
           const current = index === firstIncompleteIndex;
           const locked = index > firstIncompleteIndex + 2;
           const offset = index % 4 === 1 ? 38 : index % 4 === 2 ? 70 : index % 4 === 3 ? 34 : 0;
-          const kindIcon = lesson.activityKind === 'lab' ? '</>' : lesson.activityKind === 'checkpoint' ? '★' : lesson.activityKind === 'debug' ? '!' : '›';
+          const kindIcon = lesson.activityKind === 'lab' ? '</>' : lesson.activityKind === 'checkpoint' ? '★' : lesson.exercises?.some((exercise) => exercise.kind === 'debug') ? '!' : '›';
           return (
             <View key={lesson.id} style={[styles.nodeRow, { transform: [{ translateX: offset }] }]}>
               {index < lessons.length - 1 ? <View style={[styles.pathLine, done && styles.pathLineDone]} /> : null}
