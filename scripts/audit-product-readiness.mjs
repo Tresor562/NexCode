@@ -16,13 +16,13 @@ if (!index.includes("./src/ui/NexCodeApp")) throw new Error('index.ts does not u
 for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordSkillAttempt','installedOfflinePacks','portfolioProofs']) {
   if (!app.includes(token)) throw new Error(`NexCodeApp missing ${token}`);
 }
-for (const token of ['courseNavigationSummary','searchLearningActivities','buildChapterOfflinePack','5, 10, 20, 45','Maîtrise','Chapitres','Mise à jour disponible']) {
+for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Choisis ton chemin','Continuer','checkpoint','lab']) {
   if (!hub.includes(token)) throw new Error(`LearningHub missing ${token}`);
 }
-for (const token of ['Comprendre','Observer un exemple','Vérifier sans deviner','Pratiquer dans le Lab','Révision future','masterySnapshot']) {
+for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • REGARDER','À TOI DE JOUER','MISSION FLASH','FINAL • CONSTRUIRE','masterySnapshot','expo-haptics','expo-audio']) {
   if (!lesson.includes(token)) throw new Error(`Lesson flow missing ${token}`);
 }
-for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','autosave local','Tests cachés','secretSafetyIssues']) {
+for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Déobfusquer','Console','Preview']) {
   if (!lab.includes(token)) throw new Error(`Lab workspace UI missing ${token}`);
 }
 for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','defaultProjectRubric','Revue avant portfolio']) {
@@ -38,4 +38,4 @@ for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','portf
   if (!projectEngine.includes(token)) throw new Error(`Portfolio engine missing ${token}`);
 }
 if (requiredFiles.some((source) => source.includes('TODO UI'))) throw new Error('A product UI contains an unfinished TODO marker');
-console.log('Product readiness audit OK: final runtime shell exposes adaptive learning, chapters, mastery, lesson→Lab flow, versioned offline packs and reviewed portfolio proofs.');
+console.log('Product readiness audit OK: mobile-first learning journey, step lessons, haptic/audio feedback, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
