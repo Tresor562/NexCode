@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
 import { Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
+import { importFilesFromPhone, importFolderFromPhone } from '../lib/workspaceImport';
 import { openLabWorkspace, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
 import { runBehavioralSuite, secretSafetyIssues } from '../learning/labBehavioralTests';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
@@ -12,7 +13,7 @@ import { theme } from './theme';
 type Panel = 'files' | 'code' | 'preview' | 'console' | 'tools';
 type Tool = 'format' | 'minify' | 'obfuscate' | 'deobfuscate';
 
-const symbols = ['{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
+const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
 
 export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack }: {
   lesson: Lesson;
@@ -30,6 +31,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   const [tool, setTool] = useState<Tool>('format');
   const [toolInput, setToolInput] = useState('');
   const [toolOutput, setToolOutput] = useState('');
+  const [importing, setImporting] = useState(false);
   const mission = initial.mission;
   const files = Object.keys(draft.files);
   const content = draft.files[draft.activeFile] ?? '';
@@ -54,8 +56,50 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   }
 
   function insertSymbol(value: string) {
-    changeContent(`${content}${value}`);
+    changeContent(`${content}${value === 'Tab' ? '  ' : value}`);
     Haptics.selectionAsync().catch(() => undefined);
+  }
+
+  async function importFiles() {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const result = await importFilesFromPhone(draft.files);
+      if (!result.imported) {
+        setFeedback('Aucun fichier texte importé.');
+        return;
+      }
+      const before = new Set(Object.keys(draft.files));
+      const firstNew = Object.keys(result.files).find((name) => !before.has(name));
+      save({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() });
+      setFeedback(`${result.imported} fichier(s) importé(s)${result.renamed ? ` • ${result.renamed} renommé(s) pour éviter un écrasement` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    } catch {
+      setFeedback('Import annulé ou fichier inaccessible.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function importFolder() {
+    if (importing) return;
+    setImporting(true);
+    try {
+      const result = await importFolderFromPhone(draft.files);
+      if (!result.imported) {
+        setFeedback('Aucun fichier texte compatible trouvé dans ce dossier.');
+        return;
+      }
+      const before = new Set(Object.keys(draft.files));
+      const firstNew = Object.keys(result.files).find((name) => !before.has(name));
+      save({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() });
+      setFeedback(`${result.imported} fichier(s) du dossier importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+    } catch {
+      setFeedback('Import du dossier annulé ou accès refusé.');
+    } finally {
+      setImporting(false);
+    }
   }
 
   function runTests() {
@@ -110,9 +154,13 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
 
       {panel === 'files' ? (
         <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Explorateur</Text>
-          {files.map((filename) => <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileRow, draft.activeFile === filename && styles.fileRowActive]}><View style={styles.fileIcon}><Text style={styles.fileIconText}>#</Text></View><Text style={styles.fileName}>{filename}</Text><Text style={styles.chevron}>›</Text></Pressable>)}
-          <Text style={styles.helper}>Les fichiers du projet restent sauvegardés automatiquement.</Text>
+          <View style={styles.explorerHeader}><Text style={styles.panelTitle}>Explorateur</Text><Text style={styles.fileCount}>{files.length} fichier(s)</Text></View>
+          <View style={styles.importActions}>
+            <Pressable disabled={importing} onPress={importFiles} style={({ pressed }) => [styles.importButton, pressed && styles.importPressed]}><Text style={styles.importGlyph}>＋</Text><View><Text style={styles.importTitle}>{importing ? 'Import…' : 'Fichiers'}</Text><Text style={styles.importMeta}>Depuis le téléphone</Text></View></Pressable>
+            <Pressable disabled={importing} onPress={importFolder} style={({ pressed }) => [styles.importButton, pressed && styles.importPressed]}><Text style={styles.importGlyph}>▱</Text><View><Text style={styles.importTitle}>Dossier</Text><Text style={styles.importMeta}>Projet complet</Text></View></Pressable>
+          </View>
+          {files.map((filename) => <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileRow, draft.activeFile === filename && styles.fileRowActive]}><View style={styles.fileIcon}><Text style={styles.fileIconText}>{fileBadge(filename)}</Text></View><Text style={styles.fileName}>{filename}</Text><Text style={styles.chevron}>›</Text></Pressable>)}
+          <Text style={styles.helper}>Les imports conservent l’arborescence. En cas de même nom, NexCode garde les deux fichiers au lieu d’écraser ton code.</Text>
         </View>
       ) : null}
 
@@ -162,6 +210,11 @@ function NavItem({ active, label, icon, onPress }: { active: boolean; label: str
   return <Pressable onPress={() => { onPress(); Haptics.selectionAsync().catch(() => undefined); }} style={[styles.navItem, active && styles.navItemActive]}><Text style={[styles.navIcon, active && styles.navTextActive]}>{icon}</Text><Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text></Pressable>;
 }
 
+function fileBadge(filename: string) {
+  const ext = filename.split('.').pop()?.toUpperCase() ?? 'TXT';
+  return ext.slice(0, 3);
+}
+
 function buildPreview(files: Record<string, string>) {
   const htmlName = Object.keys(files).find((name) => name.endsWith('.html'));
   if (!htmlName) return '';
@@ -204,7 +257,7 @@ function simpleFormat(source: string) {
 const styles = StyleSheet.create({
   topbar:{flexDirection:'row',alignItems:'center',gap:10,marginBottom:12},iconButton:{width:40,height:40,borderRadius:15,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,.06)',borderWidth:1,borderColor:'rgba(255,255,255,.1)'},iconText:{color:theme.colors.text,fontSize:27},titleWrap:{flex:1},eyebrow:{color:'#8392FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},title:{color:theme.colors.text,fontSize:17,fontWeight:'900',marginTop:2},run:{paddingHorizontal:15,height:40,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'#6878FF',shadowColor:'#6878FF',shadowOpacity:.25,shadowRadius:12,elevation:6},runText:{color:'#fff',fontWeight:'900',fontSize:12},
   progressCard:{padding:12,marginBottom:10},rowBetween:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},progressLabel:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},nav:{gap:7,paddingVertical:8},navItem:{minWidth:68,paddingHorizontal:10,paddingVertical:9,borderRadius:15,alignItems:'center',gap:3,backgroundColor:'rgba(255,255,255,.04)',borderWidth:1,borderColor:'rgba(255,255,255,.07)'},navItemActive:{backgroundColor:'rgba(104,120,255,.16)',borderColor:'rgba(104,120,255,.5)'},navIcon:{color:theme.colors.textMuted,fontSize:13,fontWeight:'900'},navText:{color:theme.colors.textMuted,fontSize:9,fontWeight:'800'},navTextActive:{color:'#C9D0FF'},
-  panel:{marginTop:8,gap:10},panelTitle:{color:theme.colors.text,fontSize:21,fontWeight:'900'},helper:{color:theme.colors.textMuted,fontSize:11,lineHeight:17},fileRow:{height:54,borderRadius:15,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'rgba(255,255,255,.035)',borderWidth:1,borderColor:theme.colors.border},fileRowActive:{borderColor:'#5E70E8',backgroundColor:'rgba(94,112,232,.12)'},fileIcon:{width:30,height:30,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#172038'},fileIconText:{color:'#8EA0FF',fontWeight:'900'},fileName:{flex:1,color:theme.colors.text,fontFamily:'monospace',fontSize:12},chevron:{color:theme.colors.textMuted,fontSize:20},
+  panel:{marginTop:8,gap:10},panelTitle:{color:theme.colors.text,fontSize:21,fontWeight:'900'},helper:{color:theme.colors.textMuted,fontSize:11,lineHeight:17},explorerHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},fileCount:{color:theme.colors.textMuted,fontSize:10,fontWeight:'800'},importActions:{flexDirection:'row',gap:8},importButton:{flex:1,minHeight:64,borderRadius:17,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'rgba(103,121,255,.1)',borderWidth:1,borderColor:'rgba(119,137,255,.24)'},importPressed:{opacity:.78,transform:[{scale:.985}]},importGlyph:{color:'#BFC8FF',fontSize:20,fontWeight:'900'},importTitle:{color:theme.colors.text,fontSize:12,fontWeight:'900'},importMeta:{color:theme.colors.textMuted,fontSize:9,marginTop:2},fileRow:{minHeight:54,borderRadius:15,paddingHorizontal:12,flexDirection:'row',alignItems:'center',gap:10,backgroundColor:'rgba(255,255,255,.035)',borderWidth:1,borderColor:theme.colors.border},fileRowActive:{borderColor:'#5E70E8',backgroundColor:'rgba(94,112,232,.12)'},fileIcon:{width:34,height:30,borderRadius:10,alignItems:'center',justifyContent:'center',backgroundColor:'#172038'},fileIconText:{color:'#8EA0FF',fontWeight:'900',fontSize:8},fileName:{flex:1,color:theme.colors.text,fontFamily:'monospace',fontSize:11},chevron:{color:theme.colors.textMuted,fontSize:20},
   tabs:{gap:6},fileTab:{paddingHorizontal:11,paddingVertical:8,borderRadius:10,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,.035)'},fileTabActive:{backgroundColor:'#1A2451',borderColor:'#5267DB'},fileTabText:{color:theme.colors.textSecondary,fontSize:10,fontWeight:'700'},fileTabTextActive:{color:'#fff'},editor:{borderWidth:1,borderColor:theme.colors.border,borderRadius:18,overflow:'hidden',backgroundColor:'#070B13'},editorBar:{height:42,paddingHorizontal:13,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#1E2637'},editorFile:{color:theme.colors.text,fontSize:11,fontWeight:'800',fontFamily:'monospace'},saved:{color:theme.colors.success,fontSize:9,fontWeight:'800'},code:{minHeight:320,padding:14,color:'#E7EDFF',fontFamily:'monospace',fontSize:13,lineHeight:20},symbolBar:{gap:5,padding:8,borderTopWidth:1,borderTopColor:'#1E2637'},symbol:{minWidth:34,height:34,borderRadius:9,alignItems:'center',justifyContent:'center',backgroundColor:'#151D2D'},symbolText:{color:'#D9E0F8',fontFamily:'monospace',fontSize:12,fontWeight:'800'},
   previewTop:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},webWrap:{height:500,borderRadius:18,overflow:'hidden',borderWidth:1,borderColor:theme.colors.border,backgroundColor:'#fff'},web:{flex:1,backgroundColor:'#fff'},emptyTitle:{color:theme.colors.text,fontSize:15,fontWeight:'800'},consoleHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},smallRun:{paddingHorizontal:12,paddingVertical:7,borderRadius:10,backgroundColor:'#1B2550'},smallRunText:{color:'#AEB9FF',fontSize:10,fontWeight:'900'},console:{minHeight:280,borderRadius:18,padding:15,backgroundColor:'#060A10',borderWidth:1,borderColor:'#20283A'},consolePrompt:{color:'#77E8A9',fontFamily:'monospace',fontSize:12,fontWeight:'800'},consoleText:{color:'#CBD4E9',fontFamily:'monospace',fontSize:12,lineHeight:19,marginTop:12},consoleWarning:{color:'#F1BE6D',fontFamily:'monospace',fontSize:11,lineHeight:18,marginTop:9},
   toolTabs:{gap:6},toolChip:{paddingHorizontal:12,paddingVertical:8,borderRadius:12,borderWidth:1,borderColor:theme.colors.border},toolChipActive:{backgroundColor:'rgba(104,120,255,.16)',borderColor:'#6173EF'},toolChipText:{color:theme.colors.textMuted,fontSize:10,fontWeight:'800'},toolChipTextActive:{color:'#C8D0FF'},toolInput:{minHeight:120,borderRadius:16,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'#080D16',padding:12,color:theme.colors.text,fontFamily:'monospace',fontSize:12,textAlignVertical:'top'},toolResult:{gap:8,borderRadius:16,padding:12,backgroundColor:'#080D16',borderWidth:1,borderColor:theme.colors.border},resultLabel:{color:'#8E9BFF',fontSize:9,fontWeight:'900',letterSpacing:1},resultScroll:{maxHeight:260},resultCode:{color:'#DDE5FA',fontFamily:'monospace',fontSize:11,lineHeight:18},
