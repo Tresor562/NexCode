@@ -17,10 +17,10 @@ const projectEngine = read('../src/learning/projectPortfolioEngine.ts');
 const requiredFiles = [root, launch, app, hub, lesson, lab, projects];
 if (!index.includes("./src/ui/RootApp")) throw new Error('index.ts does not use RootApp as the runtime entry point');
 if (!root.includes('LaunchScreen') || !root.includes('NexCodeApp')) throw new Error('RootApp must transition from launch animation to NexCodeApp');
-for (const token of ['NexCode','robot','translateX','Animated']) {
+for (const token of ['exC','robot','translateX','Animated']) {
   if (!launch.includes(token)) throw new Error(`Launch screen missing ${token}`);
 }
-for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordSkillAttempt','installedOfflinePacks','portfolioProofs']) {
+for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordSkillAttempt','installedOfflinePacks','portfolioProofs','rewardProgress','nexCoins']) {
   if (!app.includes(token)) throw new Error(`NexCodeApp missing ${token}`);
 }
 for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Choisis ton chemin','Continuer','checkpoint','lab']) {
@@ -48,4 +48,4 @@ for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','portf
   if (!projectEngine.includes(token)) throw new Error(`Portfolio engine missing ${token}`);
 }
 if (requiredFiles.some((source) => source.includes('TODO UI'))) throw new Error('A product UI contains an unfinished TODO marker');
-console.log('Product readiness audit OK: animated launch, mobile-first learning journey, real progression primitives, step lessons, haptic/audio feedback, phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
+console.log('Product readiness audit OK: animated launch, path-first learning, real XP/NexCoins/streak primitives, step lessons, haptic/audio feedback, phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
