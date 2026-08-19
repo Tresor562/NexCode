@@ -1,12 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Course, Lesson } from '../data/curriculumCore';
 import { buildSkillGraph } from '../learning/skillGraph';
-import { buildAdaptivePool, planPracticeSession, recommendedSessionMessage } from '../learning/adaptivePractice';
-import { courseNavigationSummary, learningEmptyState, searchLearningActivities } from '../learning/learningNavigator';
-import { buildChapterOfflinePack, OfflinePackKind } from '../learning/offlineEngine';
+import { buildAdaptivePool, planPracticeSession } from '../learning/adaptivePractice';
+import { courseNavigationSummary } from '../learning/learningNavigator';
+import { OfflinePackKind } from '../learning/offlineEngine';
 import { LocalState } from '../lib/localState';
-import { Card, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
+import { Card, GlassCard, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
 import { theme } from './theme';
 
 export type LearningHubProps = {
@@ -16,40 +16,99 @@ export type LearningHubProps = {
   onToggleChapterOffline: (courseId: string, chapterId: string, kind: OfflinePackKind) => void;
 };
 
-const budgets = [5, 10, 20, 45] as const;
-
-export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffline }: LearningHubProps) {
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [onlyDue, setOnlyDue] = useState(false);
-  const [budget, setBudget] = useState<(typeof budgets)[number]>(10);
-  const [packKind, setPackKind] = useState<OfflinePackKind>('standard');
+export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) {
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(state.recentCourseId ?? null);
   const graph = useMemo(() => buildSkillGraph(courses), [courses]);
   const pool = useMemo(() => buildAdaptivePool(courses, graph, state.mastery, state.completedLessons), [courses, graph, state.mastery, state.completedLessons]);
-  const session = useMemo(() => planPracticeSession(pool, budget), [pool, budget]);
+  const session = useMemo(() => planPracticeSession(pool, 10), [pool]);
   const selected = courses.find((course) => course.id === selectedCourseId) ?? null;
 
-  if (selected) {
-    return <CourseJourney course={selected} state={state} packKind={packKind} onPackKind={setPackKind} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)} />;
-  }
+  if (selected) return <CourseJourney course={selected} state={state} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} />;
 
-  const results = searchLearningActivities(courses, { query, onlyDueReview: onlyDue || undefined, onlyIncomplete: true }, state.completedLessons, state.mastery).slice(0, query || onlyDue ? 40 : 12);
+  const recommended = session.activities[0];
+  const recommendedCourse = recommended ? courses.find((course) => course.id === recommended.courseId) : undefined;
+  const recommendedLesson = recommendedCourse?.starterLessons.find((lesson) => lesson.id === recommended?.lessonId);
 
-  return <View>
-    <Text style={styles.eyebrow}>APPRENTISSAGE ADAPTATIF</Text><Text style={styles.title}>Ton prochain meilleur pas.</Text><Text style={styles.lead}>NexCode privilégie les lacunes, les révisions dues et la pratique réelle avant de pousser de nouvelles notions.</Text>
-    <Card tone="primary" style={styles.sessionCard}><View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.kicker}>SESSION RECOMMANDÉE</Text><Text style={styles.cardTitle}>{session.estimatedMinutes || budget} min • {session.activities.length} activité{session.activities.length > 1 ? 's' : ''}</Text></View><Pill label={`${session.skillCoverage.length} compétences`} tone="primary" /></View><Text style={styles.body}>{recommendedSessionMessage(session)}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{budgets.map((item) => <Pressable key={item} onPress={() => setBudget(item)} style={[styles.chip, budget === item && styles.chipActive]}><Text style={[styles.chipText, budget === item && styles.chipTextActive]}>{item} min</Text></Pressable>)}</ScrollView>{session.activities[0] ? <PrimaryButton label="Commencer la session recommandée" onPress={() => { const item=session.activities[0]!; const course=courses.find((candidate)=>candidate.id===item.courseId); const lesson=course?.starterLessons.find((candidate)=>candidate.id===item.lessonId); if(course&&lesson) onOpenLesson(course,lesson); }} /> : null}</Card>
-    <SectionHeader title="Trouver une activité" action={`${courses.reduce((sum, course) => sum + course.lessons, 0)} activités`} /><View style={styles.searchRow}><TextInput value={query} onChangeText={setQuery} placeholder="Rechercher : webhook, flexbox, SQL…" placeholderTextColor={theme.colors.textMuted} style={styles.search} accessibilityLabel="Rechercher dans les activités NexCode" /><Pressable onPress={() => setOnlyDue((value)=>!value)} style={[styles.dueButton,onlyDue&&styles.dueButtonActive]}><Text style={[styles.dueText,onlyDue&&styles.dueTextActive]}>Révisions</Text></Pressable></View>
-    {(query||onlyDue)?<View style={styles.resultList}>{results.length?results.map(({course,lesson,chapterId})=><Pressable key={`${course.id}:${lesson.id}`} onPress={()=>onOpenLesson(course,lesson)} style={styles.resultPressable}><Card style={styles.resultCard}><View style={styles.rowBetween}><Pill label={course.language} tone="primary" /><Text style={styles.meta}>{lesson.durationMin} min</Text></View><Text style={styles.resultTitle}>{lesson.title}</Text><Text style={styles.meta}>{chapterId.replace(`${course.id}.`,'').replace(/-/g,' ')} • {lesson.activityKind??'learn'}</Text></Card></Pressable>):<Text style={styles.empty}>{learningEmptyState({query,onlyDueReview:onlyDue||undefined})}</Text>}</View>:null}
-    <SectionHeader title="Parcours" action="12 complets" />{courses.map((course)=>{const summary=courseNavigationSummary(course,state.completedLessons,state.mastery);return <Pressable key={course.id} onPress={()=>setSelectedCourseId(course.id)} style={styles.coursePressable}><Card><View style={styles.rowBetween}><View style={styles.courseIdentity}><View style={[styles.badge,{borderColor:course.color,backgroundColor:`${course.color}18`}]}><Text style={[styles.badgeText,{color:course.color}]}>{course.icon}</Text></View><View style={styles.flex}><Text style={styles.cardTitle}>{course.title}</Text><Text style={styles.meta}>{course.chapters.length} chapitres • {course.lessons} activités • ~{course.estimatedHours} h</Text></View></View><Text style={styles.chevron}>›</Text></View><Text style={styles.body}>{course.description}</Text><View style={styles.metricRow}><Pill label={`${summary.mastery}% maîtrise`} tone={summary.mastery>=70?'success':'primary'} /><Pill label={`${summary.dueForReview} révisions`} tone={summary.dueForReview?'warning':'neutral'} /><Text style={styles.progressText}>{summary.progress}% terminé</Text></View><ProgressBar value={summary.progress} /></Card></Pressable>})}
-  </View>;
+  return (
+    <View>
+      <Text style={styles.eyebrow}>APPRENDRE</Text>
+      <Text style={styles.title}>Choisis ton chemin.</Text>
+      <Text style={styles.lead}>Des petites étapes, du code à chaque niveau, un vrai projet à la fin.</Text>
+
+      {recommendedCourse && recommendedLesson ? (
+        <Card tone="primary" style={styles.recommended}>
+          <View style={styles.rowBetween}><Pill label="Pour toi" tone="primary" /><Text style={styles.mini}>{session.estimatedMinutes || 10} min</Text></View>
+          <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
+          <Text style={styles.meta}>{recommendedCourse.title} • +12 XP</Text>
+          <PrimaryButton icon="▶" label="Continuer" onPress={() => onOpenLesson(recommendedCourse, recommendedLesson)} />
+        </Card>
+      ) : null}
+
+      <SectionHeader title="Parcours" action={`${courses.length}`} />
+      <View style={styles.courseGrid}>
+        {courses.map((course) => {
+          const summary = courseNavigationSummary(course, state.completedLessons, state.mastery);
+          return (
+            <Pressable key={course.id} onPress={() => setSelectedCourseId(course.id)} style={({ pressed }) => [styles.courseTile, pressed && styles.pressed]}>
+              <View style={[styles.courseBadge, { borderColor: `${course.color}66`, backgroundColor: `${course.color}12` }]}><Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text></View>
+              <Text style={styles.courseTitle} numberOfLines={2}>{course.title}</Text>
+              <Text style={styles.courseMeta}>{summary.progress}% terminé</Text>
+              <ProgressBar value={summary.progress} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
-function CourseJourney({ course, state, packKind, onPackKind, onBack, onOpenLesson, onToggleChapterOffline }: { course:Course; state:LocalState; packKind:OfflinePackKind; onPackKind:(kind:OfflinePackKind)=>void; onBack:()=>void; onOpenLesson:(lesson:Lesson)=>void; onToggleChapterOffline:(chapterId:string,kind:OfflinePackKind)=>void }) {
-  const summary=courseNavigationSummary(course,state.completedLessons,state.mastery); const firstNext=course.starterLessons.find((lesson)=>!state.completedLessons.includes(lesson.id))??course.starterLessons[0];
-  return <View><Pressable onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹ Tous les parcours</Text></Pressable><Text style={styles.eyebrow}>{course.category.toUpperCase()}</Text><Text style={styles.title}>{course.title}</Text><Text style={styles.lead}>{course.description}</Text><Card tone="primary" style={styles.summaryCard}><View style={styles.metricGrid}><Metric label="Maîtrise" value={`${summary.mastery}%`} /><Metric label="Progression" value={`${summary.progress}%`} /><Metric label="À revoir" value={`${summary.dueForReview}`} /></View><ProgressBar value={summary.progress} />{firstNext?<PrimaryButton label={`Continuer • ${firstNext.title}`} onPress={()=>onOpenLesson(firstNext)} />:null}</Card>
-    <SectionHeader title="Offline par chapitre" action={packKind.toUpperCase()} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{(['lite','standard','full'] as const).map((kind)=><Pressable key={kind} onPress={()=>onPackKind(kind)} style={[styles.chip,packKind===kind&&styles.chipActive]}><Text style={[styles.chipText,packKind===kind&&styles.chipTextActive]}>{kind==='lite'?'Lite':kind==='standard'?'Standard':'Full'}</Text></Pressable>)}</ScrollView>
-    <SectionHeader title="Chapitres" action={`${course.chapters.length}`} />{summary.chapters.map((chapterSummary,index)=>{const chapter=course.chapters.find((candidate)=>candidate.id===chapterSummary.id)!; const pack=buildChapterOfflinePack(course,chapter.id,packKind); const installed=state.installedOfflinePacks.some((candidate)=>candidate.courseId===course.id&&candidate.kind===packKind&&candidate.curriculumVersion===course.curriculumVersion&&candidate.chapterIds.includes(chapter.id)); const older=state.installedOfflinePacks.some((candidate)=>candidate.courseId===course.id&&candidate.chapterIds.includes(chapter.id)&&candidate.curriculumVersion<course.curriculumVersion); const nextLesson=chapterSummary.nextLessonId?course.starterLessons.find((candidate)=>candidate.id===chapterSummary.nextLessonId):undefined; return <Card key={chapter.id} style={styles.chapterCard}><View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.chapterNumber}>CHAPITRE {index+1}</Text><Text style={styles.chapterTitle}>{chapter.title}</Text><Text style={styles.meta}>{chapter.units.length} unités • {chapter.lessonIds.length} activités • ~{chapter.estimatedMinutes} min</Text></View><Pill label={`${chapterSummary.progress}%`} tone={chapterSummary.progress>=80?'success':'primary'} /></View><View style={styles.spacer10}/><ProgressBar value={chapterSummary.progress}/><View style={styles.chapterFlags}>{chapterSummary.hasLab?<Pill label="Lab" tone="success"/>:null}{chapterSummary.hasCheckpoint?<Pill label="Checkpoint" tone="warning"/>:null}<Pill label={`${pack?.estimatedMb??0} Mo ${packKind}`}/>{older?<Pill label="Mise à jour disponible" tone="warning"/>:null}</View>{nextLesson?<Pressable onPress={()=>onOpenLesson(nextLesson)} style={styles.nextLesson}><View style={styles.flex}><Text style={styles.nextLabel}>PROCHAINE ACTIVITÉ</Text><Text style={styles.nextTitle}>{nextLesson.title}</Text><Text style={styles.meta}>{nextLesson.activityKind??'learn'} • difficulté {nextLesson.difficulty??1}/5</Text></View><Text style={styles.chevron}>›</Text></Pressable>:<Text style={styles.done}>Chapitre terminé ✓</Text>}<Pressable onPress={()=>onToggleChapterOffline(chapter.id,packKind)} style={[styles.offlineButton,installed&&styles.offlineButtonInstalled]}><Text style={[styles.offlineButtonText,installed&&styles.offlineButtonTextInstalled]}>{installed?`✓ Pack ${packKind} v${course.curriculumVersion} installé`:`↓ Télécharger ${packKind} (${pack?.estimatedMb??0} Mo)`}</Text></Pressable></Card>})}
-  </View>;
+function CourseJourney({ course, state, onBack, onOpenLesson }: { course: Course; state: LocalState; onBack: () => void; onOpenLesson: (lesson: Lesson) => void }) {
+  const summary = courseNavigationSummary(course, state.completedLessons, state.mastery);
+  const ordered = course.chapters.flatMap((chapter) => chapter.lessonIds.map((id) => course.starterLessons.find((lesson) => lesson.id === id)).filter((lesson): lesson is Lesson => Boolean(lesson)));
+  const fallback = course.starterLessons.filter((lesson) => !ordered.some((item) => item.id === lesson.id));
+  const lessons = [...ordered, ...fallback];
+  const firstIncompleteIndex = Math.max(0, lessons.findIndex((lesson) => !state.completedLessons.includes(lesson.id)));
+
+  return (
+    <View>
+      <View style={styles.journeyHeader}>
+        <Pressable onPress={onBack} style={styles.backButton}><Text style={styles.backIcon}>‹</Text></Pressable>
+        <View style={styles.flex}><Text style={styles.journeyKicker}>{course.category.toUpperCase()}</Text><Text style={styles.journeyTitle}>{course.title}</Text></View>
+        <View style={[styles.courseBadgeSmall, { borderColor: `${course.color}66` }]}><Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text></View>
+      </View>
+      <GlassCard>
+        <View style={styles.rowBetween}><Text style={styles.progressLabel}>Progression</Text><Text style={styles.progressValue}>{summary.progress}%</Text></View>
+        <ProgressBar value={summary.progress} />
+      </GlassCard>
+
+      <Text style={styles.pathHint}>Chaque étape prend quelques minutes.</Text>
+      <View style={styles.path}>
+        {lessons.slice(0, 28).map((lesson, index) => {
+          const done = state.completedLessons.includes(lesson.id);
+          const current = index === firstIncompleteIndex;
+          const locked = index > firstIncompleteIndex + 2;
+          const offset = index % 4 === 1 ? 38 : index % 4 === 2 ? 70 : index % 4 === 3 ? 34 : 0;
+          const kindIcon = lesson.activityKind === 'lab' ? '</>' : lesson.activityKind === 'checkpoint' ? '★' : lesson.activityKind === 'debug' ? '!' : '›';
+          return (
+            <View key={lesson.id} style={[styles.nodeRow, { transform: [{ translateX: offset }] }]}>
+              {index < lessons.length - 1 ? <View style={[styles.pathLine, done && styles.pathLineDone]} /> : null}
+              <Pressable disabled={locked} onPress={() => onOpenLesson(lesson)} style={({ pressed }) => [styles.node, done && styles.nodeDone, current && styles.nodeCurrent, locked && styles.nodeLocked, pressed && !locked && styles.pressed]}>
+                <Text style={[styles.nodeIcon, done && styles.nodeIconDone, locked && styles.nodeIconLocked]}>{done ? '✓' : locked ? '·' : kindIcon}</Text>
+              </Pressable>
+              <View style={styles.nodeCopy}>
+                <View style={styles.nodeLabelRow}>{current ? <Pill label="À faire" tone="primary" /> : done ? <Pill label="Terminé" tone="success" /> : null}</View>
+                <Text style={[styles.nodeTitle, locked && styles.nodeTitleLocked]} numberOfLines={2}>{lesson.title}</Text>
+                {!locked ? <Text style={styles.nodeMeta}>{lesson.durationMin ?? 5} min • {lesson.activityKind ?? 'leçon'}</Text> : null}
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      {lessons.length > 28 ? <Card style={styles.moreCard}><Text style={styles.moreTitle}>+ {lessons.length - 28} étapes dans ce parcours</Text><Text style={styles.meta}>Continue pour les débloquer.</Text></Card> : null}
+    </View>
+  );
 }
-function Metric({label,value}:{label:string;value:string}){return <View style={styles.metric}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>}
-const styles=StyleSheet.create({flex:{flex:1},eyebrow:{color:'#8A98FF',fontSize:11,fontWeight:'800',letterSpacing:1.2,marginTop:8,marginBottom:8},title:{color:theme.colors.text,fontSize:30,fontWeight:'900',lineHeight:36},lead:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:7,marginBottom:14},sessionCard:{marginTop:8},kicker:{color:'#96A3FF',fontSize:10,fontWeight:'900',letterSpacing:1},cardTitle:{color:theme.colors.text,fontSize:16,fontWeight:'800',marginTop:4},body:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:8},rowBetween:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},chipRow:{gap:8,paddingVertical:12},chip:{paddingHorizontal:13,paddingVertical:9,borderRadius:999,borderWidth:1,borderColor:theme.colors.border,backgroundColor:theme.colors.surfaceSoft},chipActive:{backgroundColor:theme.colors.primary,borderColor:theme.colors.primary},chipText:{color:theme.colors.textSecondary,fontSize:12,fontWeight:'700'},chipTextActive:{color:'#fff'},searchRow:{flexDirection:'row',gap:8},search:{flex:1,minHeight:46,borderRadius:14,borderWidth:1,borderColor:theme.colors.border,backgroundColor:theme.colors.surface,color:theme.colors.text,paddingHorizontal:14},dueButton:{minHeight:46,justifyContent:'center',paddingHorizontal:12,borderRadius:14,borderWidth:1,borderColor:theme.colors.border},dueButtonActive:{backgroundColor:'#2B2413',borderColor:'#624F1D'},dueText:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},dueTextActive:{color:theme.colors.warning},resultList:{gap:8,marginTop:10},resultPressable:{marginBottom:4},resultCard:{padding:13},resultTitle:{color:theme.colors.text,fontSize:15,fontWeight:'800',marginTop:9,marginBottom:4},empty:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,paddingVertical:22},coursePressable:{marginBottom:10},courseIdentity:{flex:1,flexDirection:'row',alignItems:'center',gap:11},badge:{width:46,height:46,borderRadius:15,borderWidth:1,alignItems:'center',justifyContent:'center'},badgeText:{fontWeight:'900',fontSize:13},chevron:{color:theme.colors.textMuted,fontSize:26},meta:{color:theme.colors.textMuted,fontSize:11,lineHeight:16,marginTop:3},metricRow:{flexDirection:'row',alignItems:'center',gap:7,marginTop:13,marginBottom:10,flexWrap:'wrap'},progressText:{marginLeft:'auto',color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},back:{color:'#9DA8FF',fontSize:13,fontWeight:'800',paddingVertical:10},summaryCard:{marginTop:10},metricGrid:{flexDirection:'row',gap:8,marginBottom:14},metric:{flex:1},metricValue:{color:theme.colors.text,fontSize:20,fontWeight:'900'},metricLabel:{color:theme.colors.textMuted,fontSize:10,marginTop:3},chapterCard:{marginBottom:10},chapterNumber:{color:'#7E8CFF',fontSize:9,fontWeight:'900',letterSpacing:1},chapterTitle:{color:theme.colors.text,fontSize:17,fontWeight:'800',marginTop:3},spacer10:{height:10},chapterFlags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:11},nextLesson:{flexDirection:'row',alignItems:'center',marginTop:12,padding:12,borderRadius:13,backgroundColor:theme.colors.surfaceSoft,borderWidth:1,borderColor:theme.colors.border},nextLabel:{color:'#8C98FF',fontSize:9,fontWeight:'900',letterSpacing:.8},nextTitle:{color:theme.colors.text,fontSize:14,fontWeight:'800',marginTop:3},done:{color:theme.colors.success,fontSize:12,fontWeight:'800',marginTop:12},offlineButton:{marginTop:10,minHeight:42,borderRadius:12,borderWidth:1,borderColor:theme.colors.borderStrong,alignItems:'center',justifyContent:'center',paddingHorizontal:10},offlineButtonInstalled:{borderColor:'#235A40',backgroundColor:theme.colors.successSoft},offlineButtonText:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},offlineButtonTextInstalled:{color:theme.colors.success}});
+
+const styles = StyleSheet.create({
+  flex:{flex:1},eyebrow:{color:'#98A5FF',fontSize:10,fontWeight:'900',letterSpacing:1.4,marginTop:12,marginBottom:8},title:{color:theme.colors.text,fontSize:30,fontWeight:'900',lineHeight:35,letterSpacing:-.7},lead:{color:theme.colors.textSecondary,fontSize:13,lineHeight:19,marginTop:6,marginBottom:14},recommended:{marginTop:4},rowBetween:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:8},mini:{color:theme.colors.textMuted,fontSize:10,fontWeight:'800'},recommendedTitle:{color:theme.colors.text,fontSize:20,fontWeight:'900',lineHeight:25,marginTop:15},meta:{color:theme.colors.textMuted,fontSize:10.5,lineHeight:16,marginTop:4,marginBottom:13},courseGrid:{flexDirection:'row',flexWrap:'wrap',gap:10},courseTile:{width:'48.4%',minHeight:156,borderRadius:22,backgroundColor:'rgba(255,255,255,.04)',borderWidth:1,borderColor:'rgba(255,255,255,.07)',padding:13},courseBadge:{width:44,height:44,borderRadius:15,borderWidth:1,alignItems:'center',justifyContent:'center'},courseBadgeSmall:{width:43,height:43,borderRadius:15,borderWidth:1,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,.035)'},courseBadgeText:{fontSize:13,fontWeight:'900'},courseTitle:{color:theme.colors.text,fontSize:14,fontWeight:'900',lineHeight:18,marginTop:13,minHeight:36},courseMeta:{color:theme.colors.textMuted,fontSize:9.5,fontWeight:'700',marginBottom:8},pressed:{opacity:.76,transform:[{scale:.985}]},journeyHeader:{flexDirection:'row',alignItems:'center',gap:11,marginTop:8,marginBottom:14},backButton:{width:40,height:40,borderRadius:14,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,.045)',borderWidth:1,borderColor:'rgba(255,255,255,.08)'},backIcon:{color:theme.colors.text,fontSize:26,fontWeight:'700',marginTop:-2},journeyKicker:{color:'#98A5FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},journeyTitle:{color:theme.colors.text,fontSize:22,fontWeight:'900',lineHeight:27,marginTop:2},progressLabel:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'700',marginBottom:9},progressValue:{color:'#B7C0FF',fontSize:12,fontWeight:'900',marginBottom:9},pathHint:{color:theme.colors.textMuted,fontSize:11,textAlign:'center',marginTop:22,marginBottom:18},path:{paddingBottom:16,paddingHorizontal:8},nodeRow:{minHeight:112,flexDirection:'row',alignItems:'flex-start',position:'relative',maxWidth:'80%'},pathLine:{position:'absolute',left:29,top:60,width:3,height:58,borderRadius:2,backgroundColor:'rgba(255,255,255,.07)'},pathLineDone:{backgroundColor:'rgba(98,208,147,.28)'},node:{width:60,height:60,borderRadius:22,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(114,129,255,.14)',borderWidth:2,borderColor:'rgba(133,147,255,.32)',shadowColor:'#6F7DFF',shadowOpacity:.18,shadowRadius:12,shadowOffset:{width:0,height:5},elevation:3},nodeCurrent:{backgroundColor:'#6271E8',borderColor:'#A8B1FF',shadowOpacity:.42,elevation:6},nodeDone:{backgroundColor:'rgba(55,159,105,.15)',borderColor:'rgba(72,200,132,.35)'},nodeLocked:{backgroundColor:'rgba(255,255,255,.025)',borderColor:'rgba(255,255,255,.07)',shadowOpacity:0,elevation:0},nodeIcon:{color:'#C8CEFF',fontSize:17,fontWeight:'900'},nodeIconDone:{color:theme.colors.success},nodeIconLocked:{color:'rgba(255,255,255,.16)'},nodeCopy:{paddingLeft:12,paddingTop:1,flex:1},nodeLabelRow:{minHeight:24},nodeTitle:{color:theme.colors.text,fontSize:13,fontWeight:'900',lineHeight:17,marginTop:4},nodeTitleLocked:{color:'rgba(255,255,255,.25)'},nodeMeta:{color:theme.colors.textMuted,fontSize:9.5,fontWeight:'700',marginTop:4},moreCard:{marginTop:4},moreTitle:{color:theme.colors.text,fontSize:14,fontWeight:'900'}
+});
