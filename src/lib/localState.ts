@@ -15,7 +15,9 @@ export type LabDraft = {
 
 export type LocalState = {
   xp: number;
+  nexCoins: number;
   streak: number;
+  lastActiveDate?: string;
   dailyGoal: number;
   dailyCompleted: number;
   downloadedCourses: string[];
@@ -36,20 +38,16 @@ export type LocalState = {
 };
 
 const initialState: LocalState = {
-  xp: 120,
-  streak: 3,
-  dailyGoal: 30,
-  dailyCompleted: 12,
-  downloadedCourses: ['html-foundations'],
+  xp: 0,
+  nexCoins: 0,
+  streak: 0,
+  dailyGoal: 20,
+  dailyCompleted: 0,
+  downloadedCourses: [],
   downloadedChapters: [],
   installedOfflinePacks: [],
-  completedLessons: ['html-structure'],
-  projectProgress: {
-    portfolio: 35,
-    todo: 0,
-    'python-quiz': 0,
-    'sql-library': 0,
-  },
+  completedLessons: [],
+  projectProgress: {},
   projectDrafts: {},
   portfolioProofs: [],
   mastery: {},
@@ -63,6 +61,33 @@ const initialState: LocalState = {
 };
 
 const stateFile = new File(Paths.document, 'nexcode-v15-state.json');
+
+function dateKey(date = new Date()): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function previousDateKey(date = new Date()): string {
+  const previous = new Date(date);
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  return dateKey(previous);
+}
+
+export function touchDailyActivity(state: LocalState, now = new Date()): LocalState {
+  const today = dateKey(now);
+  if (state.lastActiveDate === today) return state;
+  const streak = state.lastActiveDate === previousDateKey(now) ? state.streak + 1 : 1;
+  return { ...state, streak, lastActiveDate: today, dailyCompleted: 0 };
+}
+
+export function rewardProgress(state: LocalState, reward: { xp?: number; nexCoins?: number; minutes?: number }): LocalState {
+  const active = touchDailyActivity(state);
+  return {
+    ...active,
+    xp: active.xp + Math.max(0, reward.xp ?? 0),
+    nexCoins: active.nexCoins + Math.max(0, reward.nexCoins ?? 0),
+    dailyCompleted: Math.min(active.dailyGoal, active.dailyCompleted + Math.max(0, reward.minutes ?? 0)),
+  };
+}
 
 function normalizeMastery(value: unknown): MasteryMap {
   if (!value || typeof value !== 'object') return {};
@@ -92,11 +117,16 @@ function normalizeState(value: Partial<LocalState>): LocalState {
   return {
     ...initialState,
     ...value,
+    xp: Math.max(0, value.xp ?? initialState.xp),
+    nexCoins: Math.max(0, value.nexCoins ?? initialState.nexCoins),
+    streak: Math.max(0, value.streak ?? initialState.streak),
+    dailyGoal: Math.max(5, value.dailyGoal ?? initialState.dailyGoal),
+    dailyCompleted: Math.max(0, value.dailyCompleted ?? initialState.dailyCompleted),
     downloadedCourses: Array.isArray(value.downloadedCourses) ? value.downloadedCourses : initialState.downloadedCourses,
     downloadedChapters: Array.isArray(value.downloadedChapters) ? value.downloadedChapters : initialState.downloadedChapters,
     installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks : initialState.installedOfflinePacks,
     completedLessons: Array.isArray(value.completedLessons) ? value.completedLessons : initialState.completedLessons,
-    projectProgress: { ...initialState.projectProgress, ...(value.projectProgress ?? {}) },
+    projectProgress: value.projectProgress ?? initialState.projectProgress,
     projectDrafts: value.projectDrafts ?? initialState.projectDrafts,
     portfolioProofs: Array.isArray(value.portfolioProofs) ? value.portfolioProofs : initialState.portfolioProofs,
     mastery: normalizeMastery(value.mastery),
