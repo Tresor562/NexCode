@@ -23,6 +23,7 @@ export type LocalState = {
   installedOfflinePacks: OfflinePack[];
   completedLessons: string[];
   projectProgress: Record<string, number>;
+  projectDrafts: Record<string, LabDraft>;
   portfolioProofs: PortfolioProof[];
   mastery: MasteryMap;
   lessonAttempts: Record<string, number>;
@@ -49,6 +50,7 @@ const initialState: LocalState = {
     'python-quiz': 0,
     'sql-library': 0,
   },
+  projectDrafts: {},
   portfolioProofs: [],
   mastery: {},
   lessonAttempts: {},
@@ -95,6 +97,7 @@ function normalizeState(value: Partial<LocalState>): LocalState {
     installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks : initialState.installedOfflinePacks,
     completedLessons: Array.isArray(value.completedLessons) ? value.completedLessons : initialState.completedLessons,
     projectProgress: { ...initialState.projectProgress, ...(value.projectProgress ?? {}) },
+    projectDrafts: value.projectDrafts ?? initialState.projectDrafts,
     portfolioProofs: Array.isArray(value.portfolioProofs) ? value.portfolioProofs : initialState.portfolioProofs,
     mastery: normalizeMastery(value.mastery),
     lessonAttempts: value.lessonAttempts ?? initialState.lessonAttempts,
