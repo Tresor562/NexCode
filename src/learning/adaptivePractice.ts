@@ -22,6 +22,15 @@ export type PracticeSession = {
   courseCoverage: string[];
 };
 
+function lessonPrerequisitesReady(skills: string[], mastery: MasteryMap, graphById: Map<string, SkillNode>, now: Date) {
+  return skills.every((skillId) => {
+    const node = graphById.get(skillId);
+    if (!node?.prerequisiteIds.length) return true;
+    const gate = node.prerequisiteGate ?? 55;
+    return node.prerequisiteIds.every((prerequisiteId) => masterySnapshot(prerequisiteId, mastery, now).effectiveScore >= gate);
+  });
+}
+
 function scoreLesson(
   course: Course,
   lesson: Lesson,
@@ -36,8 +45,7 @@ function scoreLesson(
   const weakest = snapshots.length ? Math.min(...snapshots.map((item) => item.effectiveScore)) : 0;
   const due = snapshots.some((item) => item.needsReview);
   const recurringErrors = snapshots.reduce((sum, item) => sum + item.recurringErrors.length, 0);
-  const prerequisites = [...new Set(skills.flatMap((skill) => graphById.get(skill)?.prerequisiteIds ?? []))];
-  const prereqsReady = prerequisites.every((id) => masterySnapshot(id, mastery, now).effectiveScore >= (graphById.get(skills[0] ?? '')?.prerequisiteGate ?? 55));
+  const prereqsReady = lessonPrerequisitesReady(skills, mastery, graphById, now);
   const kind = lesson.activityKind ?? 'learn';
 
   if (completed && recurringErrors > 0) {
