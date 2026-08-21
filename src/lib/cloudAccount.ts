@@ -25,6 +25,8 @@ export type AuthResult =
   | { kind: 'confirm-email'; email: string };
 
 const sessionFile = new File(Paths.document, 'nexcode-cloud-session.json');
+const NEXCODE_SUPABASE_URL = 'https://ojbyvjqurlamplmujmyu.supabase.co';
+const NEXCODE_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_EnV_q5ePfEOB1NxN3-gtpA_HdwjtPyu';
 
 function env(): Env {
   return ((globalThis as typeof globalThis & { process?: { env?: Env } }).process?.env ?? {}) as Env;
@@ -32,8 +34,8 @@ function env(): Env {
 
 export function cloudConfig(): SupabaseConfig | null {
   const values = env();
-  const url = values.EXPO_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '');
-  const anonKey = values.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim();
+  const url = values.EXPO_PUBLIC_SUPABASE_URL?.trim().replace(/\/$/, '') || NEXCODE_SUPABASE_URL;
+  const anonKey = values.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || NEXCODE_SUPABASE_PUBLISHABLE_KEY;
   return url && anonKey ? { url, anonKey } : null;
 }
 
