@@ -27,6 +27,18 @@ export type ExerciseEvaluation = {
   hiddenPassed: number;
   hiddenTotal: number;
   feedback: string[];
+  misconceptionTags: string[];
+};
+
+export type ScaffoldingLevel = 'try-first' | 'nudge' | 'hint' | 'worked-example' | 'solution-review';
+
+export type ExerciseScaffold = {
+  level: ScaffoldingLevel;
+  title: string;
+  message: string;
+  hint?: string;
+  shouldRevealExplanation: boolean;
+  shouldRevealSolution: boolean;
 };
 
 export const supportedExerciseKinds: ExerciseKind[] = [
@@ -58,8 +70,17 @@ function testSource(source: string, test: ExerciseTest) {
   return false;
 }
 
+function misconceptionTag(test: ExerciseTest) {
+  if (test.kind === 'ordered-fragments') return `structure:${test.id}`;
+  if (test.kind === 'not-contains') return `remove:${test.id}`;
+  if (test.kind === 'regex') return `syntax:${test.id}`;
+  if (test.kind === 'equals') return `precision:${test.id}`;
+  return `concept:${test.id}`;
+}
+
 export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer): ExerciseEvaluation {
   const feedback: string[] = [];
+  const misconceptionTags: string[] = [];
   const answerText = normalize(answer);
   const accepted = [exercise.expectedAnswer, ...(exercise.acceptedAnswers ?? [])].filter((item): item is ExerciseAnswer => item !== undefined);
   const directPassed = accepted.length === 0 || accepted.some((item) => normalize(item) === answerText);
@@ -69,14 +90,38 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
   const hiddenPassed = hidden.filter((item) => item.passed).length;
   const testPassed = results.length === 0 || results.every((item) => item.passed);
   const passed = directPassed && testPassed;
-  if (!directPassed) feedback.push('La réponse ne correspond pas encore au comportement attendu.');
-  for (const item of visibleResults) if (!item.passed) feedback.push(`À corriger : ${item.description}`);
-  if (hidden.length && hiddenPassed < hidden.length) feedback.push('Certains cas limites ne passent pas encore.');
-  if (passed) feedback.push('Exercice validé : explique maintenant pourquoi ta solution fonctionne.');
+
+  if (!directPassed) {
+    feedback.push('Le comportement final n’est pas encore celui demandé. Compare ton résultat à l’objectif, sans repartir de zéro.');
+    misconceptionTags.push('expected-behavior');
+  }
+
+  for (const item of results) {
+    if (item.passed) continue;
+    misconceptionTags.push(misconceptionTag(item.test));
+    if (!item.test.hidden) feedback.push(`Point à vérifier : ${item.test.description}`);
+  }
+
+  if (hidden.length && hiddenPassed < hidden.length) {
+    feedback.push('Ta solution fonctionne dans le cas principal, mais un cas limite casse encore. Cherche une entrée inhabituelle.');
+    misconceptionTags.push('edge-case');
+  }
+
+  if (passed) feedback.push('Exercice validé. Avant de continuer, explique en une phrase pourquoi ta solution fonctionne.');
+
   const checks = Math.max(1, (accepted.length ? 1 : 0) + results.length);
   const successes = (accepted.length ? (directPassed ? 1 : 0) : 0) + results.filter((item) => item.passed).length;
   const score = results.length === 0 && accepted.length === 0 ? (answerText ? 100 : 0) : Math.round((successes / checks) * 100);
-  return { passed, score, visibleResults, hiddenPassed, hiddenTotal: hidden.length, feedback };
+
+  return {
+    passed,
+    score,
+    visibleResults,
+    hiddenPassed,
+    hiddenTotal: hidden.length,
+    feedback,
+    misconceptionTags: [...new Set(misconceptionTags)],
+  };
 }
 
 export function lessonExerciseCoverage(lesson: Lesson) {
@@ -92,4 +137,70 @@ export function nextHint(exercise: RichExercise, attempts: number) {
   if (attempts < threshold) return undefined;
   const index = Math.min(hints.length - 1, Math.floor((attempts - threshold) / threshold));
   return hints[index];
+}
+
+export function exerciseScaffold(exercise: RichExercise, attempts: number, evaluation?: ExerciseEvaluation): ExerciseScaffold {
+  const safeAttempts = Math.max(0, attempts);
+  const hint = nextHint(exercise, safeAttempts);
+
+  if (evaluation?.passed) {
+    return {
+      level: 'solution-review',
+      title: 'Validé — explique-le',
+      message: 'Ne passe pas tout de suite à la suite : formule mentalement pourquoi ta solution marche. Cette étape consolide la maîtrise.',
+      shouldRevealExplanation: true,
+      shouldRevealSolution: false,
+    };
+  }
+
+  if (safeAttempts <= 0) {
+    return {
+      level: 'try-first',
+      title: 'Essaie sans aide',
+      message: 'Fais une première tentative complète. Même imparfaite, elle donne un meilleur signal sur ce que tu sais réellement.',
+      shouldRevealExplanation: false,
+      shouldRevealSolution: false,
+    };
+  }
+
+  if (safeAttempts === 1) {
+    return {
+      level: 'nudge',
+      title: 'Tu es en train d’apprendre',
+      message: evaluation?.feedback[0] ?? 'Relis l’objectif et modifie seulement la partie qui semble responsable du résultat.',
+      shouldRevealExplanation: false,
+      shouldRevealSolution: false,
+    };
+  }
+
+  if (safeAttempts <= 3) {
+    return {
+      level: 'hint',
+      title: hint ? 'Indice débloqué' : 'Réduis le problème',
+      message: hint ?? evaluation?.feedback[0] ?? 'Teste une hypothèse à la fois et observe ce qui change.',
+      hint,
+      shouldRevealExplanation: false,
+      shouldRevealSolution: false,
+    };
+  }
+
+  if (safeAttempts <= 5) {
+    return {
+      level: 'worked-example',
+      title: 'Regarde un raisonnement proche',
+      message: exercise.explanation ?? 'Reviens au concept de la leçon, identifie la règle utilisée, puis applique-la à ton propre code sans recopier une solution complète.',
+      hint,
+      shouldRevealExplanation: true,
+      shouldRevealSolution: false,
+    };
+  }
+
+  return {
+    level: 'solution-review',
+    title: 'Étudie puis reconstruis',
+    message: exercise.explanation ?? 'Analyse la solution attendue, ferme-la, puis reconstruis la réponse de mémoire avant de continuer.',
+    hint,
+    shouldRevealExplanation: true,
+    shouldRevealSolution: true,
+  };
 }
