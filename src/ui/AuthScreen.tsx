@@ -25,7 +25,6 @@ type FieldProps = {
   keyboardType?: 'default' | 'email-address';
   autoCapitalize?: 'none' | 'words';
   rightAction?: { label: string; onPress: () => void };
-  onFocusChange?: (focused: boolean) => void;
 };
 
 function AuthField({
@@ -37,14 +36,8 @@ function AuthField({
   keyboardType = 'default',
   autoCapitalize = 'none',
   rightAction,
-  onFocusChange,
 }: FieldProps) {
   const [focused, setFocused] = useState(false);
-
-  const setFocus = (next: boolean) => {
-    setFocused(next);
-    onFocusChange?.(next);
-  };
 
   return (
     <View style={styles.fieldGroup}>
@@ -60,8 +53,8 @@ function AuthField({
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
           autoCorrect={false}
-          onFocus={() => setFocus(true)}
-          onBlur={() => setFocus(false)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           accessibilityLabel={label}
         />
         {rightAction ? (
@@ -221,7 +214,7 @@ export function AuthScreen({
               pressed && valid && !busy && styles.primaryDepthPressed,
             ]}
           >
-            <View style={[styles.primaryFace, pressedSafe(valid, busy) && styles.primaryFacePressed]}>
+            <View style={styles.primaryFace}>
               {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
               <Text style={styles.primaryText}>
                 {busy ? 'Synchronisation…' : mode === 'signin' ? 'Continuer' : 'Créer mon compte'}
@@ -236,10 +229,6 @@ export function AuthScreen({
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
-}
-
-function pressedSafe(valid: boolean, busy: boolean) {
-  return false && valid && !busy;
 }
 
 const styles = StyleSheet.create({
@@ -351,7 +340,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   primaryDepthPressed: { paddingBottom: 2, transform: [{ translateY: 3 }] },
-  primaryFacePressed: { backgroundColor: '#6170EA' },
   primaryDisabled: { opacity: .38 },
   primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900', letterSpacing: .15 },
   privacy: { color: theme.colors.textMuted, fontSize: 10.5, lineHeight: 16, textAlign: 'center', marginTop: 15, paddingHorizontal: 10 },
