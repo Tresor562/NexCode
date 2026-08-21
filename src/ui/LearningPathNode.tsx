@@ -187,11 +187,11 @@ export function LearningPathNode({
 const styles = StyleSheet.create({
   row: {
     minHeight: 132,
-    width: '100%',
+    width: '86%',
     flexDirection: 'row',
     alignItems: 'flex-start',
     position: 'relative',
-    paddingRight: 6,
+    paddingRight: 4,
   },
   connectorTrack: {
     position: 'absolute',
