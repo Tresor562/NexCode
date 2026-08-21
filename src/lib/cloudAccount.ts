@@ -27,6 +27,14 @@ export type AuthResult =
 const sessionFile = new File(Paths.document, 'nexcode-cloud-session.json');
 const NEXCODE_SUPABASE_URL = 'https://ojbyvjqurlamplmujmyu.supabase.co';
 const NEXCODE_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_EnV_q5ePfEOB1NxN3-gtpA_HdwjtPyu';
+const SESSION_REFRESH_WINDOW_MS = 120_000;
+
+type RefreshFlight = {
+  refreshToken: string;
+  promise: Promise<CloudSession>;
+};
+
+let refreshFlight: RefreshFlight | null = null;
 
 function env(): Env {
   return ((globalThis as typeof globalThis & { process?: { env?: Env } }).process?.env ?? {}) as Env;
@@ -142,8 +150,13 @@ export async function signUpWithPassword(email: string, password: string, displa
   return { kind: 'session', session };
 }
 
-export async function refreshCloudSession(session: CloudSession): Promise<CloudSession> {
-  if (session.expiresAt - Date.now() > 120_000) return session;
+function shouldDiscardSessionAfterRefreshFailure(status: number): boolean {
+  // A rejected refresh token is terminal. Throttling and server/network failures
+  // are transient and must not log the learner out or destroy offline continuity.
+  return status === 400 || status === 401 || status === 403;
+}
+
+async function performCloudSessionRefresh(session: CloudSession): Promise<CloudSession> {
   const config = cloudConfig();
   if (!config) return session;
   const response = await fetch(`${config.url}/auth/v1/token?grant_type=refresh_token`, {
@@ -152,12 +165,30 @@ export async function refreshCloudSession(session: CloudSession): Promise<CloudS
     body: JSON.stringify({ refresh_token: session.refreshToken }),
   });
   if (!response.ok) {
-    saveCloudSession(null);
+    if (shouldDiscardSessionAfterRefreshFailure(response.status)) saveCloudSession(null);
     throw await parseError(response);
   }
   const refreshed = toSession(await response.json());
   saveCloudSession(refreshed);
   return refreshed;
+}
+
+export async function refreshCloudSession(session: CloudSession): Promise<CloudSession> {
+  if (session.expiresAt - Date.now() > SESSION_REFRESH_WINDOW_MS) return session;
+
+  // Supabase refresh tokens rotate. Two concurrent refresh calls using the same
+  // token can invalidate one another and produce random sign-outs. Share one
+  // request per refresh token and let all callers reuse the resulting session.
+  if (refreshFlight?.refreshToken === session.refreshToken) return refreshFlight.promise;
+
+  const promise = performCloudSessionRefresh(session);
+  const flight: RefreshFlight = { refreshToken: session.refreshToken, promise };
+  refreshFlight = flight;
+  try {
+    return await promise;
+  } finally {
+    if (refreshFlight === flight) refreshFlight = null;
+  }
 }
 
 function unique<T>(values: T[]): T[] {
