@@ -23,10 +23,10 @@ for (const token of ['exC','robot','translateX','Animated']) {
 for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordSkillAttempt','installedOfflinePacks','portfolioProofs','rewardProgress','nexCoins']) {
   if (!app.includes(token)) throw new Error(`NexCodeApp missing ${token}`);
 }
-for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Choisis ton chemin','Continuer','checkpoint','lab']) {
+for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Continue ton chemin','LearningPathNode','Progression du parcours','Continuer','checkpoint','lab']) {
   if (!hub.includes(token)) throw new Error(`LearningHub missing ${token}`);
 }
-for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • OBSERVER','RAPPEL ACTIF • SANS REGARDER','À TOI DE JOUER','MISSION FLASH • TRANSFERT','FINAL • CONSTRUIRE','retrievalPrompt','recallConfidence','masterySnapshot','expo-haptics','expo-audio']) {
+for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • OBSERVER','RAPPEL ACTIF • SANS REGARDER','À TOI DE JOUER','MISSION FLASH • TRANSFERT','FINAL • CONSTRUIRE','retrievalPrompt','recallConfidence','successCriteria','masterySnapshot','expo-haptics','expo-audio']) {
   if (!lesson.includes(token)) throw new Error(`Lesson flow missing ${token}`);
 }
 for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Déobfusquer','Console','Preview','importFilesFromPhone','importFolderFromPhone']) {
