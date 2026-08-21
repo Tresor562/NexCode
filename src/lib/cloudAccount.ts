@@ -167,15 +167,21 @@ function unique<T>(values: T[]): T[] {
 function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | undefined, progress: Record<string, unknown> | undefined): LocalState {
   if (!progress && !profile) return local;
   const remoteLessons = Array.isArray(progress?.completed_lessons) ? progress?.completed_lessons.filter((value): value is string => typeof value === 'string') : [];
+  const settings = progress?.settings && typeof progress.settings === 'object' ? progress.settings as Record<string, unknown> : {};
+  const remoteStreak = typeof progress?.streak === 'number' ? progress.streak : 0;
+  const streak = Math.max(local.streak, remoteStreak);
   return {
     ...local,
     name: typeof profile?.display_name === 'string' && profile.display_name.trim() ? profile.display_name : local.name,
     learningGoal: typeof profile?.learning_goal === 'string' && profile.learning_goal.trim() ? profile.learning_goal : local.learningGoal,
     xp: Math.max(local.xp, typeof progress?.xp === 'number' ? progress.xp : 0),
     nexCoins: Math.max(local.nexCoins, typeof progress?.nexcoins === 'number' ? progress.nexcoins : 0),
-    streak: Math.max(local.streak, typeof progress?.streak === 'number' ? progress.streak : 0),
+    streak,
+    bestStreak: Math.max(local.bestStreak, streak, typeof settings.bestStreak === 'number' ? settings.bestStreak : 0),
     dailyGoal: Math.max(5, typeof progress?.daily_goal === 'number' ? progress.daily_goal : local.dailyGoal),
     dailyCompleted: Math.max(local.dailyCompleted, typeof progress?.daily_completed === 'number' ? progress.daily_completed : 0),
+    dailyGoalRewardDate: typeof settings.dailyGoalRewardDate === 'string' ? settings.dailyGoalRewardDate : local.dailyGoalRewardDate,
+    totalLearningMinutes: Math.max(local.totalLearningMinutes, typeof settings.totalLearningMinutes === 'number' ? settings.totalLearningMinutes : 0),
     lastActiveDate: typeof progress?.last_active_date === 'string' ? progress.last_active_date : local.lastActiveDate,
     recentCourseId: typeof progress?.recent_course_id === 'string' ? progress.recent_course_id : local.recentCourseId,
     completedLessons: unique([...local.completedLessons, ...remoteLessons]),
@@ -234,7 +240,12 @@ export async function pushCloudState(session: CloudSession, state: LocalState): 
         lesson_error_tags: state.lessonErrorTags,
         project_progress: state.projectProgress,
         portfolio_proofs: state.portfolioProofs,
-        settings: { onboardingComplete: state.onboardingComplete },
+        settings: {
+          onboardingComplete: state.onboardingComplete,
+          bestStreak: state.bestStreak,
+          totalLearningMinutes: state.totalLearningMinutes,
+          dailyGoalRewardDate: state.dailyGoalRewardDate ?? null,
+        },
         updated_at: updatedAt,
       }),
     }),
