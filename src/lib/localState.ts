@@ -18,9 +18,12 @@ export type LocalState = {
   xp: number;
   nexCoins: number;
   streak: number;
+  bestStreak: number;
   lastActiveDate?: string;
   dailyGoal: number;
   dailyCompleted: number;
+  dailyGoalRewardDate?: string;
+  totalLearningMinutes: number;
   downloadedCourses: string[];
   downloadedChapters: string[];
   installedOfflinePacks: OfflinePack[];
@@ -42,8 +45,10 @@ const initialState: LocalState = {
   xp: 0,
   nexCoins: 0,
   streak: 0,
+  bestStreak: 0,
   dailyGoal: 20,
   dailyCompleted: 0,
+  totalLearningMinutes: 0,
   downloadedCourses: [],
   downloadedChapters: [],
   installedOfflinePacks: [],
@@ -63,30 +68,55 @@ const initialState: LocalState = {
 
 const stateFile = new File(Paths.document, 'nexcode-v15-state.json');
 
-function dateKey(date = new Date()): string {
-  return date.toISOString().slice(0, 10);
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
 }
 
-function previousDateKey(date = new Date()): string {
-  const previous = new Date(date);
-  previous.setUTCDate(previous.getUTCDate() - 1);
-  return dateKey(previous);
+export function localDateKey(date = new Date()): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+}
+
+function previousLocalDateKey(date = new Date()): string {
+  const previous = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1, 12, 0, 0, 0);
+  return localDateKey(previous);
 }
 
 export function touchDailyActivity(state: LocalState, now = new Date()): LocalState {
-  const today = dateKey(now);
+  const today = localDateKey(now);
   if (state.lastActiveDate === today) return state;
-  const streak = state.lastActiveDate === previousDateKey(now) ? state.streak + 1 : 1;
-  return { ...state, streak, lastActiveDate: today, dailyCompleted: 0 };
+  const streak = state.lastActiveDate === previousLocalDateKey(now) ? state.streak + 1 : 1;
+  return {
+    ...state,
+    streak,
+    bestStreak: Math.max(state.bestStreak, streak),
+    lastActiveDate: today,
+    dailyCompleted: 0,
+  };
 }
 
-export function rewardProgress(state: LocalState, reward: { xp?: number; nexCoins?: number; minutes?: number }): LocalState {
-  const active = touchDailyActivity(state);
+export type ProgressReward = {
+  xp?: number;
+  nexCoins?: number;
+  minutes?: number;
+  now?: Date;
+};
+
+export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
+  const now = reward.now ?? new Date();
+  const active = touchDailyActivity(state, now);
+  const minutes = Math.max(0, reward.minutes ?? 0);
+  const dailyCompleted = Math.min(active.dailyGoal, active.dailyCompleted + minutes);
+  const today = localDateKey(now);
+  const reachedGoal = active.dailyCompleted < active.dailyGoal && dailyCompleted >= active.dailyGoal;
+  const shouldGrantGoalBonus = reachedGoal && active.dailyGoalRewardDate !== today;
+
   return {
     ...active,
-    xp: active.xp + Math.max(0, reward.xp ?? 0),
-    nexCoins: active.nexCoins + Math.max(0, reward.nexCoins ?? 0),
-    dailyCompleted: Math.min(active.dailyGoal, active.dailyCompleted + Math.max(0, reward.minutes ?? 0)),
+    xp: active.xp + Math.max(0, reward.xp ?? 0) + (shouldGrantGoalBonus ? 40 : 0),
+    nexCoins: active.nexCoins + Math.max(0, reward.nexCoins ?? 0) + (shouldGrantGoalBonus ? 20 : 0),
+    dailyCompleted,
+    dailyGoalRewardDate: shouldGrantGoalBonus ? today : active.dailyGoalRewardDate,
+    totalLearningMinutes: active.totalLearningMinutes + minutes,
   };
 }
 
@@ -115,14 +145,18 @@ function normalizeMastery(value: unknown): MasteryMap {
 }
 
 function normalizeState(value: Partial<LocalState>): LocalState {
+  const dailyGoal = Math.max(5, value.dailyGoal ?? initialState.dailyGoal);
+  const streak = Math.max(0, value.streak ?? initialState.streak);
   return {
     ...initialState,
     ...value,
     xp: Math.max(0, value.xp ?? initialState.xp),
     nexCoins: Math.max(0, value.nexCoins ?? initialState.nexCoins),
-    streak: Math.max(0, value.streak ?? initialState.streak),
-    dailyGoal: Math.max(5, value.dailyGoal ?? initialState.dailyGoal),
-    dailyCompleted: Math.max(0, value.dailyCompleted ?? initialState.dailyCompleted),
+    streak,
+    bestStreak: Math.max(streak, value.bestStreak ?? initialState.bestStreak),
+    dailyGoal,
+    dailyCompleted: Math.min(dailyGoal, Math.max(0, value.dailyCompleted ?? initialState.dailyCompleted)),
+    totalLearningMinutes: Math.max(0, value.totalLearningMinutes ?? initialState.totalLearningMinutes),
     downloadedCourses: Array.isArray(value.downloadedCourses) ? value.downloadedCourses : initialState.downloadedCourses,
     downloadedChapters: Array.isArray(value.downloadedChapters) ? value.downloadedChapters : initialState.downloadedChapters,
     installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks : initialState.installedOfflinePacks,
