@@ -83,13 +83,22 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
   const misconceptionTags: string[] = [];
   const answerText = normalize(answer);
   const accepted = [exercise.expectedAnswer, ...(exercise.acceptedAnswers ?? [])].filter((item): item is ExerciseAnswer => item !== undefined);
-  const directPassed = accepted.length === 0 || accepted.some((item) => normalize(item) === answerText);
+  const hasDirectGate = accepted.length > 0;
+  const directPassed = !hasDirectGate || accepted.some((item) => normalize(item) === answerText);
   const results = (exercise.tests ?? []).map((test) => ({ test, passed: testSource(answerText, test) }));
   const visibleResults = results.filter(({ test }) => !test.hidden).map(({ test, passed }) => ({ id: test.id, passed, description: test.description }));
   const hidden = results.filter(({ test }) => test.hidden);
   const hiddenPassed = hidden.filter((item) => item.passed).length;
-  const testPassed = results.length === 0 || results.every((item) => item.passed);
-  const passed = directPassed && testPassed;
+  const hasTestGate = results.length > 0;
+  const testPassed = !hasTestGate || results.every((item) => item.passed);
+  const hasAutomaticGate = hasDirectGate || hasTestGate;
+  const hasSubstantiveAnswer = answerText.length > 0;
+  const passed = hasAutomaticGate ? directPassed && testPassed : hasSubstantiveAnswer;
+
+  if (!hasAutomaticGate && !hasSubstantiveAnswer) {
+    feedback.push('Écris d’abord une réponse exploitable avant de valider. Une tentative vide ne compte pas comme un exercice réussi.');
+    misconceptionTags.push('input-required');
+  }
 
   if (!directPassed) {
     feedback.push('Le comportement final n’est pas encore celui demandé. Compare ton résultat à l’objectif, sans repartir de zéro.');
@@ -107,11 +116,15 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
     misconceptionTags.push('edge-case');
   }
 
-  if (passed) feedback.push('Exercice validé. Avant de continuer, explique en une phrase pourquoi ta solution fonctionne.');
+  if (passed) {
+    feedback.push(hasAutomaticGate
+      ? 'Exercice validé. Avant de continuer, explique en une phrase pourquoi ta solution fonctionne.'
+      : 'Réponse enregistrée. Avant de continuer, vérifie qu’elle répond précisément à la consigne et explique ton raisonnement en une phrase.');
+  }
 
-  const checks = Math.max(1, (accepted.length ? 1 : 0) + results.length);
-  const successes = (accepted.length ? (directPassed ? 1 : 0) : 0) + results.filter((item) => item.passed).length;
-  const score = results.length === 0 && accepted.length === 0 ? (answerText ? 100 : 0) : Math.round((successes / checks) * 100);
+  const checks = Math.max(1, (hasDirectGate ? 1 : 0) + results.length);
+  const successes = (hasDirectGate ? (directPassed ? 1 : 0) : 0) + results.filter((item) => item.passed).length;
+  const score = !hasAutomaticGate ? (hasSubstantiveAnswer ? 100 : 0) : Math.round((successes / checks) * 100);
 
   return {
     passed,
