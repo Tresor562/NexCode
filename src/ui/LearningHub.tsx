@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Course, Lesson } from '../data/curriculumCore';
 import { buildSkillGraph } from '../learning/skillGraph';
-import { buildAdaptivePool, planPracticeSession } from '../learning/adaptivePractice';
+import { buildAdaptivePool, planPracticeSession, PracticeMode, recommendedSessionMessage } from '../learning/adaptivePractice';
 import { courseNavigationSummary } from '../learning/learningNavigator';
 import { OfflinePackKind } from '../learning/offlineEngine';
 import { LocalState } from '../lib/localState';
@@ -16,6 +16,21 @@ export type LearningHubProps = {
   onOpenLesson: (course: Course, lesson: Lesson) => void;
   onToggleChapterOffline: (courseId: string, chapterId: string, kind: OfflinePackKind) => void;
 };
+
+const modeLabels: Record<PracticeMode, string> = {
+  learn: 'Nouvelle notion',
+  repair: 'Réparation ciblée',
+  review: 'Révision espacée',
+  interleave: 'Consolidation',
+  lab: 'Passage au Lab',
+  checkpoint: 'Checkpoint',
+};
+
+function modeTone(mode: PracticeMode): 'primary' | 'success' | 'warning' | undefined {
+  if (mode === 'repair') return 'warning';
+  if (mode === 'review' || mode === 'interleave') return 'success';
+  return 'primary';
+}
 
 export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(state.recentCourseId ?? null);
@@ -38,6 +53,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
   const recommended = session.activities[0];
   const recommendedCourse = recommended ? courses.find((course) => course.id === recommended.courseId) : undefined;
   const recommendedLesson = recommendedCourse?.starterLessons.find((lesson) => lesson.id === recommended?.lessonId);
+  const sessionMessage = recommendedSessionMessage(session);
 
   return (
     <View>
@@ -56,15 +72,39 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
         </View>
       </View>
 
-      {recommendedCourse && recommendedLesson ? (
+      {recommendedCourse && recommendedLesson && recommended ? (
         <Card tone="primary" style={styles.recommended}>
           <View style={styles.rowBetween}>
-            <Pill label="Prochaine étape" tone="primary" />
+            <View style={styles.recommendationPills}>
+              <Pill label="Prochaine étape" tone="primary" />
+              <Pill label={modeLabels[recommended.mode]} tone={modeTone(recommended.mode)} />
+            </View>
             <Text style={styles.mini}>{session.estimatedMinutes || 10} min</Text>
           </View>
           <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
           <Text style={styles.meta}>{recommendedCourse.title} • +12 XP</Text>
-          <PrimaryButton icon="▶" label="Continuer" onPress={() => onOpenLesson(recommendedCourse, recommendedLesson)} />
+          <View style={styles.whyCard}>
+            <Text style={styles.whyKicker}>POURQUOI NEX TE PROPOSE ÇA</Text>
+            <Text style={styles.whyText}>{recommended.reason}</Text>
+            <Text style={styles.sessionText}>{sessionMessage}</Text>
+          </View>
+          <View style={styles.sessionStats}>
+            <View style={styles.sessionStat}>
+              <Text style={styles.sessionStatValue}>{session.activities.length}</Text>
+              <Text style={styles.sessionStatLabel}>activité{session.activities.length > 1 ? 's' : ''}</Text>
+            </View>
+            <View style={styles.sessionStatDivider} />
+            <View style={styles.sessionStat}>
+              <Text style={styles.sessionStatValue}>{session.skillCoverage.length}</Text>
+              <Text style={styles.sessionStatLabel}>compétence{session.skillCoverage.length > 1 ? 's' : ''}</Text>
+            </View>
+            <View style={styles.sessionStatDivider} />
+            <View style={styles.sessionStat}>
+              <Text style={styles.sessionStatValue}>{session.courseCoverage.length}</Text>
+              <Text style={styles.sessionStatLabel}>parcours</Text>
+            </View>
+          </View>
+          <PrimaryButton icon="▶" label={recommended.mode === 'repair' ? 'Réparer cette notion' : recommended.mode === 'review' ? 'Faire la révision' : 'Continuer'} onPress={() => onOpenLesson(recommendedCourse, recommendedLesson)} />
         </Card>
       ) : null}
 
@@ -180,9 +220,19 @@ const styles = StyleSheet.create({
   nexLabel: { color: '#B9C1FF', fontSize: 8, fontWeight: '900', letterSpacing: 1.5, marginTop: 5 },
   recommended: { marginTop: 10 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  recommendationPills: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   mini: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '800' },
   recommendedTitle: { color: theme.colors.text, fontSize: 20, fontWeight: '900', lineHeight: 25, marginTop: 15 },
   meta: { color: theme.colors.textMuted, fontSize: 10.5, lineHeight: 16, marginTop: 4, marginBottom: 13 },
+  whyCard: { marginBottom: 13, padding: 13, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(152,165,255,.18)', backgroundColor: 'rgba(99,117,255,.07)' },
+  whyKicker: { color: '#9BA7FF', fontSize: 8.5, fontWeight: '900', letterSpacing: 1.05 },
+  whyText: { color: theme.colors.text, fontSize: 12.5, lineHeight: 19, fontWeight: '700', marginTop: 6 },
+  sessionText: { color: theme.colors.textSecondary, fontSize: 11.5, lineHeight: 18, marginTop: 7 },
+  sessionStats: { minHeight: 54, flexDirection: 'row', alignItems: 'center', marginBottom: 14, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,.07)', backgroundColor: 'rgba(255,255,255,.025)' },
+  sessionStat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  sessionStatValue: { color: theme.colors.text, fontSize: 15, fontWeight: '900' },
+  sessionStatLabel: { color: theme.colors.textMuted, fontSize: 8.5, fontWeight: '700', marginTop: 2 },
+  sessionStatDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,.08)' },
   courseGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   courseTile: { width: '48.4%', minHeight: 156, borderRadius: 22, backgroundColor: 'rgba(255,255,255,.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,.07)', padding: 13 },
   courseBadge: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
