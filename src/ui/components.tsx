@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { shadows, theme } from './theme';
 
 type CardTone = 'default' | 'primary' | 'success';
@@ -43,17 +43,37 @@ function TactileButton({
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const depth = useRef(new Animated.Value(0)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => { if (active) setReduceMotion(enabled); })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
   const animate = (pressed: boolean) => {
+    const nextScale = pressed ? theme.motion.pressedScale : 1;
+    const nextDepth = pressed ? theme.motion.pressedDepth : 0;
+    if (reduceMotion) {
+      scale.setValue(nextScale);
+      depth.setValue(nextDepth);
+      return;
+    }
     Animated.parallel([
       Animated.spring(scale, {
-        toValue: pressed ? theme.motion.pressedScale : 1,
+        toValue: nextScale,
         useNativeDriver: true,
         speed: theme.motion.springSpeed,
         bounciness: theme.motion.springBounciness,
       }),
       Animated.spring(depth, {
-        toValue: pressed ? theme.motion.pressedDepth : 0,
+        toValue: nextDepth,
         useNativeDriver: true,
         speed: theme.motion.springSpeed,
         bounciness: 0,
