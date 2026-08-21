@@ -26,7 +26,7 @@ for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdapti
 for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Choisis ton chemin','Continuer','checkpoint','lab']) {
   if (!hub.includes(token)) throw new Error(`LearningHub missing ${token}`);
 }
-for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • REGARDER','À TOI DE JOUER','MISSION FLASH','FINAL • CONSTRUIRE','masterySnapshot','expo-haptics','expo-audio']) {
+for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • OBSERVER','RAPPEL ACTIF • SANS REGARDER','À TOI DE JOUER','MISSION FLASH • TRANSFERT','FINAL • CONSTRUIRE','retrievalPrompt','recallConfidence','masterySnapshot','expo-haptics','expo-audio']) {
   if (!lesson.includes(token)) throw new Error(`Lesson flow missing ${token}`);
 }
 for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Déobfusquer','Console','Preview','importFilesFromPhone','importFolderFromPhone']) {
@@ -48,4 +48,4 @@ for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','portf
   if (!projectEngine.includes(token)) throw new Error(`Portfolio engine missing ${token}`);
 }
 if (requiredFiles.some((source) => source.includes('TODO UI'))) throw new Error('A product UI contains an unfinished TODO marker');
-console.log('Product readiness audit OK: animated launch, path-first learning, real XP/NexCoins/streak primitives, step lessons, haptic/audio feedback, phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
+console.log('Product readiness audit OK: animated launch, path-first learning, active recall, real XP/NexCoins/streak primitives, step lessons, haptic/audio feedback, phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
