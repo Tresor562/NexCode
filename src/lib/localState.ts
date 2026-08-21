@@ -2,6 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import { MasteryMap, SkillMastery, masteryBand } from '../learning/skillGraph';
 import type { OfflinePack } from '../learning/offlineEngine';
 import type { PortfolioProof } from '../learning/projectPortfolioEngine';
+import { scheduleCloudStatePush } from './cloudSync';
 
 export type LabDraft = {
   missionId?: string;
@@ -155,6 +156,7 @@ export function saveLocalState(state: LocalState): void {
   try {
     if (!stateFile.exists) stateFile.create();
     stateFile.write(JSON.stringify(state));
+    scheduleCloudStatePush(state);
   } catch {
     // Learning must keep working even if a local write fails temporarily.
   }
