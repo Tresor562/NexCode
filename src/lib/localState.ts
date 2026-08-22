@@ -120,54 +120,145 @@ export function rewardProgress(state: LocalState, reward: ProgressReward): Local
   };
 }
 
+function finiteNumber(value: unknown, fallback: number, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function finiteInteger(value: unknown, fallback: number, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
+  return Math.floor(finiteNumber(value, fallback, minimum, maximum));
+}
+
+function cleanString(value: unknown, fallback: string, maxLength = 240): string {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  return normalized ? normalized.slice(0, maxLength) : fallback;
+}
+
+function optionalDateKey(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : undefined;
+}
+
+function stringList(value: unknown, limit = 2_000): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter(Boolean))].slice(0, limit);
+}
+
+function plainRecord(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return {};
+  return value as Record<string, unknown>;
+}
+
+function normalizeNumberRecord(value: unknown): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(plainRecord(value))) {
+    if (!key.trim() || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    result[key] = Math.max(0, raw);
+  }
+  return result;
+}
+
+function normalizeErrorTags(value: unknown): Record<string, string[]> {
+  const result: Record<string, string[]> = {};
+  for (const [key, raw] of Object.entries(plainRecord(value))) {
+    if (!key.trim()) continue;
+    result[key] = stringList(raw, 12).slice(-12);
+  }
+  return result;
+}
+
+function normalizeLabDrafts(value: unknown): Record<string, LabDraft> {
+  const result: Record<string, LabDraft> = {};
+  for (const [key, raw] of Object.entries(plainRecord(value))) {
+    const draft = plainRecord(raw);
+    const filesRaw = plainRecord(draft.files);
+    const files: Record<string, string> = {};
+    for (const [path, content] of Object.entries(filesRaw)) {
+      if (!path.trim() || typeof content !== 'string') continue;
+      files[path] = content;
+    }
+    const activeFile = typeof draft.activeFile === 'string' && draft.activeFile in files
+      ? draft.activeFile
+      : Object.keys(files)[0];
+    if (!activeFile) continue;
+    result[key] = {
+      missionId: typeof draft.missionId === 'string' ? draft.missionId : undefined,
+      language: cleanString(draft.language, 'text', 40),
+      files,
+      activeFile,
+      updatedAt: typeof draft.updatedAt === 'string' ? draft.updatedAt : new Date(0).toISOString(),
+      lastValidatedAt: typeof draft.lastValidatedAt === 'string' ? draft.lastValidatedAt : undefined,
+      passedCriteria: stringList(draft.passedCriteria, 100),
+    };
+  }
+  return result;
+}
+
 function normalizeMastery(value: unknown): MasteryMap {
-  if (!value || typeof value !== 'object') return {};
   const normalized: MasteryMap = {};
-  for (const [skillId, raw] of Object.entries(value as Record<string, Partial<SkillMastery>>)) {
-    const attempts = Math.max(0, raw.attempts ?? 0);
-    const correctAttempts = Math.max(0, Math.min(attempts, raw.correctAttempts ?? 0));
-    const score = Math.max(0, Math.min(100, raw.score ?? 0));
+  for (const [skillId, rawValue] of Object.entries(plainRecord(value))) {
+    if (!skillId.trim()) continue;
+    const raw = plainRecord(rawValue) as Partial<SkillMastery>;
+    const attempts = finiteInteger(raw.attempts, 0);
+    const correctAttempts = finiteInteger(raw.correctAttempts, 0, 0, attempts);
+    const score = finiteNumber(raw.score, 0, 0, 100);
     normalized[skillId] = {
       skillId,
       score,
-      confidence: Math.max(0, Math.min(100, raw.confidence ?? (attempts ? Math.round((correctAttempts / attempts) * 70) : 0))),
+      confidence: finiteNumber(raw.confidence, attempts ? Math.round((correctAttempts / attempts) * 70) : 0, 0, 100),
       band: masteryBand(score),
       attempts,
       correctAttempts,
-      consecutiveCorrect: Math.max(0, raw.consecutiveCorrect ?? 0),
-      lastPracticedAt: raw.lastPracticedAt,
-      nextReviewAt: raw.nextReviewAt,
-      errorTags: Array.isArray(raw.errorTags) ? raw.errorTags.slice(-8) : [],
-      evidence: Array.isArray(raw.evidence) ? raw.evidence.slice(-20) : [],
+      consecutiveCorrect: finiteInteger(raw.consecutiveCorrect, 0, 0, attempts),
+      lastPracticedAt: typeof raw.lastPracticedAt === 'string' ? raw.lastPracticedAt : undefined,
+      nextReviewAt: typeof raw.nextReviewAt === 'string' ? raw.nextReviewAt : undefined,
+      errorTags: stringList(raw.errorTags, 8).slice(-8),
+      evidence: Array.isArray(raw.evidence)
+        ? raw.evidence.filter((entry) => entry && typeof entry === 'object').slice(-20) as SkillMastery['evidence']
+        : [],
     };
   }
   return normalized;
 }
 
 function normalizeState(value: Partial<LocalState>): LocalState {
-  const dailyGoal = Math.max(5, value.dailyGoal ?? initialState.dailyGoal);
-  const streak = Math.max(0, value.streak ?? initialState.streak);
+  const dailyGoal = finiteInteger(value.dailyGoal, initialState.dailyGoal, 5, 240);
+  const streak = finiteInteger(value.streak, initialState.streak, 0, 100_000);
   return {
     ...initialState,
-    ...value,
-    xp: Math.max(0, value.xp ?? initialState.xp),
-    nexCoins: Math.max(0, value.nexCoins ?? initialState.nexCoins),
+    xp: finiteInteger(value.xp, initialState.xp),
+    nexCoins: finiteInteger(value.nexCoins, initialState.nexCoins),
     streak,
-    bestStreak: Math.max(streak, value.bestStreak ?? initialState.bestStreak),
+    bestStreak: Math.max(streak, finiteInteger(value.bestStreak, initialState.bestStreak, 0, 100_000)),
+    lastActiveDate: optionalDateKey(value.lastActiveDate),
     dailyGoal,
-    dailyCompleted: Math.min(dailyGoal, Math.max(0, value.dailyCompleted ?? initialState.dailyCompleted)),
-    totalLearningMinutes: Math.max(0, value.totalLearningMinutes ?? initialState.totalLearningMinutes),
-    downloadedCourses: Array.isArray(value.downloadedCourses) ? value.downloadedCourses : initialState.downloadedCourses,
-    downloadedChapters: Array.isArray(value.downloadedChapters) ? value.downloadedChapters : initialState.downloadedChapters,
-    installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks : initialState.installedOfflinePacks,
-    completedLessons: Array.isArray(value.completedLessons) ? value.completedLessons : initialState.completedLessons,
-    projectProgress: value.projectProgress ?? initialState.projectProgress,
-    projectDrafts: value.projectDrafts ?? initialState.projectDrafts,
-    portfolioProofs: Array.isArray(value.portfolioProofs) ? value.portfolioProofs : initialState.portfolioProofs,
+    dailyCompleted: finiteInteger(value.dailyCompleted, initialState.dailyCompleted, 0, dailyGoal),
+    dailyGoalRewardDate: optionalDateKey(value.dailyGoalRewardDate),
+    totalLearningMinutes: finiteInteger(value.totalLearningMinutes, initialState.totalLearningMinutes),
+    downloadedCourses: stringList(value.downloadedCourses),
+    downloadedChapters: stringList(value.downloadedChapters),
+    installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks.slice(0, 500) : [],
+    completedLessons: stringList(value.completedLessons, 20_000),
+    projectProgress: normalizeNumberRecord(value.projectProgress),
+    projectDrafts: normalizeLabDrafts(value.projectDrafts),
+    portfolioProofs: Array.isArray(value.portfolioProofs)
+      ? value.portfolioProofs.filter((proof) => proof && typeof proof === 'object').slice(0, 2_000) as PortfolioProof[]
+      : [],
     mastery: normalizeMastery(value.mastery),
-    lessonAttempts: value.lessonAttempts ?? initialState.lessonAttempts,
-    lessonErrorTags: value.lessonErrorTags ?? initialState.lessonErrorTags,
-    labDrafts: value.labDrafts ?? initialState.labDrafts,
+    lessonAttempts: normalizeNumberRecord(value.lessonAttempts),
+    lessonErrorTags: normalizeErrorTags(value.lessonErrorTags),
+    labDrafts: normalizeLabDrafts(value.labDrafts),
+    onboardingComplete: value.onboardingComplete === true,
+    name: cleanString(value.name, initialState.name, 80),
+    learningGoal: cleanString(value.learningGoal, initialState.learningGoal, 160),
+    recentCourseId: cleanString(value.recentCourseId, initialState.recentCourseId, 120),
   };
 }
 
@@ -180,7 +271,8 @@ export function loadLocalState(): LocalState {
     }
     const raw = stateFile.textSync();
     if (!raw.trim()) return initialState;
-    return normalizeState(JSON.parse(raw) as Partial<LocalState>);
+    const parsed = JSON.parse(raw) as unknown;
+    return normalizeState(plainRecord(parsed) as Partial<LocalState>);
   } catch {
     return initialState;
   }
