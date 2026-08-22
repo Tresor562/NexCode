@@ -143,16 +143,18 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   }
 
   if (selected.length === 0 && sorted.length > 0) {
-    const fallback = [...sorted].sort((a, b) => {
+    const [fallback] = [...sorted].sort((a, b) => {
       const overrunA = Math.max(0, a.estimatedMinutes - budgetMinutes);
       const overrunB = Math.max(0, b.estimatedMinutes - budgetMinutes);
       if (overrunA !== overrunB) return overrunA - overrunB;
       return activitySort(a, b);
-    })[0];
-    selected.push(fallback);
-    minutes = fallback.estimatedMinutes;
-    fallback.skillIds.forEach((skill) => usedSkills.add(skill));
-    usedCourses.add(fallback.courseId);
+    });
+    if (fallback) {
+      selected.push(fallback);
+      minutes = fallback.estimatedMinutes;
+      fallback.skillIds.forEach((skill) => usedSkills.add(skill));
+      usedCourses.add(fallback.courseId);
+    }
   }
 
   return {
