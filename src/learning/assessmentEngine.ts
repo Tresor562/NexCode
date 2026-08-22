@@ -16,6 +16,17 @@ export type AssessmentPlan = {
   recommendedMinutes: number;
 };
 
+function evenlySampleLessons(lessons: Lesson[], maxItems: number) {
+  if (lessons.length <= maxItems) return lessons;
+  if (maxItems <= 1) return lessons.slice(0, Math.max(0, maxItems));
+
+  const lastIndex = lessons.length - 1;
+  return Array.from({ length: maxItems }, (_, index) => {
+    const sourceIndex = Math.round((index * lastIndex) / (maxItems - 1));
+    return lessons[sourceIndex];
+  });
+}
+
 export function chapterAssessment(course: Course, chapter: Chapter): AssessmentPlan {
   const explicit = chapter.lessonIds
     .map((id) => course.starterLessons.find((lesson) => lesson.id === id))
@@ -38,11 +49,12 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
 
 export function courseExam(course: Course): AssessmentPlan {
   const evidenceLessons = course.starterLessons.filter((lesson) => ['checkpoint', 'boss', 'project', 'lab'].includes(lesson.activityKind ?? 'learn'));
+  const selectedLessons = evenlySampleLessons(evidenceLessons, 20);
   return {
     id: `${course.id}.course-exam`,
     kind: 'course-exam',
     courseId: course.id,
-    lessonIds: evidenceLessons.slice(-Math.max(8, Math.min(20, evidenceLessons.length))).map((lesson) => lesson.id),
+    lessonIds: selectedLessons.map((lesson) => lesson.id),
     skillIds: course.skillIds,
     requiredScore: 80,
     requiresIndependentEvidence: true,
