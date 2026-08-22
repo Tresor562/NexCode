@@ -1,5 +1,5 @@
 import { File, Paths } from 'expo-file-system';
-import { MasteryMap, SkillMastery, masteryBand } from '../learning/skillGraph';
+import { AttemptEvidence, MasteryMap, SkillMastery, masteryBand } from '../learning/skillGraph';
 import type { OfflinePack } from '../learning/offlineEngine';
 import type { PortfolioProof } from '../learning/projectPortfolioEngine';
 import { scheduleCloudStatePush } from './cloudSync';
@@ -141,6 +141,13 @@ function optionalDateKey(value: unknown): string | undefined {
   return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : undefined;
 }
 
+function optionalIsoDate(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || !Number.isFinite(Date.parse(trimmed))) return undefined;
+  return new Date(trimmed).toISOString();
+}
+
 function stringList(value: unknown, limit = 2_000): string[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value
@@ -193,12 +200,34 @@ function normalizeLabDrafts(value: unknown): Record<string, LabDraft> {
       language: cleanString(draft.language, 'text', 40),
       files,
       activeFile,
-      updatedAt: typeof draft.updatedAt === 'string' ? draft.updatedAt : new Date(0).toISOString(),
-      lastValidatedAt: typeof draft.lastValidatedAt === 'string' ? draft.lastValidatedAt : undefined,
+      updatedAt: optionalIsoDate(draft.updatedAt) ?? new Date(0).toISOString(),
+      lastValidatedAt: optionalIsoDate(draft.lastValidatedAt),
       passedCriteria: stringList(draft.passedCriteria, 100),
     };
   }
   return result;
+}
+
+function normalizeEvidence(value: unknown): AttemptEvidence[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: AttemptEvidence[] = [];
+  for (const rawValue of value.slice(-20)) {
+    const raw = plainRecord(rawValue);
+    const lessonId = cleanString(raw.lessonId, '', 160);
+    const activityKind = cleanString(raw.activityKind, '', 40);
+    const at = optionalIsoDate(raw.at);
+    if (!lessonId || !activityKind || !at || typeof raw.correct !== 'boolean') continue;
+    const errorTag = raw.correct ? undefined : cleanString(raw.errorTag, '', 120) || undefined;
+    normalized.push({
+      lessonId,
+      activityKind,
+      correct: raw.correct,
+      scoreDelta: finiteNumber(raw.scoreDelta, 0, -100, 100),
+      at,
+      errorTag,
+    });
+  }
+  return normalized;
 }
 
 function normalizeMastery(value: unknown): MasteryMap {
@@ -217,12 +246,10 @@ function normalizeMastery(value: unknown): MasteryMap {
       attempts,
       correctAttempts,
       consecutiveCorrect: finiteInteger(raw.consecutiveCorrect, 0, 0, attempts),
-      lastPracticedAt: typeof raw.lastPracticedAt === 'string' ? raw.lastPracticedAt : undefined,
-      nextReviewAt: typeof raw.nextReviewAt === 'string' ? raw.nextReviewAt : undefined,
+      lastPracticedAt: optionalIsoDate(raw.lastPracticedAt),
+      nextReviewAt: optionalIsoDate(raw.nextReviewAt),
       errorTags: stringList(raw.errorTags, 8).slice(-8),
-      evidence: Array.isArray(raw.evidence)
-        ? raw.evidence.filter((entry) => entry && typeof entry === 'object').slice(-20) as SkillMastery['evidence']
-        : [],
+      evidence: normalizeEvidence(raw.evidence),
     };
   }
   return normalized;
