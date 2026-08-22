@@ -23,7 +23,7 @@ function evenlySampleLessons(lessons: Lesson[], maxItems: number) {
   const lastIndex = lessons.length - 1;
   return Array.from({ length: maxItems }, (_, index) => {
     const sourceIndex = Math.round((index * lastIndex) / (maxItems - 1));
-    return lessons[sourceIndex];
+    return lessons[sourceIndex]!;
   });
 }
 
