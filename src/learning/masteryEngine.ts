@@ -40,6 +40,18 @@ function retentionFactor(state: SkillMastery, now: Date) {
   return 0.7;
 }
 
+function recurringErrorTags(state: SkillMastery) {
+  const counts = new Map<string, number>();
+  for (const attempt of state.evidence.slice(-12)) {
+    if (attempt.correct || !attempt.errorTag) continue;
+    counts.set(attempt.errorTag, (counts.get(attempt.errorTag) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag]) => tag);
+}
+
 export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new Date()): MasterySnapshot {
   const state = mastery[skillId];
   if (!state) {
@@ -57,9 +69,7 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
   }
   const effectiveScore = Math.round(state.score * retentionFactor(state, now));
   const evidenceKinds = [...new Set(state.evidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
-  const counts = new Map<string, number>();
-  for (const tag of state.errorTags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  const recurringErrors = [...counts.entries()].filter(([, count]) => count >= 2).map(([tag]) => tag);
+  const recurringErrors = recurringErrorTags(state);
   const independentEvidence = evidenceKinds.some((kind) => ['lab', 'checkpoint', 'boss', 'project'].includes(kind));
   const due = !state.nextReviewAt || new Date(state.nextReviewAt).getTime() <= now.getTime();
   return {
