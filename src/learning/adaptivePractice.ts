@@ -89,21 +89,29 @@ export function buildAdaptivePool(
     .sort((a, b) => b.priority - a.priority);
 }
 
+const modeOrder: PracticeMode[] = ['repair', 'review', 'checkpoint', 'lab', 'learn', 'interleave'];
+
+function activitySort(a: PlannedActivity, b: PlannedActivity) {
+  const modeDelta = modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode);
+  if (modeDelta !== 0) return modeDelta;
+  if (b.priority !== a.priority) return b.priority - a.priority;
+  if (a.estimatedMinutes !== b.estimatedMinutes) return a.estimatedMinutes - b.estimatedMinutes;
+  const courseDelta = a.courseId.localeCompare(b.courseId);
+  return courseDelta !== 0 ? courseDelta : a.lessonId.localeCompare(b.lessonId);
+}
+
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
   const usedSkills = new Set<string>();
   const usedCourses = new Set<string>();
   let minutes = 0;
 
-  const modeOrder: PracticeMode[] = ['repair', 'review', 'learn', 'lab', 'interleave', 'checkpoint'];
-  const sorted = [...pool].sort((a, b) => {
-    const modeDelta = modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode);
-    return modeDelta !== 0 ? modeDelta : b.priority - a.priority;
-  });
+  const sorted = [...pool].sort(activitySort);
+  const overrunAllowance = Math.max(2, Math.round(budgetMinutes * 0.15));
+  const maxMinutes = budgetMinutes + overrunAllowance;
 
   for (const candidate of sorted) {
-    const wouldExceed = minutes + candidate.estimatedMinutes > budgetMinutes + Math.max(3, Math.round(budgetMinutes * 0.2));
-    if (wouldExceed && selected.length > 0) continue;
+    if (minutes + candidate.estimatedMinutes > maxMinutes) continue;
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
     const bringsNewCourse = !usedCourses.has(candidate.courseId);
     const needsDiversity = selected.length >= 2;
@@ -115,11 +123,17 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (minutes >= budgetMinutes) break;
   }
 
-  if (selected.length === 0 && sorted[0]) {
-    selected.push(sorted[0]);
-    minutes = sorted[0].estimatedMinutes;
-    sorted[0].skillIds.forEach((skill) => usedSkills.add(skill));
-    usedCourses.add(sorted[0].courseId);
+  if (selected.length === 0 && sorted.length > 0) {
+    const fallback = [...sorted].sort((a, b) => {
+      const overrunA = Math.max(0, a.estimatedMinutes - budgetMinutes);
+      const overrunB = Math.max(0, b.estimatedMinutes - budgetMinutes);
+      if (overrunA !== overrunB) return overrunA - overrunB;
+      return activitySort(a, b);
+    })[0];
+    selected.push(fallback);
+    minutes = fallback.estimatedMinutes;
+    fallback.skillIds.forEach((skill) => usedSkills.add(skill));
+    usedCourses.add(fallback.courseId);
   }
 
   return {
