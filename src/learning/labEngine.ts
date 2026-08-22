@@ -122,11 +122,19 @@ function containsLikelySecret(files: Record<string, string>) {
 }
 
 function meaningfulChange(mission: LabMission, files: Record<string, string>) {
-  const allText = Object.values(files).join('\n').trim();
-  const starter = (mission.starterCode ?? '').trim();
-  if (!starter) return allText.length >= 20;
+  const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
   const normalized = (value: string) => value.replace(/\s+/g, ' ').trim();
-  return normalized(allText) !== normalized(starter) && allText.length >= Math.min(20, starter.length + 3);
+  const starterNames = new Set(Object.keys(starterFiles));
+
+  for (const [filename, content] of Object.entries(files)) {
+    if (!starterNames.has(filename)) {
+      if (normalized(content).length >= 3) return true;
+      continue;
+    }
+    if (normalized(content) !== normalized(starterFiles[filename] ?? '')) return true;
+  }
+
+  return Object.keys(starterFiles).some((filename) => files[filename] === undefined);
 }
 
 function languageStructureCheck(language: LabMission['language'], files: Record<string, string>) {
