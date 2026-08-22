@@ -10,6 +10,8 @@ const SENSITIVE_BASENAMES = new Set([
   '.env','.npmrc','.pypirc','.netrc','id_rsa','id_ed25519','credentials','credentials.json','service-account.json','service_account.json',
 ]);
 const MAX_TEXT_BYTES = 1_500_000;
+const MAX_TEXT_CHARS = 1_500_000;
+const MAX_TOTAL_TEXT_CHARS = 5_000_000;
 const MAX_FILES_PER_IMPORT = 300;
 const MAX_DEPTH = 10;
 
@@ -35,9 +37,15 @@ function isSensitiveName(name: string) {
   return false;
 }
 
+function isSafeSegment(name: string) {
+  if (!name || name === '.' || name === '..') return false;
+  if (name.includes('/') || name.includes('\\')) return false;
+  return !/[\u0000-\u001f\u007f]/.test(name);
+}
+
 function canReadAsText(file: File) {
   const size = typeof file.size === 'number' ? file.size : 0;
-  return size <= MAX_TEXT_BYTES && !isSensitiveName(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
+  return size <= MAX_TEXT_BYTES && isSafeSegment(file.name) && !isSensitiveName(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
 }
 
 function uniquePath(path: string, occupied: Set<string>) {
@@ -53,8 +61,10 @@ function uniquePath(path: string, occupied: Set<string>) {
   return { path: `${folder}${stem} (${counter})${ext}`, renamed: true };
 }
 
-async function readFile(file: File) {
-  return file.text();
+async function readTextFile(file: File) {
+  const text = await file.text();
+  if (text.length > MAX_TEXT_CHARS || text.includes('\0')) return null;
+  return text;
 }
 
 export async function importFilesFromPhone(existing: Record<string, string>): Promise<WorkspaceImportResult> {
@@ -63,15 +73,19 @@ export async function importFilesFromPhone(existing: Record<string, string>): Pr
   const occupied = new Set(Object.keys(existing));
   const next = { ...existing };
   let imported = 0;
-  let skipped = 0;
+  let skipped = Math.max(0, picked.result.length - MAX_FILES_PER_IMPORT);
   let renamed = 0;
+  let importedChars = 0;
 
   for (const file of picked.result.slice(0, MAX_FILES_PER_IMPORT)) {
     if (!canReadAsText(file)) { skipped += 1; continue; }
     try {
+      const text = await readTextFile(file);
+      if (text === null || importedChars + text.length > MAX_TOTAL_TEXT_CHARS) { skipped += 1; continue; }
       const resolved = uniquePath(file.name, occupied);
-      next[resolved.path] = await readFile(file);
+      next[resolved.path] = text;
       occupied.add(resolved.path);
+      importedChars += text.length;
       imported += 1;
       if (resolved.renamed) renamed += 1;
     } catch {
@@ -83,28 +97,37 @@ export async function importFilesFromPhone(existing: Record<string, string>): Pr
 
 export async function importFolderFromPhone(existing: Record<string, string>): Promise<WorkspaceImportResult> {
   const picker = Directory as unknown as { pickDirectoryAsync: () => Promise<Directory> };
-  const root = await picker.pickDirectoryAsync();
+  let root: Directory;
+  try {
+    root = await picker.pickDirectoryAsync();
+  } catch {
+    return { files: existing, imported: 0, skipped: 0, renamed: 0 };
+  }
   const occupied = new Set(Object.keys(existing));
   const next = { ...existing };
   let imported = 0;
   let skipped = 0;
   let renamed = 0;
+  let importedChars = 0;
 
   async function walk(directory: Directory, prefix: string, depth: number): Promise<void> {
-    if (depth > MAX_DEPTH || imported + skipped >= MAX_FILES_PER_IMPORT) return;
+    if (depth > MAX_DEPTH || imported + skipped >= MAX_FILES_PER_IMPORT || importedChars >= MAX_TOTAL_TEXT_CHARS) return;
     const entries = directory.list();
     for (const entry of entries) {
-      if (imported + skipped >= MAX_FILES_PER_IMPORT) break;
+      if (imported + skipped >= MAX_FILES_PER_IMPORT || importedChars >= MAX_TOTAL_TEXT_CHARS) break;
       if (entry instanceof Directory) {
-        if (IGNORED_DIRECTORIES.has(entry.name)) continue;
+        if (!isSafeSegment(entry.name) || IGNORED_DIRECTORIES.has(entry.name)) continue;
         await walk(entry, `${prefix}${entry.name}/`, depth + 1);
         continue;
       }
       if (!canReadAsText(entry)) { skipped += 1; continue; }
       try {
+        const text = await readTextFile(entry);
+        if (text === null || importedChars + text.length > MAX_TOTAL_TEXT_CHARS) { skipped += 1; continue; }
         const resolved = uniquePath(`${prefix}${entry.name}`, occupied);
-        next[resolved.path] = await readFile(entry);
+        next[resolved.path] = text;
         occupied.add(resolved.path);
+        importedChars += text.length;
         imported += 1;
         if (resolved.renamed) renamed += 1;
       } catch {
