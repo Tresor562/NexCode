@@ -64,13 +64,53 @@ export function missionForLesson(lesson: Lesson): LabMission {
   };
 }
 
+function isSensitiveLabFilename(filename: string): boolean {
+  const normalized = filename.trim().replace(/\\/g, '/').toLowerCase();
+  const basename = normalized.split('/').pop() ?? normalized;
+  if (basename === '.env.example') return false;
+  if (basename === '.env' || basename.startsWith('.env.')) return true;
+  if (['.npmrc', '.pypirc', '.netrc', 'credentials.json', 'service-account.json', 'id_rsa', 'id_ed25519'].includes(basename)) return true;
+  return /\.(pem|key|p12|pfx|jks|keystore)$/.test(basename);
+}
+
+function restoreStoredLabDraft(mission: LabMission, stored?: LabDraft): LabDraft | undefined {
+  if (!stored) return undefined;
+  if (stored.missionId && stored.missionId !== mission.id) return undefined;
+
+  const files = Object.fromEntries(
+    Object.entries(stored.files ?? {}).filter(([filename, content]) => (
+      Boolean(filename.trim()) && typeof content === 'string' && !isSensitiveLabFilename(filename)
+    )),
+  );
+  const filenames = Object.keys(files);
+  if (!filenames.length) return undefined;
+
+  const activeFile = filenames.includes(stored.activeFile) ? stored.activeFile : filenames[0]!;
+  const changedOnRestore = filenames.length !== Object.keys(stored.files ?? {}).length
+    || activeFile !== stored.activeFile
+    || stored.language !== mission.language
+    || stored.missionId !== mission.id;
+
+  return {
+    ...stored,
+    missionId: mission.id,
+    language: mission.language,
+    files,
+    activeFile,
+    lastValidatedAt: changedOnRestore ? undefined : stored.lastValidatedAt,
+    passedCriteria: changedOnRestore ? [] : stored.passedCriteria,
+    updatedAt: changedOnRestore ? new Date().toISOString() : stored.updatedAt,
+  };
+}
+
 export function openLabWorkspace(lesson: Lesson, stored?: LabDraft): LabWorkspace {
   const mission = missionForLesson(lesson);
   const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
   const activeFile = Object.keys(starterFiles)[0] ?? 'main.txt';
+  const restored = restoreStoredLabDraft(mission, stored);
   return {
     mission,
-    draft: stored ?? {
+    draft: restored ?? {
       missionId: mission.id,
       language: mission.language,
       files: starterFiles,
@@ -99,15 +139,6 @@ export function updateLabFile(draft: LabDraft, filename: string, content: string
     updatedAt: new Date().toISOString(),
   };
   return changed ? invalidateLabValidation(next) : next;
-}
-
-function isSensitiveLabFilename(filename: string): boolean {
-  const normalized = filename.trim().replace(/\\/g, '/').toLowerCase();
-  const basename = normalized.split('/').pop() ?? normalized;
-  if (basename === '.env.example') return false;
-  if (basename === '.env' || basename.startsWith('.env.')) return true;
-  if (['.npmrc', '.pypirc', '.netrc', 'credentials.json', 'service-account.json', 'id_rsa', 'id_ed25519'].includes(basename)) return true;
-  return /\.(pem|key|p12|pfx|jks|keystore)$/.test(basename);
 }
 
 export function addLabFile(draft: LabDraft, filename: string) {
