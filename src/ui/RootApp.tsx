@@ -38,14 +38,12 @@ export default function RootApp() {
         setSession(refreshed);
       })
       .catch(() => {
-        // Offline-first: an existing account can continue from the local snapshot.
-        // If this is a different account, never expose the previous learner's
-        // state while cloud hydration is unavailable.
+        // Offline-first: continue with the snapshot scoped to this account. If
+        // the device has just switched accounts, this is intentionally a fresh
+        // local state rather than another learner's XP, mastery or projects.
         if (!active) return;
-        if (scopedLocal !== loadLocalState()) {
-          bindLocalStateOwner(session.user.id);
-          saveLocalState(scopedLocal);
-        }
+        bindLocalStateOwner(session.user.id);
+        saveLocalState(scopedLocal);
       })
       .finally(() => {
         if (active) setHydrating(false);
