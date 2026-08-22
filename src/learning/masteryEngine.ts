@@ -52,6 +52,16 @@ function recurringErrorTags(state: SkillMastery) {
     .map(([tag]) => tag);
 }
 
+function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
+  if (!nextReviewAt) return true;
+  const timestamp = new Date(nextReviewAt).getTime();
+  return !Number.isFinite(timestamp) || timestamp <= now.getTime();
+}
+
+function snapshotIsMastered(snapshot: MasterySnapshot) {
+  return snapshot.effectiveScore >= 85 && snapshot.confidence >= 70 && snapshot.independentEvidence;
+}
+
 export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new Date()): MasterySnapshot {
   const state = mastery[skillId];
   if (!state) {
@@ -71,7 +81,7 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
   const evidenceKinds = [...new Set(state.evidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
   const recurringErrors = recurringErrorTags(state);
   const independentEvidence = evidenceKinds.some((kind) => ['lab', 'checkpoint', 'boss', 'project'].includes(kind));
-  const due = !state.nextReviewAt || new Date(state.nextReviewAt).getTime() <= now.getTime();
+  const due = reviewIsDue(state.nextReviewAt, now);
   return {
     skillId,
     rawScore: state.score,
@@ -97,8 +107,7 @@ export function evidenceStrength(snapshot: MasterySnapshot) {
 }
 
 export function skillIsMastered(skillId: string, mastery: MasteryMap, now = new Date()) {
-  const snapshot = masterySnapshot(skillId, mastery, now);
-  return snapshot.effectiveScore >= 85 && snapshot.confidence >= 70 && snapshot.independentEvidence;
+  return snapshotIsMastered(masterySnapshot(skillId, mastery, now));
 }
 
 export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, required = 70, now = new Date()): GateResult {
@@ -124,7 +133,7 @@ export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, requi
 export function courseMasterySnapshot(course: Course, mastery: MasteryMap, now = new Date()) {
   const snapshots = course.skillIds.map((id) => masterySnapshot(id, mastery, now));
   const score = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
-  const mastered = snapshots.filter((item) => item.effectiveScore >= 85 && item.independentEvidence).length;
+  const mastered = snapshots.filter(snapshotIsMastered).length;
   const dueForReview = snapshots.filter((item) => item.needsReview).length;
   return { score, mastered, total: snapshots.length, dueForReview, snapshots };
 }
