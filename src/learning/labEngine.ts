@@ -101,9 +101,18 @@ export function updateLabFile(draft: LabDraft, filename: string, content: string
   return changed ? invalidateLabValidation(next) : next;
 }
 
+function isSensitiveLabFilename(filename: string): boolean {
+  const normalized = filename.trim().replace(/\\/g, '/').toLowerCase();
+  const basename = normalized.split('/').pop() ?? normalized;
+  if (basename === '.env.example') return false;
+  if (basename === '.env' || basename.startsWith('.env.')) return true;
+  if (['.npmrc', '.pypirc', '.netrc', 'credentials.json', 'service-account.json', 'id_rsa', 'id_ed25519'].includes(basename)) return true;
+  return /\.(pem|key|p12|pfx|jks|keystore)$/.test(basename);
+}
+
 export function addLabFile(draft: LabDraft, filename: string) {
   const safe = filename.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-  if (!safe || draft.files[safe] !== undefined) return draft;
+  if (!safe || isSensitiveLabFilename(safe) || draft.files[safe] !== undefined) return draft;
   return invalidateLabValidation({ ...draft, files: { ...draft.files, [safe]: '' }, activeFile: safe, updatedAt: new Date().toISOString() });
 }
 
@@ -117,7 +126,9 @@ export function removeLabFile(draft: LabDraft, filename: string) {
 }
 
 function containsLikelySecret(files: Record<string, string>) {
+  if (Object.keys(files).some(isSensitiveLabFilename)) return true;
   const text = Object.values(files).join('\n');
+  if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(text)) return true;
   return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test|changeme)[A-Za-z0-9_-]{12,}/i.test(text);
 }
 
