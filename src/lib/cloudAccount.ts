@@ -195,25 +195,61 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+function dateKey(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : undefined;
+}
+
+function laterDateKey(left: string | undefined, right: string | undefined): string | undefined {
+  if (!left) return right;
+  if (!right) return left;
+  return left >= right ? left : right;
+}
+
+function mergeDailyProgress(local: LocalState, progress: Record<string, unknown> | undefined) {
+  const localDate = dateKey(local.lastActiveDate);
+  const remoteDate = dateKey(progress?.last_active_date);
+  const remoteCompleted = typeof progress?.daily_completed === 'number' ? Math.max(0, progress.daily_completed) : 0;
+  const remoteStreak = typeof progress?.streak === 'number' ? Math.max(0, progress.streak) : 0;
+  const lastActiveDate = laterDateKey(localDate, remoteDate);
+
+  // Daily counters and the current streak describe a specific activity day. A
+  // stale cloud snapshot must never revive yesterday's completed goal or streak
+  // after this device has already moved to a newer local day.
+  if (localDate && (!remoteDate || localDate > remoteDate)) {
+    return { lastActiveDate: localDate, dailyCompleted: local.dailyCompleted, streak: local.streak };
+  }
+  if (remoteDate && (!localDate || remoteDate > localDate)) {
+    return { lastActiveDate: remoteDate, dailyCompleted: remoteCompleted, streak: remoteStreak };
+  }
+  return {
+    lastActiveDate,
+    dailyCompleted: Math.max(local.dailyCompleted, remoteCompleted),
+    streak: Math.max(local.streak, remoteStreak),
+  };
+}
+
 function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | undefined, progress: Record<string, unknown> | undefined): LocalState {
   if (!progress && !profile) return local;
   const remoteLessons = Array.isArray(progress?.completed_lessons) ? progress?.completed_lessons.filter((value): value is string => typeof value === 'string') : [];
   const settings = progress?.settings && typeof progress.settings === 'object' ? progress.settings as Record<string, unknown> : {};
-  const remoteStreak = typeof progress?.streak === 'number' ? progress.streak : 0;
-  const streak = Math.max(local.streak, remoteStreak);
+  const daily = mergeDailyProgress(local, progress);
+  const remoteRewardDate = dateKey(settings.dailyGoalRewardDate);
+  const localRewardDate = dateKey(local.dailyGoalRewardDate);
   return {
     ...local,
     name: typeof profile?.display_name === 'string' && profile.display_name.trim() ? profile.display_name : local.name,
     learningGoal: typeof profile?.learning_goal === 'string' && profile.learning_goal.trim() ? profile.learning_goal : local.learningGoal,
     xp: Math.max(local.xp, typeof progress?.xp === 'number' ? progress.xp : 0),
     nexCoins: Math.max(local.nexCoins, typeof progress?.nexcoins === 'number' ? progress.nexcoins : 0),
-    streak,
-    bestStreak: Math.max(local.bestStreak, streak, typeof settings.bestStreak === 'number' ? settings.bestStreak : 0),
+    streak: daily.streak,
+    bestStreak: Math.max(local.bestStreak, daily.streak, typeof settings.bestStreak === 'number' ? settings.bestStreak : 0),
     dailyGoal: Math.max(5, typeof progress?.daily_goal === 'number' ? progress.daily_goal : local.dailyGoal),
-    dailyCompleted: Math.max(local.dailyCompleted, typeof progress?.daily_completed === 'number' ? progress.daily_completed : 0),
-    dailyGoalRewardDate: typeof settings.dailyGoalRewardDate === 'string' ? settings.dailyGoalRewardDate : local.dailyGoalRewardDate,
+    dailyCompleted: daily.dailyCompleted,
+    dailyGoalRewardDate: laterDateKey(localRewardDate, remoteRewardDate),
     totalLearningMinutes: Math.max(local.totalLearningMinutes, typeof settings.totalLearningMinutes === 'number' ? settings.totalLearningMinutes : 0),
-    lastActiveDate: typeof progress?.last_active_date === 'string' ? progress.last_active_date : local.lastActiveDate,
+    lastActiveDate: daily.lastActiveDate,
     recentCourseId: typeof progress?.recent_course_id === 'string' ? progress.recent_course_id : local.recentCourseId,
     completedLessons: unique([...local.completedLessons, ...remoteLessons]),
     mastery: progress?.mastery && typeof progress.mastery === 'object' ? { ...progress.mastery as LocalState['mastery'], ...local.mastery } : local.mastery,
