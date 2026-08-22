@@ -38,6 +38,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const [recallDraft, setRecallDraft] = useState('');
   const [recallRevealed, setRecallRevealed] = useState(false);
   const [recallConfidence, setRecallConfidence] = useState<RecallConfidence | null>(null);
+  const [transferDraft, setTransferDraft] = useState('');
   const scale = useRef(new Animated.Value(1)).current;
   const successPlayer = useAudioPlayer(successSound);
   const errorPlayer = useAudioPlayer(errorSound);
@@ -45,6 +46,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const step = steps[stepIndex];
   const correct = answer === lesson.correctIndex;
   const recallAttemptReady = recallDraft.trim().length >= 3;
+  const transferAttemptReady = transferDraft.trim().length >= 12;
   const snapshots = useMemo(() => (lesson.skillIds ?? []).map((id) => masterySnapshot(id, state.mastery)), [lesson.id, state.mastery]);
   const mastery = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
@@ -257,8 +259,24 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
           <Card style={styles.bigCard}>
             <Text style={styles.transfer}>{lesson.transferPrompt}</Text>
             <Text style={styles.tip}>Ne cherche pas une phrase apprise par cœur. Décide comment utiliser le concept pour résoudre ce nouveau problème.</Text>
+            <View style={styles.transferAttempt}>
+              <Text style={styles.transferAttemptLabel}>TA STRATÉGIE</Text>
+              <TextInput
+                value={transferDraft}
+                onChangeText={setTransferDraft}
+                multiline
+                maxLength={600}
+                textAlignVertical="top"
+                placeholder="Décris ce que tu ferais, même en pseudo-code…"
+                placeholderTextColor={theme.colors.textMuted}
+                accessibilityLabel="Ta stratégie pour la mission de transfert"
+                accessibilityHint="Explique une vraie démarche avant de continuer vers le Lab"
+                style={styles.transferInput}
+              />
+              <Text style={styles.transferCounter}>{transferDraft.trim().length}/600 • {transferAttemptReady ? 'stratégie prête' : 'explique ta démarche en au moins 12 caractères'}</Text>
+            </View>
           </Card>
-          <PrimaryButton label="J’ai imaginé une solution" icon="→" onPress={next} />
+          <PrimaryButton label="Passer au Lab" icon="→" disabled={!transferAttemptReady} onPress={next} />
         </View>
       ) : null}
 
@@ -294,5 +312,5 @@ const styles = StyleSheet.create({
   codeBlock:{backgroundColor:'#070B13',borderWidth:1,borderColor:'#222A3D',borderRadius:20,overflow:'hidden'},codeTop:{height:42,paddingHorizontal:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#1C2435'},codeFile:{color:'#AEB8D5',fontFamily:'monospace',fontSize:11},runBadge:{color:'#7EE6B0',fontSize:9,fontWeight:'900'},code:{color:'#EAF0FF',fontFamily:'monospace',fontSize:13,lineHeight:21,padding:16,minHeight:190},
   recallQuestion:{color:theme.colors.text,fontSize:20,lineHeight:29,fontWeight:'900'},recallChallenge:{marginTop:18,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},recallChallengeTitle:{color:'#AEB8FF',fontSize:12,fontWeight:'900'},recallChallengeText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:6},recallInput:{minHeight:112,marginTop:14,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},recallCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},recallAttempt:{marginTop:18,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},recallAttemptText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:22,marginTop:6},recallReveal:{marginTop:10,padding:14,borderRadius:16,backgroundColor:'rgba(100,118,255,0.12)',borderWidth:1,borderColor:'rgba(100,118,255,0.28)'},recallRevealLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},recallRevealText:{color:theme.colors.text,fontSize:14,lineHeight:22,fontWeight:'700',marginTop:6},confidenceTitle:{color:theme.colors.textSecondary,fontSize:12,fontWeight:'800'},confidenceRow:{flexDirection:'row',gap:8},confidence:{flex:1,minHeight:68,paddingVertical:10,paddingHorizontal:7,borderRadius:15,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.035)',alignItems:'center',justifyContent:'center',gap:5},confidenceActive:{borderColor:'#6677FF',backgroundColor:'rgba(102,119,255,0.16)'},confidenceEmoji:{color:'#AAB4FF',fontSize:15,fontWeight:'900'},confidenceText:{color:theme.colors.text,fontSize:10,fontWeight:'800',textAlign:'center'},
   question:{color:theme.colors.text,fontSize:23,fontWeight:'900',lineHeight:30},choices:{gap:10},choice:{minHeight:58,flexDirection:'row',alignItems:'center',gap:12,padding:12,borderRadius:16,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.045)'},choiceSelected:{borderColor:'#6476FF',backgroundColor:'rgba(100,118,255,0.15)'},choiceCorrect:{borderColor:'#2E9A69',backgroundColor:'rgba(46,154,105,0.14)'},choiceWrong:{borderColor:'#B94B57',backgroundColor:'rgba(185,75,87,0.13)'},pressed:{transform:[{scale:.985}]},choiceLetter:{width:34,height:34,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,0.07)'},choiceLetterText:{color:theme.colors.text,fontSize:11,fontWeight:'900'},choiceText:{flex:1,color:theme.colors.text,fontSize:14,lineHeight:20,fontWeight:'700'},
-  feedback:{padding:16,borderRadius:18,borderWidth:1},feedbackGood:{borderColor:'#2D7655',backgroundColor:'rgba(34,116,79,0.16)'},feedbackBad:{borderColor:'#7A4148',backgroundColor:'rgba(122,65,72,0.16)'},feedbackTitle:{color:theme.colors.text,fontSize:18,fontWeight:'900'},feedbackText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginVertical:8},transfer:{color:theme.colors.text,fontSize:18,fontWeight:'800',lineHeight:27},tip:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:12},labTitle:{color:theme.colors.text,fontSize:23,fontWeight:'900'},labText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:8},criteria:{gap:8,marginTop:14},criterionRow:{flexDirection:'row',alignItems:'flex-start',gap:8},criterionDot:{color:'#70DEA8',fontSize:12,fontWeight:'900',marginTop:1},criterionText:{flex:1,color:theme.colors.textSecondary,fontSize:12,lineHeight:18},flags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:14},backButton:{alignSelf:'center',padding:12,marginTop:14},backText:{color:theme.colors.textMuted,fontSize:12,fontWeight:'800'},
+  feedback:{padding:16,borderRadius:18,borderWidth:1},feedbackGood:{borderColor:'#2D7655',backgroundColor:'rgba(34,116,79,0.16)'},feedbackBad:{borderColor:'#7A4148',backgroundColor:'rgba(122,65,72,0.16)'},feedbackTitle:{color:theme.colors.text,fontSize:18,fontWeight:'900'},feedbackText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginVertical:8},transfer:{color:theme.colors.text,fontSize:18,fontWeight:'800',lineHeight:27},tip:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:12},transferAttempt:{marginTop:16,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},transferAttemptLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},transferInput:{minHeight:118,marginTop:10,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},transferCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},labTitle:{color:theme.colors.text,fontSize:23,fontWeight:'900'},labText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:8},criteria:{gap:8,marginTop:14},criterionRow:{flexDirection:'row',alignItems:'flex-start',gap:8},criterionDot:{color:'#70DEA8',fontSize:12,fontWeight:'900',marginTop:1},criterionText:{flex:1,color:theme.colors.textSecondary,fontSize:12,lineHeight:18},flags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:14},backButton:{alignSelf:'center',padding:12,marginTop:14},backText:{color:theme.colors.textMuted,fontSize:12,fontWeight:'800'},
 });
