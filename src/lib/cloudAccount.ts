@@ -115,6 +115,15 @@ export function saveCloudSession(session: CloudSession | null): void {
   }
 }
 
+function sessionIsStillCurrent(session: CloudSession): boolean {
+  const persisted = loadCloudSession();
+  return Boolean(
+    persisted
+      && persisted.user.id === session.user.id
+      && persisted.refreshToken === session.refreshToken,
+  );
+}
+
 export async function signInWithPassword(email: string, password: string): Promise<CloudSession> {
   const config = cloudConfig();
   if (!config) throw new Error('Supabase n’est pas encore configuré pour ce build.');
@@ -165,11 +174,19 @@ async function performCloudSessionRefresh(session: CloudSession): Promise<CloudS
     body: JSON.stringify({ refresh_token: session.refreshToken }),
   });
   if (!response.ok) {
-    if (shouldDiscardSessionAfterRefreshFailure(response.status)) saveCloudSession(null);
+    // A refresh can finish after the learner has already switched accounts. Never
+    // let a stale request sign the newly active learner out.
+    if (shouldDiscardSessionAfterRefreshFailure(response.status) && sessionIsStillCurrent(session)) {
+      saveCloudSession(null);
+    }
     throw await parseError(response);
   }
   const refreshed = toSession(await response.json());
-  saveCloudSession(refreshed);
+
+  // Supabase refresh tokens rotate, but an old account refresh may resolve after
+  // another account has signed in. Persist only when the same session is still
+  // active so an in-flight request cannot resurrect the previous account.
+  if (sessionIsStillCurrent(session)) saveCloudSession(refreshed);
   return refreshed;
 }
 
