@@ -1,8 +1,13 @@
 import type { LocalState } from './localState';
-import { isCloudConfigured, loadCloudSession, pushCloudState, saveCloudSession } from './cloudAccount';
+import { isCloudConfigured, loadCloudSession, pushCloudState } from './cloudAccount';
+
+type PendingCloudState = {
+  userId: string;
+  state: LocalState;
+};
 
 let pendingPush: ReturnType<typeof setTimeout> | null = null;
-let latestState: LocalState | null = null;
+let latestState: PendingCloudState | null = null;
 let pushInFlight = false;
 let retryDelayMs = 1_500;
 
@@ -32,12 +37,20 @@ async function flushLatestState(): Promise<void> {
   }
 
   const snapshot = latestState;
+
+  // A debounce timer can outlive a sign-out/sign-in. Never send learner A's
+  // queued progress through learner B's Supabase session.
+  if (session.user.id !== snapshot.userId) {
+    latestState = null;
+    retryDelayMs = 1_500;
+    return;
+  }
+
   latestState = null;
   pushInFlight = true;
 
   try {
-    const refreshed = await pushCloudState(session, snapshot);
-    saveCloudSession(refreshed);
+    await pushCloudState(session, snapshot.state);
     retryDelayMs = 1_500;
   } catch {
     // Keep the newest local snapshot queued while offline. If another mutation
@@ -46,6 +59,15 @@ async function flushLatestState(): Promise<void> {
     const delay = retryDelayMs;
     retryDelayMs = Math.min(MAX_RETRY_DELAY_MS, retryDelayMs * 2);
     pushInFlight = false;
+
+    // If the account changed while the request was in flight, do not keep
+    // retrying the previous learner's snapshot under the new session.
+    const current = loadCloudSession();
+    if (!current || current.user.id !== snapshot.userId) {
+      if (latestState?.userId === snapshot.userId) latestState = null;
+      return;
+    }
+
     queueFlush(delay);
     return;
   }
@@ -55,8 +77,10 @@ async function flushLatestState(): Promise<void> {
 }
 
 export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
-  if (!isCloudConfigured() || !loadCloudSession()) return;
-  latestState = state;
+  if (!isCloudConfigured()) return;
+  const session = loadCloudSession();
+  if (!session) return;
+  latestState = { userId: session.user.id, state };
 
   // Debounce rapid local mutations, but never start a second request while one
   // is in flight. The completed request immediately flushes any newer snapshot.
