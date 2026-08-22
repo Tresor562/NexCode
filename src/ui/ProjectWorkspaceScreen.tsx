@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { GuidedProject } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
 import { importFilesFromPhone, importFolderFromPhone } from '../lib/workspaceImport';
+import { restoreWorkspaceDraft } from '../lib/workspaceSafety';
 import { Pill, PrimaryButton } from './components';
 import { theme } from './theme';
 
@@ -17,10 +18,17 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   onSave: (draft: LabDraft) => void;
   onBack: () => void;
 }) {
-  const initial = useMemo(() => stored ?? createProjectDraft(project), [project.id]);
-  const [draft, setDraft] = useState(initial);
+  const initial = useMemo(() => restoreWorkspaceDraft({
+    stored,
+    expectedMissionId: `project:${project.id}`,
+    expectedLanguage: project.tech,
+    fallbackFiles: starterFiles(project),
+  }), [project.id]);
+  const [draft, setDraft] = useState(initial.draft);
   const [panel, setPanel] = useState<Panel>('code');
-  const [consoleText, setConsoleText] = useState('Projet prêt. Écris ton code puis lance-le.');
+  const [consoleText, setConsoleText] = useState(initial.repaired
+    ? 'Workspace restauré en mode sûr. Les fichiers sensibles, invalides ou incompatibles ont été retirés.'
+    : 'Projet prêt. Écris ton code puis lance-le.');
   const [importing, setImporting] = useState(false);
   const files = Object.keys(draft.files);
   const content = draft.files[draft.activeFile] ?? '';
