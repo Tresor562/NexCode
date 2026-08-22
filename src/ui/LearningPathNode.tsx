@@ -90,6 +90,11 @@ export function LearningPathNode({
   }, [focusPulse, isCurrent, reduceMotion, shimmer]);
 
   const animate = (toValue: number) => {
+    if (reduceMotion) {
+      press.stopAnimation();
+      press.setValue(toValue);
+      return;
+    }
     Animated.spring(press, {
       toValue,
       useNativeDriver: true,
