@@ -5,7 +5,7 @@ import { WebView } from 'react-native-webview';
 import { Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
 import { importFilesFromPhone, importFolderFromPhone } from '../lib/workspaceImport';
-import { openLabWorkspace, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
+import { invalidateLabValidation, openLabWorkspace, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
 import { runBehavioralSuite, secretSafetyIssues } from '../learning/labBehavioralTests';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
 import { theme } from './theme';
@@ -71,7 +71,8 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
       }
       const before = new Set(Object.keys(draft.files));
       const firstNew = Object.keys(result.files).find((name) => !before.has(name));
-      save({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() });
+      save(invalidateLabValidation({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() }));
+      setValidated(false);
       setFeedback(`${result.imported} fichier(s) importé(s)${result.renamed ? ` • ${result.renamed} renommé(s) pour éviter un écrasement` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     } catch {
@@ -92,7 +93,8 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
       }
       const before = new Set(Object.keys(draft.files));
       const firstNew = Object.keys(result.files).find((name) => !before.has(name));
-      save({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() });
+      save(invalidateLabValidation({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() }));
+      setValidated(false);
       setFeedback(`${result.imported} fichier(s) du dossier importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     } catch {
