@@ -4,6 +4,7 @@ import NexCodeApp from './NexCodeApp';
 import { LaunchScreen } from './LaunchScreen';
 import { AuthScreen } from './AuthScreen';
 import { loadLocalState, saveLocalState } from '../lib/localState';
+import { bindLocalStateOwner, scopeLocalStateForUser } from '../lib/accountScope';
 import {
   CloudSession,
   isCloudConfigured,
@@ -27,15 +28,24 @@ export default function RootApp() {
     if (!launched || !cloudEnabled || !session) return;
     let active = true;
     setHydrating(true);
-    void pullCloudState(session, loadLocalState())
+    const scopedLocal = scopeLocalStateForUser(loadLocalState(), session.user.id);
+    void pullCloudState(session, scopedLocal)
       .then(({ session: refreshed, state }) => {
         if (!active) return;
         saveCloudSession(refreshed);
+        bindLocalStateOwner(refreshed.user.id);
         saveLocalState(state);
         setSession(refreshed);
       })
       .catch(() => {
         // Offline-first: an existing account can continue from the local snapshot.
+        // If this is a different account, never expose the previous learner's
+        // state while cloud hydration is unavailable.
+        if (!active) return;
+        if (scopedLocal !== loadLocalState()) {
+          bindLocalStateOwner(session.user.id);
+          saveLocalState(scopedLocal);
+        }
       })
       .finally(() => {
         if (active) setHydrating(false);
