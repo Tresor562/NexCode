@@ -80,19 +80,31 @@ export function openLabWorkspace(lesson: Lesson, stored?: LabDraft): LabWorkspac
   };
 }
 
-export function updateLabFile(draft: LabDraft, filename: string, content: string): LabDraft {
+export function invalidateLabValidation(draft: LabDraft): LabDraft {
+  if (!draft.lastValidatedAt && !(draft.passedCriteria?.length)) return draft;
   return {
+    ...draft,
+    lastValidatedAt: undefined,
+    passedCriteria: [],
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function updateLabFile(draft: LabDraft, filename: string, content: string): LabDraft {
+  const changed = draft.files[filename] !== content;
+  const next = {
     ...draft,
     files: { ...draft.files, [filename]: content },
     activeFile: filename,
     updatedAt: new Date().toISOString(),
   };
+  return changed ? invalidateLabValidation(next) : next;
 }
 
 export function addLabFile(draft: LabDraft, filename: string) {
   const safe = filename.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
   if (!safe || draft.files[safe] !== undefined) return draft;
-  return { ...draft, files: { ...draft.files, [safe]: '' }, activeFile: safe, updatedAt: new Date().toISOString() };
+  return invalidateLabValidation({ ...draft, files: { ...draft.files, [safe]: '' }, activeFile: safe, updatedAt: new Date().toISOString() });
 }
 
 export function removeLabFile(draft: LabDraft, filename: string) {
@@ -101,7 +113,7 @@ export function removeLabFile(draft: LabDraft, filename: string) {
   const files = { ...draft.files };
   delete files[filename];
   const activeFile = draft.activeFile === filename ? Object.keys(files)[0]! : draft.activeFile;
-  return { ...draft, files, activeFile, updatedAt: new Date().toISOString() };
+  return invalidateLabValidation({ ...draft, files, activeFile, updatedAt: new Date().toISOString() });
 }
 
 function containsLikelySecret(files: Record<string, string>) {
