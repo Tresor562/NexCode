@@ -96,6 +96,25 @@ function nextReviewDays(score: number, consecutiveCorrect: number, correct: bool
   return 1;
 }
 
+export function masteryConfidence(attempts: number, correctAttempts: number) {
+  if (!Number.isFinite(attempts) || !Number.isFinite(correctAttempts) || attempts <= 0 || correctAttempts <= 0) return 0;
+  const boundedAttempts = Math.max(0, Math.floor(attempts));
+  const boundedCorrect = Math.max(0, Math.min(boundedAttempts, Math.floor(correctAttempts)));
+  if (boundedAttempts === 0 || boundedCorrect === 0) return 0;
+
+  // Confidence should represent repeated evidence, not a single lucky answer.
+  // The previous formula produced 73% confidence after one correct attempt,
+  // which was enough to satisfy the mastery confidence gate immediately.
+  // Evidence depth now ramps over the first four attempts and observed
+  // accuracy scales the whole confidence budget. A learner therefore needs
+  // several consistent attempts before confidence can cross the 70% gate.
+  const accuracy = boundedCorrect / boundedAttempts;
+  const evidenceDepth = Math.min(1, boundedAttempts / 4);
+  const depthBudget = 70 * evidenceDepth;
+  const repetitionBudget = Math.min(boundedAttempts, 10) * 3;
+  return Math.max(0, Math.min(100, Math.round(accuracy * (depthBudget + repetitionBudget))));
+}
+
 export function recordSkillAttempt(
   map: MasteryMap,
   lesson: Lesson,
@@ -121,7 +140,7 @@ export function recordSkillAttempt(
     const consecutiveCorrect = correct ? previous.consecutiveCorrect + 1 : 0;
     const delta = qualityWeight(lesson, correct);
     const score = Math.max(0, Math.min(100, previous.score + delta));
-    const confidence = Math.max(0, Math.min(100, Math.round((correctAttempts / attempts) * 70 + Math.min(attempts, 10) * 3)));
+    const confidence = masteryConfidence(attempts, correctAttempts);
     const reviewDays = nextReviewDays(score, consecutiveCorrect, correct);
     const nextReview = new Date(now);
     nextReview.setDate(nextReview.getDate() + reviewDays);
