@@ -100,10 +100,15 @@ function activitySort(a: PlannedActivity, b: PlannedActivity) {
   return courseDelta !== 0 ? courseDelta : a.lessonId.localeCompare(b.lessonId);
 }
 
+function isRecoveryMode(mode: PracticeMode) {
+  return mode === 'repair' || mode === 'review';
+}
+
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
   const usedSkills = new Set<string>();
   const usedCourses = new Set<string>();
+  const recoveredSkills = new Set<string>();
   let minutes = 0;
 
   const sorted = [...pool].sort(activitySort);
@@ -112,13 +117,27 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
 
   for (const candidate of sorted) {
     if (minutes + candidate.estimatedMinutes > maxMinutes) continue;
+
+    // A single recurring misconception can generate several eligible completed
+    // lessons. One session should repair/review the skill once, then spend the
+    // remaining learner time on another weak skill or on transfer. This avoids
+    // repetitive "three versions of the same repair" sessions while keeping the
+    // highest-priority activity for that skill.
+    const recoveryMode = isRecoveryMode(candidate.mode);
+    const bringsNewRecoverySkill = candidate.skillIds.some((skill) => !recoveredSkills.has(skill));
+    if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
+
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
     const bringsNewCourse = !usedCourses.has(candidate.courseId);
     const needsDiversity = selected.length >= 2;
     if (needsDiversity && !bringsNewSkill && !bringsNewCourse && candidate.mode !== 'repair') continue;
+
     selected.push(candidate);
     minutes += candidate.estimatedMinutes;
-    candidate.skillIds.forEach((skill) => usedSkills.add(skill));
+    candidate.skillIds.forEach((skill) => {
+      usedSkills.add(skill);
+      if (recoveryMode) recoveredSkills.add(skill);
+    });
     usedCourses.add(candidate.courseId);
     if (minutes >= budgetMinutes) break;
   }
