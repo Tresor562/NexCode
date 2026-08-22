@@ -81,6 +81,7 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
       - name: Build Android with EAS
+        if: github.event_name == 'workflow_dispatch'
         run: npx eas-cli build --platform android --profile "$BUILD_PROFILE" --non-interactive --wait
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
