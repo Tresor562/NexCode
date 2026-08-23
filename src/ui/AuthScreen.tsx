@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TextInputProps,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -24,6 +25,10 @@ type FieldProps = {
   secureTextEntry?: boolean;
   keyboardType?: 'default' | 'email-address';
   autoCapitalize?: 'none' | 'words';
+  autoComplete?: TextInputProps['autoComplete'];
+  textContentType?: TextInputProps['textContentType'];
+  returnKeyType?: TextInputProps['returnKeyType'];
+  onSubmitEditing?: TextInputProps['onSubmitEditing'];
   rightAction?: { label: string; onPress: () => void };
 };
 
@@ -35,6 +40,10 @@ function AuthField({
   secureTextEntry,
   keyboardType = 'default',
   autoCapitalize = 'none',
+  autoComplete,
+  textContentType,
+  returnKeyType,
+  onSubmitEditing,
   rightAction,
 }: FieldProps) {
   const [focused, setFocused] = useState(false);
@@ -52,6 +61,10 @@ function AuthField({
           secureTextEntry={secureTextEntry}
           keyboardType={keyboardType}
           autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
+          textContentType={textContentType}
+          returnKeyType={returnKeyType}
+          onSubmitEditing={onSubmitEditing}
           autoCorrect={false}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
@@ -172,6 +185,9 @@ export function AuthScreen({
               onChangeText={setDisplayName}
               placeholder="Prénom ou pseudo"
               autoCapitalize="words"
+              autoComplete="name"
+              textContentType="name"
+              returnKeyType="next"
             />
           ) : null}
 
@@ -181,6 +197,9 @@ export function AuthScreen({
             onChangeText={setEmail}
             placeholder="toi@exemple.com"
             keyboardType="email-address"
+            autoComplete="email"
+            textContentType="emailAddress"
+            returnKeyType="next"
           />
 
           <AuthField
@@ -189,6 +208,10 @@ export function AuthScreen({
             onChangeText={setPassword}
             placeholder="6 caractères minimum"
             secureTextEntry={!showPassword}
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+            textContentType={mode === 'signup' ? 'newPassword' : 'password'}
+            returnKeyType="go"
+            onSubmitEditing={submit}
             rightAction={{
               label: showPassword ? 'Masquer' : 'Afficher',
               onPress: () => {
