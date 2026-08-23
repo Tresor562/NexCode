@@ -21,6 +21,7 @@ export type PracticeSession = {
   skillCoverage: string[];
   courseCoverage: string[];
   blockedByRecovery?: boolean;
+  deferredRecoveryCount?: number;
 };
 
 function lessonPrerequisitesReady(skills: string[], mastery: MasteryMap, graphById: Map<string, SkillNode>, now: Date) {
@@ -178,10 +179,26 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (fallback) {
       selected.push(fallback);
       minutes = fallback.estimatedMinutes;
-      fallback.skillIds.forEach((skill) => usedSkills.add(skill));
+      fallback.skillIds.forEach((skill) => {
+        usedSkills.add(skill);
+        if (isRecoveryMode(fallback.mode)) recoveredSkills.add(skill);
+      });
       usedCourses.add(fallback.courseId);
     }
   }
+
+  const selectedRecoveryKeys = new Set(
+    selected
+      .filter((item) => isRecoveryMode(item.mode))
+      .map((item) => `${item.courseId}:${item.lessonId}`),
+  );
+  const deferredRecoverySkills = [...recoverySkills].filter((skill) => !recoveredSkills.has(skill));
+  const deferredUnscopedRecovery = sorted.filter(
+    (item) => isRecoveryMode(item.mode)
+      && item.skillIds.length === 0
+      && !selectedRecoveryKeys.has(`${item.courseId}:${item.lessonId}`),
+  ).length;
+  const deferredRecoveryCount = deferredRecoverySkills.length + deferredUnscopedRecovery;
 
   return {
     budgetMinutes,
@@ -190,6 +207,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     skillCoverage: [...usedSkills],
     courseCoverage: [...usedCourses],
     blockedByRecovery: hasPendingRecovery && selected.length === 0,
+    deferredRecoveryCount,
   };
 }
 
@@ -203,8 +221,12 @@ export function recommendedSessionMessage(session: PracticeSession) {
   const repair = session.activities.filter((item) => item.mode === 'repair').length;
   const review = session.activities.filter((item) => item.mode === 'review').length;
   const lab = session.activities.filter((item) => item.mode === 'lab').length;
-  if (repair > 0) return `Commence par ${repair} réparation${repair > 1 ? 's' : ''} ciblée${repair > 1 ? 's' : ''}, puis consolide.`;
-  if (review > 0) return `${review} révision${review > 1 ? 's' : ''} espacée${review > 1 ? 's' : ''} avant les nouvelles notions.`;
-  if (lab > 0) return 'Cette session inclut du Lab pour transformer la compréhension en compétence pratique.';
-  return 'Session équilibrée entre nouvelles notions et consolidation.';
+  const deferred = session.deferredRecoveryCount ?? 0;
+  const deferredMessage = deferred > 0
+    ? ` Il restera ${deferred} récupération${deferred > 1 ? 's' : ''} à traiter avant d'ajouter du nouveau contenu.`
+    : '';
+  if (repair > 0) return `Commence par ${repair} réparation${repair > 1 ? 's' : ''} ciblée${repair > 1 ? 's' : ''}, puis consolide.${deferredMessage}`;
+  if (review > 0) return `${review} révision${review > 1 ? 's' : ''} espacée${review > 1 ? 's' : ''} avant les nouvelles notions.${deferredMessage}`;
+  if (lab > 0) return `Cette session inclut du Lab pour transformer la compréhension en compétence pratique.${deferredMessage}`;
+  return `Session équilibrée entre nouvelles notions et consolidation.${deferredMessage}`;
 }
