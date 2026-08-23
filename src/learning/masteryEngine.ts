@@ -58,6 +58,15 @@ function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   return !Number.isFinite(timestamp) || timestamp <= now.getTime();
 }
 
+function independentEvidenceContextCount(state: SkillMastery) {
+  const contexts = new Set<string>();
+  for (const evidence of state.evidence) {
+    if (!evidence.correct || !['lab', 'checkpoint', 'boss', 'project'].includes(evidence.activityKind)) continue;
+    contexts.add(`${evidence.activityKind}:${evidence.lessonId}`);
+  }
+  return contexts.size;
+}
+
 function snapshotIsMastered(snapshot: MasterySnapshot) {
   return snapshot.effectiveScore >= 85 && snapshot.confidence >= 70 && snapshot.independentEvidence;
 }
@@ -80,7 +89,7 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
   const effectiveScore = Math.round(state.score * retentionFactor(state, now));
   const evidenceKinds = [...new Set(state.evidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
   const recurringErrors = recurringErrorTags(state);
-  const independentEvidence = evidenceKinds.some((kind) => ['lab', 'checkpoint', 'boss', 'project'].includes(kind));
+  const independentEvidence = independentEvidenceContextCount(state) >= 2;
   const due = reviewIsDue(state.nextReviewAt, now);
   return {
     skillId,
