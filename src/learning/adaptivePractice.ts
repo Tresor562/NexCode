@@ -144,8 +144,10 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     const bringsNewRecoverySkill = candidate.skillIds.some((skill) => !recoveredSkills.has(skill));
     if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
 
-    const unresolvedRecovery = [...recoverySkills].some((skill) => !recoveredSkills.has(skill));
-    if (candidate.mode === 'learn' && unresolvedRecovery) continue;
+    const unresolvedRecoverySkills = [...recoverySkills].filter((skill) => !recoveredSkills.has(skill));
+    const unresolvedRecovery = unresolvedRecoverySkills.length > 0;
+    const supportsUnresolvedRecovery = candidate.skillIds.some((skill) => unresolvedRecoverySkills.includes(skill));
+    if (unresolvedRecovery && !recoveryMode && !supportsUnresolvedRecovery) continue;
     if (candidate.mode === 'learn' && newActivities >= maxNewActivities) continue;
 
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
@@ -158,7 +160,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (candidate.mode === 'learn') newActivities += 1;
     candidate.skillIds.forEach((skill) => {
       usedSkills.add(skill);
-      if (recoveryMode) recoveredSkills.add(skill);
+      if (recoveryMode || supportsUnresolvedRecovery) recoveredSkills.add(skill);
     });
     usedCourses.add(candidate.courseId);
     if (minutes >= budgetMinutes) break;
