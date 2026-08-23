@@ -181,7 +181,12 @@ export function missingPrerequisites(node: SkillNode, mastery: MasteryMap) {
 export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
   const state = mastery[node.id];
   if (!state || state.score < 55) return true;
-  return !state.evidence.some((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind));
+  const contexts = new Set(
+    state.evidence
+      .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind))
+      .map((item) => `${item.activityKind}:${item.lessonId}`),
+  );
+  return contexts.size < 2;
 }
 
 export function courseMastery(course: Course, mastery: MasteryMap): number {
