@@ -56,11 +56,30 @@ export function labSessionCanReturn(session: LabSession) {
   return validateLabDraft(session.workspace.mission, session.workspace.draft).passed;
 }
 
+function escapeInlineClosingTag(source: string, tagName: 'script' | 'style') {
+  return source.replace(new RegExp(`</${tagName}`, 'gi'), `<\\/${tagName}`);
+}
+
+function injectBeforeClosingTag(document: string, closingTag: '</head>' | '</body>', fragment: string) {
+  const index = document.toLowerCase().lastIndexOf(closingTag);
+  if (index < 0) return `${document}\n${fragment}`;
+  return `${document.slice(0, index)}${fragment}\n${document.slice(index)}`;
+}
+
 export function webPreviewDocument(draft: LabDraft) {
-  const html = draft.files['index.html'] ?? '<main></main>';
+  const html = draft.files['index.html']?.trim() || '<main></main>';
   const css = draft.files['styles.css'] ?? '';
   const js = draft.files['script.js'] ?? '';
-  return `${html}\n<style>${css}</style>\n<script>${js}<\/script>`;
+  const styleTag = `<style>${escapeInlineClosingTag(css, 'style')}</style>`;
+  const scriptTag = `<script>${escapeInlineClosingTag(js, 'script')}<\/script>`;
+
+  const withStyles = html.toLowerCase().includes('</head>')
+    ? injectBeforeClosingTag(html, '</head>', styleTag)
+    : html.toLowerCase().includes('</body>')
+      ? injectBeforeClosingTag(html, '</body>', styleTag)
+      : `${html}\n${styleTag}`;
+
+  return injectBeforeClosingTag(withStyles, '</body>', scriptTag);
 }
 
 export function labConsoleLines(feedback: string, passed: boolean) {
