@@ -129,7 +129,13 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
 
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
     const bringsNewCourse = !usedCourses.has(candidate.courseId);
-    const needsDiversity = selected.length >= 2;
+
+    // Diversity starts with activity #2, not activity #3. After the anchor task,
+    // each additional non-repair item must add either a new skill or a new
+    // course. This prevents short sessions from spending their entire budget on
+    // two near-duplicate lessons from the same concept while still allowing an
+    // urgent repair to break the rule when necessary.
+    const needsDiversity = selected.length >= 1;
     if (needsDiversity && !bringsNewSkill && !bringsNewCourse && candidate.mode !== 'repair') continue;
 
     selected.push(candidate);
