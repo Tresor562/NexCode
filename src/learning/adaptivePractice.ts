@@ -106,11 +106,6 @@ function isRecoveryMode(mode: PracticeMode) {
 }
 
 function acceptableFallbackMinutes(budgetMinutes: PracticeSession['budgetMinutes']) {
-  // If the normal planner cannot fit anything, a fallback may exceed the learner's
-  // chosen budget slightly, but never by an arbitrary amount. A 5-minute session
-  // must not silently become a 20–30 minute task just because it is the smallest
-  // item in the pool. Keep the fallback within 50% of the chosen budget, with a
-  // small absolute allowance for very short sessions.
   return budgetMinutes + Math.max(3, Math.round(budgetMinutes * 0.5));
 }
 
@@ -122,37 +117,29 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   let minutes = 0;
 
   const sorted = [...pool].sort(activitySort);
-  const hasPendingRecovery = sorted.some((item) => isRecoveryMode(item.mode));
+  const recoverySkills = new Set(
+    sorted
+      .filter((item) => isRecoveryMode(item.mode))
+      .flatMap((item) => item.skillIds),
+  );
+  const hasPendingRecovery = recoverySkills.size > 0 || sorted.some((item) => isRecoveryMode(item.mode));
   const overrunAllowance = Math.max(2, Math.round(budgetMinutes * 0.15));
   const maxMinutes = budgetMinutes + overrunAllowance;
 
   for (const candidate of sorted) {
     if (minutes + candidate.estimatedMinutes > maxMinutes) continue;
 
-    // If a misconception repair or spaced review is pending, the learner should
-    // not be routed into brand-new material merely because the recovery item is a
-    // little longer than the chosen session. Require the first selected activity
-    // to address recovery; once that anchor exists, the remaining budget can be
-    // used for transfer or new learning as usual.
     if (selected.length === 0 && hasPendingRecovery && !isRecoveryMode(candidate.mode)) continue;
 
-    // A single recurring misconception can generate several eligible completed
-    // lessons. One session should repair/review the skill once, then spend the
-    // remaining learner time on another weak skill or on transfer. This avoids
-    // repetitive "three versions of the same repair" sessions while keeping the
-    // highest-priority activity for that skill.
     const recoveryMode = isRecoveryMode(candidate.mode);
     const bringsNewRecoverySkill = candidate.skillIds.some((skill) => !recoveredSkills.has(skill));
     if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
 
+    const unresolvedRecovery = [...recoverySkills].some((skill) => !recoveredSkills.has(skill));
+    if (candidate.mode === 'learn' && unresolvedRecovery) continue;
+
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
     const bringsNewCourse = !usedCourses.has(candidate.courseId);
-
-    // Diversity starts with activity #2, not activity #3. After the anchor task,
-    // each additional non-repair item must add either a new skill or a new
-    // course. This prevents short sessions from spending their entire budget on
-    // two near-duplicate lessons from the same concept while still allowing an
-    // urgent repair to break the rule when necessary.
     const needsDiversity = selected.length >= 1;
     if (needsDiversity && !bringsNewSkill && !bringsNewCourse && candidate.mode !== 'repair') continue;
 
