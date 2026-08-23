@@ -26,6 +26,7 @@ export function LearningPathNode({
   const press = useRef(new Animated.Value(0)).current;
   const focusPulse = useRef(new Animated.Value(0)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
+  const completionPop = useRef(new Animated.Value(state === 'done' ? 0.88 : 1)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
@@ -89,6 +90,22 @@ export function LearningPathNode({
     };
   }, [focusPulse, isCurrent, reduceMotion, shimmer]);
 
+  useEffect(() => {
+    completionPop.stopAnimation();
+    if (state !== 'done' || reduceMotion) {
+      completionPop.setValue(1);
+      return;
+    }
+
+    completionPop.setValue(0.88);
+    Animated.spring(completionPop, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 8,
+    }).start();
+  }, [completionPop, reduceMotion, state]);
+
   const animate = (toValue: number) => {
     if (reduceMotion) {
       press.stopAnimation();
@@ -104,10 +121,23 @@ export function LearningPathNode({
   };
 
   const handlePress = () => {
-    Haptics.selectionAsync().catch(() => undefined);
+    const feedback = isCurrent
+      ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+      : state === 'done'
+        ? Haptics.selectionAsync()
+        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    feedback.catch(() => undefined);
     onPress();
   };
 
+  const stateLabel = state === 'done'
+    ? 'terminée'
+    : isCurrent
+      ? 'prochaine étape recommandée'
+      : state === 'available'
+        ? 'disponible'
+        : 'verrouillée';
+  const accessibilityLabel = [title, stateLabel, !disabled ? meta : undefined].filter(Boolean).join(', ');
   const accessibilityHint = disabled
     ? 'Termine les étapes précédentes pour débloquer cette activité.'
     : isCurrent
@@ -139,10 +169,11 @@ export function LearningPathNode({
         <Animated.View style={{ transform: [{ translateY }, { scale: nodeScale }] }}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={title}
+            accessibilityLabel={accessibilityLabel}
             accessibilityHint={accessibilityHint}
             accessibilityState={{ disabled, selected: isCurrent }}
             disabled={disabled}
+            hitSlop={8}
             onPress={handlePress}
             onPressIn={() => animate(1)}
             onPressOut={() => animate(0)}
@@ -160,9 +191,17 @@ export function LearningPathNode({
                 style={[styles.shimmer, { transform: [{ translateX: shimmerX }, { rotate: '18deg' }] }]}
               />
             ) : null}
-            <View style={[styles.iconWell, isCurrent && styles.iconWellCurrent, state === 'done' && styles.iconWellDone, disabled && styles.iconWellLocked]}>
+            <Animated.View
+              style={[
+                styles.iconWell,
+                isCurrent && styles.iconWellCurrent,
+                state === 'done' && styles.iconWellDone,
+                disabled && styles.iconWellLocked,
+                state === 'done' ? { transform: [{ scale: completionPop }] } : undefined,
+              ]}
+            >
               <Text style={[styles.icon, state === 'done' && styles.iconDone, disabled && styles.iconLocked]}>{state === 'done' ? '✓' : icon}</Text>
-            </View>
+            </Animated.View>
             {isCurrent ? <View style={styles.currentDot} /> : null}
           </Pressable>
         </Animated.View>
