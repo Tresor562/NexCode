@@ -34,20 +34,42 @@ export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[])
   });
 }
 
+function skillReadinessScore(skillId: string, mastery: MasteryMap) {
+  const state = mastery[skillId];
+  if (!state) return 0;
+  const score = Number.isFinite(state.score) ? Math.max(0, Math.min(100, state.score)) : 0;
+  const confidence = Number.isFinite(state.confidence) ? Math.max(0, Math.min(100, state.confidence)) : 0;
+
+  // Projects are a transfer activity: the learner does not need prior project
+  // evidence to start one, but a high raw score from too little evidence should
+  // not make the prerequisite look consolidated. Blend demonstrated score with
+  // confidence so readiness reflects both competence and evidence depth.
+  return Math.round((score * 0.75) + (confidence * 0.25));
+}
+
 export function projectReadinessAgainstGraph(project: GuidedProject, graph: SkillNode[], mastery: MasteryMap, gate = 55) {
   const resolved = resolveProjectSkills(project, graph);
   const skillIds = [...new Set(resolved.flatMap((item) => item.skillIds))];
   const unresolved = resolved.filter((item) => item.skillIds.length === 0).map((item) => item.requested);
   const missing = skillIds.filter((id) => !mastery[id]);
   const weak = skillIds.filter((id) => mastery[id] && (mastery[id]?.score ?? 0) < gate);
-  const score = skillIds.length ? Math.round(skillIds.reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0) / skillIds.length) : 0;
+  const confidenceGate = Math.min(70, Math.max(40, gate));
+  const uncertain = skillIds.filter((id) => {
+    const state = mastery[id];
+    return Boolean(state) && (state?.score ?? 0) >= gate && (state?.confidence ?? 0) < confidenceGate;
+  });
+  const score = skillIds.length
+    ? Math.round(skillIds.reduce((sum, id) => sum + skillReadinessScore(id, mastery), 0) / skillIds.length)
+    : 0;
+
   return {
-    ready: unresolved.length === 0 && missing.length === 0 && weak.length === 0,
+    ready: unresolved.length === 0 && missing.length === 0 && weak.length === 0 && uncertain.length === 0,
     score,
     skillIds,
     unresolvedSkillLabels: unresolved,
     missingSkillIds: missing,
     weakSkillIds: weak,
+    uncertainSkillIds: uncertain,
   };
 }
 
