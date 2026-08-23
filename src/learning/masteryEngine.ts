@@ -121,10 +121,22 @@ export function skillIsMastered(skillId: string, mastery: MasteryMap, now = new 
 
 export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, required = 70, now = new Date()): GateResult {
   const snapshots = skillIds.map((id) => masterySnapshot(id, mastery, now));
+  const confidenceRequired = Math.min(70, required);
   const missingSkills = snapshots.filter((item) => item.rawScore === 0).map((item) => item.skillId);
-  const weakSkills = snapshots.filter((item) => item.rawScore > 0 && item.effectiveScore < required).map((item) => item.skillId);
+  const weakSkills = snapshots
+    .filter(
+      (item) =>
+        item.rawScore > 0 &&
+        (item.effectiveScore < required || item.confidence < confidenceRequired),
+    )
+    .map((item) => item.skillId);
   const missingIndependentEvidence = snapshots
-    .filter((item) => item.effectiveScore >= required && !item.independentEvidence)
+    .filter(
+      (item) =>
+        item.effectiveScore >= required &&
+        item.confidence >= confidenceRequired &&
+        !item.independentEvidence,
+    )
     .map((item) => item.skillId);
   const score = snapshots.length
     ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length)
