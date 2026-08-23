@@ -5,6 +5,24 @@ import { shadows, theme } from './theme';
 type CardTone = 'default' | 'primary' | 'success';
 type PillTone = 'neutral' | 'success' | 'primary' | 'warning';
 
+function useReduceMotionPreference() {
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => { if (active) setReduceMotion(enabled); })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
+  return reduceMotion;
+}
+
 export function Card({ children, style, tone = 'default' }: { children: React.ReactNode; style?: ViewStyle | ViewStyle[]; tone?: CardTone }) {
   return <View style={[styles.card, tone === 'primary' && styles.cardPrimary, tone === 'success' && styles.cardSuccess, style]}>{children}</View>;
 }
@@ -43,19 +61,7 @@ function TactileButton({
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const depth = useRef(new Animated.Value(0)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => { if (active) setReduceMotion(enabled); })
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
+  const reduceMotion = useReduceMotionPreference();
 
   const animate = (pressed: boolean) => {
     const nextScale = pressed ? theme.motion.pressedScale : 1;
@@ -122,13 +128,19 @@ export function SecondaryButton({ label, onPress, icon }: { label: string; onPre
 }
 
 export function IconButton({ icon, label, onPress, active = false }: { icon: string; label: string; onPress: () => void; active?: boolean }) {
+  const reduceMotion = useReduceMotionPreference();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      style={({ pressed }) => [styles.iconButton, active && styles.iconButtonActive, pressed && styles.iconPressed]}
+      hitSlop={4}
+      style={({ pressed }) => [
+        styles.iconButton,
+        active && styles.iconButtonActive,
+        pressed && (reduceMotion ? styles.iconPressedReducedMotion : styles.iconPressed),
+      ]}
     >
       <Text style={[styles.iconButtonText, active && styles.iconButtonTextActive]}>{icon}</Text>
     </Pressable>
@@ -235,6 +247,7 @@ const styles = StyleSheet.create({
   },
   iconButtonActive: { backgroundColor: theme.colors.primaryGlass, borderColor: 'rgba(135,149,255,.35)' },
   iconPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
+  iconPressedReducedMotion: { opacity: 0.72 },
   iconButtonText: { color: theme.colors.textSecondary, fontSize: 17, fontWeight: theme.weight.black },
   iconButtonTextActive: { color: '#B7C0FF' },
   pill: {
