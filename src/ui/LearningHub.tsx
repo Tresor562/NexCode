@@ -17,6 +17,9 @@ export type LearningHubProps = {
   onToggleChapterOffline: (courseId: string, chapterId: string, kind: OfflinePackKind) => void;
 };
 
+const SESSION_OPTIONS = [5, 10, 20] as const;
+type SessionMinutes = typeof SESSION_OPTIONS[number];
+
 const modeLabels: Record<PracticeMode, string> = {
   learn: 'Nouvelle notion',
   repair: 'Réparation ciblée',
@@ -100,11 +103,41 @@ function DailyMomentumCard({ state }: { state: LocalState }) {
   );
 }
 
+function SessionLengthPicker({ value, onChange }: { value: SessionMinutes; onChange: (minutes: SessionMinutes) => void }) {
+  return (
+    <View style={styles.sessionLengthCard} accessibilityRole="radiogroup" accessibilityLabel="Durée de la session recommandée">
+      <View style={styles.flex}>
+        <Text style={styles.sessionLengthKicker}>TEMPS DISPONIBLE</Text>
+        <Text style={styles.sessionLengthHint}>Nex adapte la séance à ton temps réel.</Text>
+      </View>
+      <View style={styles.sessionLengthOptions}>
+        {SESSION_OPTIONS.map((minutes) => {
+          const selected = minutes === value;
+          return (
+            <Pressable
+              key={minutes}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={`${minutes} minutes`}
+              onPress={() => onChange(minutes)}
+              hitSlop={6}
+              style={({ pressed }) => [styles.sessionLengthOption, selected && styles.sessionLengthOptionSelected, pressed && styles.sessionLengthOptionPressed]}
+            >
+              <Text style={[styles.sessionLengthOptionText, selected && styles.sessionLengthOptionTextSelected]}>{minutes} min</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(state.recentCourseId ?? null);
+  const [sessionMinutes, setSessionMinutes] = useState<SessionMinutes>(10);
   const graph = useMemo(() => buildSkillGraph(courses), [courses]);
   const pool = useMemo(() => buildAdaptivePool(courses, graph, state.mastery, state.completedLessons), [courses, graph, state.mastery, state.completedLessons]);
-  const session = useMemo(() => planPracticeSession(pool, 10), [pool]);
+  const session = useMemo(() => planPracticeSession(pool, sessionMinutes), [pool, sessionMinutes]);
   const selected = courses.find((course) => course.id === selectedCourseId) ?? null;
 
   if (selected) {
@@ -141,6 +174,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
       </View>
 
       <DailyMomentumCard state={state} />
+      <SessionLengthPicker value={sessionMinutes} onChange={setSessionMinutes} />
 
       {recommendedCourse && recommendedLesson && recommended ? (
         <Card tone="primary" style={styles.recommended}>
@@ -149,7 +183,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
               <Pill label="Prochaine étape" tone="primary" />
               <Pill label={modeLabels[recommended.mode]} tone={modeTone(recommended.mode)} />
             </View>
-            <Text style={styles.mini}>{session.estimatedMinutes || 10} min</Text>
+            <Text style={styles.mini}>{session.estimatedMinutes || sessionMinutes} min</Text>
           </View>
           <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
           <Text style={styles.meta}>{recommendedCourse.title} • +12 XP</Text>
@@ -307,6 +341,15 @@ const styles = StyleSheet.create({
   goalRewardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
   goalRewardText: { color: '#93F1C8', fontSize: 10.5, fontWeight: '800' },
   momentumHint: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 11 },
+  sessionLengthCard: { minHeight: 74, marginTop: 10, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,.07)', backgroundColor: 'rgba(255,255,255,.028)' },
+  sessionLengthKicker: { color: '#98A5FF', fontSize: 8, fontWeight: '900', letterSpacing: 1.05 },
+  sessionLengthHint: { color: theme.colors.textMuted, fontSize: 9.5, lineHeight: 14, marginTop: 3 },
+  sessionLengthOptions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sessionLengthOption: { minWidth: 50, minHeight: 42, paddingHorizontal: 9, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,.08)', backgroundColor: 'rgba(255,255,255,.035)' },
+  sessionLengthOptionSelected: { borderColor: 'rgba(152,165,255,.72)', backgroundColor: 'rgba(109,124,255,.2)' },
+  sessionLengthOptionPressed: { opacity: .78 },
+  sessionLengthOptionText: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '900' },
+  sessionLengthOptionTextSelected: { color: '#D6DBFF' },
   recommended: { marginTop: 10 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   recommendationPills: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
