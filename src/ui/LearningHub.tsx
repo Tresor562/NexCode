@@ -155,6 +155,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
   const recommendedCourse = recommended ? courses.find((course) => course.id === recommended.courseId) : undefined;
   const recommendedLesson = recommendedCourse?.starterLessons.find((lesson) => lesson.id === recommended?.lessonId);
   const sessionMessage = recommendedSessionMessage(session);
+  const recentCourse = courses.find((course) => course.id === state.recentCourseId) ?? courses[0];
 
   return (
     <View>
@@ -210,7 +211,22 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
           </View>
           <PrimaryButton icon="▶" label={recommended.mode === 'repair' ? 'Réparer cette notion' : recommended.mode === 'review' ? 'Faire la révision' : 'Continuer'} onPress={() => onOpenLesson(recommendedCourse, recommendedLesson)} />
         </Card>
-      ) : null}
+      ) : (
+        <Card style={styles.emptySessionCard}>
+          <View style={styles.rowBetween}>
+            <Pill label="Séance à ajuster" tone="warning" />
+            <Text style={styles.mini}>{sessionMinutes} min</Text>
+          </View>
+          <Text style={styles.emptySessionTitle}>Ton créneau est trop court pour la prochaine étape.</Text>
+          <Text style={styles.emptySessionText}>{sessionMessage}</Text>
+          <Text style={styles.emptySessionHint}>Nex préfère te faire choisir un créneau réaliste plutôt que de cacher une réparation importante ou de te pousser une nouvelle notion trop tôt.</Text>
+          <PrimaryButton
+            icon="↗"
+            label={sessionMinutes < 20 ? 'Passer à 20 min' : 'Voir le parcours'}
+            onPress={() => sessionMinutes < 20 ? setSessionMinutes(20) : recentCourse && setSelectedCourseId(recentCourse.id)}
+          />
+        </Card>
+      )}
 
       <SectionHeader title="Parcours" action={`${courses.length}`} />
       <View style={styles.courseGrid}>
@@ -351,6 +367,10 @@ const styles = StyleSheet.create({
   sessionLengthOptionText: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '900' },
   sessionLengthOptionTextSelected: { color: '#D6DBFF' },
   recommended: { marginTop: 10 },
+  emptySessionCard: { marginTop: 10 },
+  emptySessionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900', lineHeight: 23, marginTop: 14 },
+  emptySessionText: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 19, marginTop: 7 },
+  emptySessionHint: { color: theme.colors.textMuted, fontSize: 10.5, lineHeight: 16, marginTop: 8, marginBottom: 14 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   recommendationPills: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   mini: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '800' },
