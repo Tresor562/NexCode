@@ -32,6 +32,74 @@ function modeTone(mode: PracticeMode): 'primary' | 'success' | 'warning' | undef
   return 'primary';
 }
 
+function DailyMomentumCard({ state }: { state: LocalState }) {
+  const goal = Math.max(1, state.dailyGoal);
+  const completed = Math.max(0, Math.min(goal, state.dailyCompleted));
+  const progress = Math.round((completed / goal) * 100);
+  const remaining = Math.max(0, goal - completed);
+  const goalReached = completed >= goal;
+
+  return (
+    <GlassCard style={styles.momentumCard}>
+      <View style={styles.rowBetween}>
+        <View style={styles.flex}>
+          <Text style={styles.momentumKicker}>ÉLAN DU JOUR</Text>
+          <Text style={styles.momentumTitle}>{goalReached ? 'Objectif atteint. Garde le rythme.' : `${remaining} min pour ton objectif.`}</Text>
+        </View>
+        <View style={styles.streakBadge} accessibilityLabel={`Série actuelle : ${state.streak} jours`}>
+          <Text style={styles.streakIcon}>◆</Text>
+          <Text style={styles.streakValue}>{state.streak}</Text>
+          <Text style={styles.streakUnit}>j</Text>
+        </View>
+      </View>
+
+      <View
+        accessibilityRole="progressbar"
+        accessibilityLabel="Progression de l'objectif quotidien"
+        accessibilityValue={{ min: 0, max: goal, now: completed, text: `${completed} minutes sur ${goal}` }}
+        style={styles.momentumProgress}
+      >
+        <View style={styles.momentumProgressHeader}>
+          <Text style={styles.momentumProgressLabel}>{completed} / {goal} min</Text>
+          <Text style={styles.momentumProgressValue}>{progress}%</Text>
+        </View>
+        <ProgressBar value={progress} />
+      </View>
+
+      <View style={styles.momentumStats}>
+        <View style={styles.momentumStat}>
+          <Text style={styles.momentumStatValue}>{state.xp}</Text>
+          <Text style={styles.momentumStatLabel}>XP</Text>
+        </View>
+        <View style={styles.momentumStatDivider} />
+        <View style={styles.momentumStat}>
+          <Text style={styles.momentumStatValue}>{state.nexCoins}</Text>
+          <Text style={styles.momentumStatLabel}>NexCoins</Text>
+        </View>
+        <View style={styles.momentumStatDivider} />
+        <View style={styles.momentumStat}>
+          <Text style={styles.momentumStatValue}>{state.bestStreak}</Text>
+          <Text style={styles.momentumStatLabel}>record série</Text>
+        </View>
+        <View style={styles.momentumStatDivider} />
+        <View style={styles.momentumStat}>
+          <Text style={styles.momentumStatValue}>{state.totalLearningMinutes}</Text>
+          <Text style={styles.momentumStatLabel}>min apprises</Text>
+        </View>
+      </View>
+
+      {goalReached ? (
+        <View style={styles.goalRewardRow} accessibilityLabel="Bonus quotidien obtenu : 40 XP et 20 NexCoins">
+          <Pill label="Bonus obtenu" tone="success" />
+          <Text style={styles.goalRewardText}>+40 XP · +20 NexCoins</Text>
+        </View>
+      ) : (
+        <Text style={styles.momentumHint}>Termine ton objectif pour débloquer +40 XP et +20 NexCoins aujourd’hui.</Text>
+      )}
+    </GlassCard>
+  );
+}
+
 export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(state.recentCourseId ?? null);
   const graph = useMemo(() => buildSkillGraph(courses), [courses]);
@@ -71,6 +139,8 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
           <Text style={styles.nexLabel}>NEX</Text>
         </View>
       </View>
+
+      <DailyMomentumCard state={state} />
 
       {recommendedCourse && recommendedLesson && recommended ? (
         <Card tone="primary" style={styles.recommended}>
@@ -218,6 +288,25 @@ const styles = StyleSheet.create({
   nexFace: { width: 38, height: 26, borderRadius: 12, borderWidth: 2, borderColor: '#BAC3FF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(9,14,25,.86)' },
   nexEye: { width: 5, height: 7, borderRadius: 99, backgroundColor: '#7FE5FF' },
   nexLabel: { color: '#B9C1FF', fontSize: 8, fontWeight: '900', letterSpacing: 1.5, marginTop: 5 },
+  momentumCard: { marginTop: 10, marginBottom: 2 },
+  momentumKicker: { color: '#7FE5FF', fontSize: 8.5, fontWeight: '900', letterSpacing: 1.1 },
+  momentumTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '900', lineHeight: 21, marginTop: 4 },
+  streakBadge: { minWidth: 65, height: 40, paddingHorizontal: 10, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: 'rgba(255,196,95,.08)', borderWidth: 1, borderColor: 'rgba(255,196,95,.22)' },
+  streakIcon: { color: '#FFC45F', fontSize: 10 },
+  streakValue: { color: '#FFD487', fontSize: 16, fontWeight: '900' },
+  streakUnit: { color: '#DDBE84', fontSize: 9, fontWeight: '800', marginTop: 3 },
+  momentumProgress: { marginTop: 14 },
+  momentumProgressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 },
+  momentumProgressLabel: { color: theme.colors.textSecondary, fontSize: 10.5, fontWeight: '800' },
+  momentumProgressValue: { color: '#B7C0FF', fontSize: 10.5, fontWeight: '900' },
+  momentumStats: { minHeight: 58, flexDirection: 'row', alignItems: 'center', marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,.065)', backgroundColor: 'rgba(255,255,255,.022)' },
+  momentumStat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
+  momentumStatValue: { color: theme.colors.text, fontSize: 14, fontWeight: '900' },
+  momentumStatLabel: { color: theme.colors.textMuted, fontSize: 7.5, lineHeight: 10, fontWeight: '700', marginTop: 2, textAlign: 'center' },
+  momentumStatDivider: { width: 1, height: 25, backgroundColor: 'rgba(255,255,255,.07)' },
+  goalRewardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  goalRewardText: { color: '#93F1C8', fontSize: 10.5, fontWeight: '800' },
+  momentumHint: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 11 },
   recommended: { marginTop: 10 },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   recommendationPills: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
