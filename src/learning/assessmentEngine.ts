@@ -86,7 +86,11 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
 
 export function courseExam(course: Course): AssessmentPlan {
   const evidenceLessons = course.starterLessons.filter((lesson) => ['checkpoint', 'boss', 'project', 'lab'].includes(lesson.activityKind ?? 'learn'));
-  const candidates = evidenceLessons.length ? evidenceLessons : course.starterLessons;
+  const evidenceIds = new Set(evidenceLessons.map((lesson) => lesson.id));
+  const candidates = [
+    ...evidenceLessons,
+    ...course.starterLessons.filter((lesson) => !evidenceIds.has(lesson.id)),
+  ];
   const selectedLessons = coverageSampleLessons(candidates, course.skillIds, 20);
   return {
     id: `${course.id}.course-exam`,
