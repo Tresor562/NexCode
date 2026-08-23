@@ -109,11 +109,19 @@ function acceptableFallbackMinutes(budgetMinutes: PracticeSession['budgetMinutes
   return budgetMinutes + Math.max(3, Math.round(budgetMinutes * 0.5));
 }
 
+function maxNewActivitiesForBudget(budgetMinutes: PracticeSession['budgetMinutes']) {
+  if (budgetMinutes <= 10) return 1;
+  if (budgetMinutes <= 20) return 2;
+  return 3;
+}
+
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
   const usedSkills = new Set<string>();
   const usedCourses = new Set<string>();
   const recoveredSkills = new Set<string>();
+  const maxNewActivities = maxNewActivitiesForBudget(budgetMinutes);
+  let newActivities = 0;
   let minutes = 0;
 
   const sorted = [...pool].sort(activitySort);
@@ -137,6 +145,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
 
     const unresolvedRecovery = [...recoverySkills].some((skill) => !recoveredSkills.has(skill));
     if (candidate.mode === 'learn' && unresolvedRecovery) continue;
+    if (candidate.mode === 'learn' && newActivities >= maxNewActivities) continue;
 
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
     const bringsNewCourse = !usedCourses.has(candidate.courseId);
@@ -145,6 +154,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
 
     selected.push(candidate);
     minutes += candidate.estimatedMinutes;
+    if (candidate.mode === 'learn') newActivities += 1;
     candidate.skillIds.forEach((skill) => {
       usedSkills.add(skill);
       if (recoveryMode) recoveredSkills.add(skill);
