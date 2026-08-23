@@ -62,7 +62,9 @@ export const theme = {
     black: '900' as const,
   },
   control: {
-    heightSm: 42,
+    // Keep compact controls at a minimum 44pt touch target so shared navigation
+    // and icon actions stay comfortably tappable on dense mobile layouts.
+    heightSm: 44,
     heightMd: 48,
     heightLg: 54,
   },
