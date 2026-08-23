@@ -138,7 +138,14 @@ function cleanString(value: unknown, fallback: string, maxLength = 240): string 
 function optionalDateKey(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const candidate = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return undefined;
+  return trimmed;
 }
 
 function optionalIsoDate(value: unknown): string | undefined {
@@ -289,6 +296,10 @@ function normalizeState(value: Partial<LocalState>): LocalState {
   };
 }
 
+export function sanitizeLocalState(value: unknown): LocalState {
+  return normalizeState(plainRecord(value) as Partial<LocalState>);
+}
+
 export function loadLocalState(): LocalState {
   try {
     if (!stateFile.exists) {
@@ -299,7 +310,7 @@ export function loadLocalState(): LocalState {
     const raw = stateFile.textSync();
     if (!raw.trim()) return initialState;
     const parsed = JSON.parse(raw) as unknown;
-    return normalizeState(plainRecord(parsed) as Partial<LocalState>);
+    return sanitizeLocalState(parsed);
   } catch {
     return initialState;
   }
