@@ -20,6 +20,7 @@ export type PracticeSession = {
   activities: PlannedActivity[];
   skillCoverage: string[];
   courseCoverage: string[];
+  blockedByRecovery?: boolean;
 };
 
 function lessonPrerequisitesReady(skills: string[], mastery: MasteryMap, graphById: Map<string, SkillNode>, now: Date) {
@@ -121,11 +122,19 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   let minutes = 0;
 
   const sorted = [...pool].sort(activitySort);
+  const hasPendingRecovery = sorted.some((item) => isRecoveryMode(item.mode));
   const overrunAllowance = Math.max(2, Math.round(budgetMinutes * 0.15));
   const maxMinutes = budgetMinutes + overrunAllowance;
 
   for (const candidate of sorted) {
     if (minutes + candidate.estimatedMinutes > maxMinutes) continue;
+
+    // If a misconception repair or spaced review is pending, the learner should
+    // not be routed into brand-new material merely because the recovery item is a
+    // little longer than the chosen session. Require the first selected activity
+    // to address recovery; once that anchor exists, the remaining budget can be
+    // used for transfer or new learning as usual.
+    if (selected.length === 0 && hasPendingRecovery && !isRecoveryMode(candidate.mode)) continue;
 
     // A single recurring misconception can generate several eligible completed
     // lessons. One session should repair/review the skill once, then spend the
@@ -159,7 +168,8 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
 
   if (selected.length === 0 && sorted.length > 0) {
     const fallbackLimit = acceptableFallbackMinutes(budgetMinutes);
-    const fallback = [...sorted]
+    const fallbackPool = hasPendingRecovery ? sorted.filter((item) => isRecoveryMode(item.mode)) : sorted;
+    const fallback = [...fallbackPool]
       .filter((item) => item.estimatedMinutes <= fallbackLimit)
       .sort((a, b) => {
         const overrunA = Math.max(0, a.estimatedMinutes - budgetMinutes);
@@ -182,11 +192,15 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     activities: selected,
     skillCoverage: [...usedSkills],
     courseCoverage: [...usedCourses],
+    blockedByRecovery: hasPendingRecovery && selected.length === 0,
   };
 }
 
 export function recommendedSessionMessage(session: PracticeSession) {
   if (session.activities.length === 0) {
+    if (session.blockedByRecovery) {
+      return `Une réparation ou révision importante dépasse ${session.budgetMinutes} min. Choisis plus de temps pour la traiter avant d'ajouter une nouvelle notion.`;
+    }
     return `Aucune activité ne tient honnêtement dans ${session.budgetMinutes} min. Choisis plus de temps pour garder une séance complète.`;
   }
   const repair = session.activities.filter((item) => item.mode === 'repair').length;
