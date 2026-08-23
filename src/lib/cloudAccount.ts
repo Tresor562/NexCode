@@ -1,5 +1,5 @@
 import { File, Paths } from 'expo-file-system';
-import type { LocalState } from './localState';
+import { sanitizeLocalState, type LocalState } from './localState';
 
 type Env = Record<string, string | undefined>;
 
@@ -215,7 +215,14 @@ function unique<T>(values: T[]): T[] {
 function dateKey(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : undefined;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const candidate = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return undefined;
+  return trimmed;
 }
 
 function laterDateKey(left: string | undefined, right: string | undefined): string | undefined {
@@ -254,7 +261,7 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
   const daily = mergeDailyProgress(local, progress);
   const remoteRewardDate = dateKey(settings.dailyGoalRewardDate);
   const localRewardDate = dateKey(local.dailyGoalRewardDate);
-  return {
+  const merged: LocalState = {
     ...local,
     name: typeof profile?.display_name === 'string' && profile.display_name.trim() ? profile.display_name : local.name,
     learningGoal: typeof profile?.learning_goal === 'string' && profile.learning_goal.trim() ? profile.learning_goal : local.learningGoal,
@@ -276,6 +283,13 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
     portfolioProofs: Array.isArray(progress?.portfolio_proofs) && progress.portfolio_proofs.length > local.portfolioProofs.length ? progress.portfolio_proofs as LocalState['portfolioProofs'] : local.portfolioProofs,
     onboardingComplete: local.onboardingComplete || Boolean(profile?.display_name),
   };
+
+  // Supabase JSON is an external persistence boundary. Run the merged snapshot
+  // through the same fail-safe normalizer used for local disk restores before it
+  // can reach mastery, streak, projects or UI state. This prevents malformed or
+  // stale cloud JSON from reintroducing NaN, impossible dates or invalid evidence
+  // that local storage already knows how to reject.
+  return sanitizeLocalState(merged);
 }
 
 export async function pullCloudState(session: CloudSession, local: LocalState): Promise<{ session: CloudSession; state: LocalState }> {
