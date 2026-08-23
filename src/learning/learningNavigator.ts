@@ -23,6 +23,14 @@ function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
+function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
+  if (!nextReviewAt) return false;
+  const nextReviewMs = Date.parse(nextReviewAt);
+  if (!Number.isFinite(nextReviewMs)) return true;
+  const nowMs = now.getTime();
+  return Number.isFinite(nowMs) ? nextReviewMs <= nowMs : true;
+}
+
 export function searchLearningActivities(
   courses: Course[],
   filter: LearningFilter,
@@ -43,10 +51,7 @@ export function searchLearningActivities(
           if (filter.kinds?.length && !filter.kinds.includes(lesson.activityKind ?? 'learn')) continue;
           if (filter.difficulty?.length && !filter.difficulty.includes(lesson.difficulty ?? 1)) continue;
           if (filter.onlyDueReview) {
-            const due = (lesson.skillIds ?? []).some((skillId) => {
-              const next = mastery[skillId]?.nextReviewAt;
-              return Boolean(next && new Date(next).getTime() <= now.getTime());
-            });
+            const due = (lesson.skillIds ?? []).some((skillId) => reviewIsDue(mastery[skillId]?.nextReviewAt, now));
             if (!due) continue;
           }
           const haystack = normalize(`${course.title} ${course.language} ${chapter.title} ${unit.title} ${lesson.title} ${lesson.concept} ${(lesson.skillIds ?? []).join(' ')}`);
