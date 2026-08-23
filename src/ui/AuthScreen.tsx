@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -98,6 +99,7 @@ export function AuthScreen({
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -105,22 +107,26 @@ export function AuthScreen({
   const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
   const hasPassword = password.length >= 6;
   const hasName = displayName.trim().length >= 2;
-  const valid = hasEmail && hasPassword && (mode === 'signin' || hasName);
+  const passwordsMatch = mode === 'signin' || (confirmPassword.length > 0 && confirmPassword === password);
+  const valid = hasEmail && hasPassword && passwordsMatch && (mode === 'signin' || hasName);
 
   const helper = useMemo(() => {
     if (!email && !password && mode === 'signin') return 'Reprends exactement là où tu t’étais arrêté.';
     if (!hasEmail && email.length > 0) return 'Entre une adresse email valide.';
     if (!hasPassword && password.length > 0) return 'Ton mot de passe doit contenir au moins 6 caractères.';
     if (mode === 'signup' && displayName.length > 0 && !hasName) return 'Choisis un nom d’au moins 2 caractères.';
+    if (mode === 'signup' && confirmPassword.length > 0 && !passwordsMatch) return 'Les deux mots de passe ne correspondent pas.';
+    if (mode === 'signup' && hasPassword && confirmPassword.length === 0) return 'Confirme ton mot de passe pour éviter une faute de frappe.';
     return mode === 'signup'
       ? 'Ton compte sauvegardera progression, projets et récompenses.'
       : 'Progression cloud, projets et récompenses sont synchronisés.';
-  }, [displayName.length, email, hasEmail, hasName, hasPassword, mode, password.length]);
+  }, [confirmPassword.length, displayName.length, email, hasEmail, hasName, hasPassword, mode, password.length, passwordsMatch]);
 
   const switchMode = (nextMode: Mode) => {
     if (nextMode === mode || busy) return;
     Haptics.selectionAsync().catch(() => undefined);
     setMode(nextMode);
+    setConfirmPassword('');
   };
 
   const submit = () => {
@@ -137,118 +143,148 @@ export function AuthScreen({
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="light" />
-      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.root}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      >
         <View style={styles.ambientTop} />
-        <View style={styles.content}>
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Text style={styles.brandMarkText}>NC</Text>
-              <View style={styles.brandGlow} />
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.content}>
+            <View style={styles.brandRow}>
+              <View style={styles.brandMark}>
+                <Text style={styles.brandMarkText}>NC</Text>
+                <View style={styles.brandGlow} />
+              </View>
+              <View style={styles.brandCopy}>
+                <Text style={styles.brandName}>NexCode</Text>
+                <Text style={styles.brandTag}>LEARN · BUILD · MASTER</Text>
+              </View>
             </View>
-            <View style={styles.brandCopy}>
-              <Text style={styles.brandName}>NexCode</Text>
-              <Text style={styles.brandTag}>LEARN · BUILD · MASTER</Text>
+
+            <Text style={styles.eyebrow}>{mode === 'signin' ? 'ESPACE APPRENANT' : 'NOUVEAU PARCOURS'}</Text>
+            <Text style={styles.title}>{mode === 'signin' ? 'Bon retour.' : 'Crée ton compte.'}</Text>
+            <Text style={styles.subtitle}>
+              {mode === 'signin'
+                ? 'Retrouve ton parcours, ton XP, tes NexCoins et tes projets.'
+                : 'Commence sur un appareil et continue sur un autre sans perdre ta progression.'}
+            </Text>
+
+            <View style={styles.switcher} accessibilityRole="tablist">
+              <Pressable
+                onPress={() => switchMode('signin')}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === 'signin' }}
+                style={[styles.switchButton, mode === 'signin' && styles.switchActive]}
+              >
+                <Text style={[styles.switchText, mode === 'signin' && styles.switchTextActive]}>Connexion</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => switchMode('signup')}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: mode === 'signup' }}
+                style={[styles.switchButton, mode === 'signup' && styles.switchActive]}
+              >
+                <Text style={[styles.switchText, mode === 'signup' && styles.switchTextActive]}>Créer un compte</Text>
+              </Pressable>
             </View>
-          </View>
 
-          <Text style={styles.eyebrow}>{mode === 'signin' ? 'ESPACE APPRENANT' : 'NOUVEAU PARCOURS'}</Text>
-          <Text style={styles.title}>{mode === 'signin' ? 'Bon retour.' : 'Crée ton compte.'}</Text>
-          <Text style={styles.subtitle}>
-            {mode === 'signin'
-              ? 'Retrouve ton parcours, ton XP, tes NexCoins et tes projets.'
-              : 'Commence sur un appareil et continue sur un autre sans perdre ta progression.'}
-          </Text>
+            {mode === 'signup' ? (
+              <AuthField
+                label="Nom affiché"
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder="Prénom ou pseudo"
+                autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
+                returnKeyType="next"
+              />
+            ) : null}
 
-          <View style={styles.switcher} accessibilityRole="tablist">
-            <Pressable
-              onPress={() => switchMode('signin')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: mode === 'signin' }}
-              style={[styles.switchButton, mode === 'signin' && styles.switchActive]}
-            >
-              <Text style={[styles.switchText, mode === 'signin' && styles.switchTextActive]}>Connexion</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => switchMode('signup')}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: mode === 'signup' }}
-              style={[styles.switchButton, mode === 'signup' && styles.switchActive]}
-            >
-              <Text style={[styles.switchText, mode === 'signup' && styles.switchTextActive]}>Créer un compte</Text>
-            </Pressable>
-          </View>
-
-          {mode === 'signup' ? (
             <AuthField
-              label="Nom affiché"
-              value={displayName}
-              onChangeText={setDisplayName}
-              placeholder="Prénom ou pseudo"
-              autoCapitalize="words"
-              autoComplete="name"
-              textContentType="name"
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              placeholder="toi@exemple.com"
+              keyboardType="email-address"
+              autoComplete="email"
+              textContentType="emailAddress"
               returnKeyType="next"
             />
-          ) : null}
 
-          <AuthField
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="toi@exemple.com"
-            keyboardType="email-address"
-            autoComplete="email"
-            textContentType="emailAddress"
-            returnKeyType="next"
-          />
+            <AuthField
+              label="Mot de passe"
+              value={password}
+              onChangeText={setPassword}
+              placeholder="6 caractères minimum"
+              secureTextEntry={!showPassword}
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              textContentType={mode === 'signup' ? 'newPassword' : 'password'}
+              returnKeyType={mode === 'signup' ? 'next' : 'go'}
+              onSubmitEditing={mode === 'signin' ? submit : undefined}
+              rightAction={{
+                label: showPassword ? 'Masquer' : 'Afficher',
+                onPress: () => {
+                  Haptics.selectionAsync().catch(() => undefined);
+                  setShowPassword((value) => !value);
+                },
+              }}
+            />
 
-          <AuthField
-            label="Mot de passe"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="6 caractères minimum"
-            secureTextEntry={!showPassword}
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-            textContentType={mode === 'signup' ? 'newPassword' : 'password'}
-            returnKeyType="go"
-            onSubmitEditing={submit}
-            rightAction={{
-              label: showPassword ? 'Masquer' : 'Afficher',
-              onPress: () => {
-                Haptics.selectionAsync().catch(() => undefined);
-                setShowPassword((value) => !value);
-              },
-            }}
-          />
+            {mode === 'signup' ? (
+              <AuthField
+                label="Confirmer le mot de passe"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                placeholder="Retape le même mot de passe"
+                secureTextEntry={!showPassword}
+                autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="go"
+                onSubmitEditing={submit}
+              />
+            ) : null}
 
-          <View style={[styles.helperCard, error ? styles.helperCardError : null]}>
-            <View style={[styles.helperDot, error ? styles.helperDotError : null]} />
-            <Text style={[styles.helperText, error ? styles.errorText : null]}>{error || helper}</Text>
-          </View>
-
-          <Pressable
-            disabled={!valid || busy}
-            onPress={submit}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !valid || busy, busy }}
-            style={({ pressed }) => [
-              styles.primaryDepth,
-              (!valid || busy) && styles.primaryDisabled,
-              pressed && valid && !busy && styles.primaryDepthPressed,
-            ]}
-          >
-            <View style={styles.primaryFace}>
-              {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
-              <Text style={styles.primaryText}>
-                {busy ? 'Synchronisation…' : mode === 'signin' ? 'Continuer' : 'Créer mon compte'}
+            <View style={[styles.helperCard, error ? styles.helperCardError : null]}>
+              <View style={[styles.helperDot, error ? styles.helperDotError : null]} />
+              <Text
+                style={[styles.helperText, error ? styles.errorText : null]}
+                accessibilityLiveRegion={error ? 'assertive' : 'polite'}
+              >
+                {error || helper}
               </Text>
             </View>
-          </Pressable>
 
-          <Text style={styles.privacy}>
-            Tes données de progression restent liées à ton compte NexCode et sont récupérables sur tes appareils.
-          </Text>
-        </View>
+            <Pressable
+              disabled={!valid || busy}
+              onPress={submit}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !valid || busy, busy }}
+              style={({ pressed }) => [
+                styles.primaryDepth,
+                (!valid || busy) && styles.primaryDisabled,
+                pressed && valid && !busy && styles.primaryDepthPressed,
+              ]}
+            >
+              <View style={styles.primaryFace}>
+                {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
+                <Text style={styles.primaryText}>
+                  {busy ? 'Synchronisation…' : mode === 'signin' ? 'Continuer' : 'Créer mon compte'}
+                </Text>
+              </View>
+            </Pressable>
+
+            <Text style={styles.privacy}>
+              Tes données de progression restent liées à ton compte NexCode et sont récupérables sur tes appareils.
+            </Text>
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -256,7 +292,8 @@ export function AuthScreen({
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
-  root: { flex: 1, justifyContent: 'center', overflow: 'hidden' },
+  root: { flex: 1, overflow: 'hidden' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center' },
   ambientTop: {
     position: 'absolute',
     width: 320,
