@@ -104,6 +104,15 @@ function isRecoveryMode(mode: PracticeMode) {
   return mode === 'repair' || mode === 'review';
 }
 
+function acceptableFallbackMinutes(budgetMinutes: PracticeSession['budgetMinutes']) {
+  // If the normal planner cannot fit anything, a fallback may exceed the learner's
+  // chosen budget slightly, but never by an arbitrary amount. A 5-minute session
+  // must not silently become a 20–30 minute task just because it is the smallest
+  // item in the pool. Keep the fallback within 50% of the chosen budget, with a
+  // small absolute allowance for very short sessions.
+  return budgetMinutes + Math.max(3, Math.round(budgetMinutes * 0.5));
+}
+
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
   const usedSkills = new Set<string>();
@@ -149,12 +158,16 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   }
 
   if (selected.length === 0 && sorted.length > 0) {
-    const [fallback] = [...sorted].sort((a, b) => {
-      const overrunA = Math.max(0, a.estimatedMinutes - budgetMinutes);
-      const overrunB = Math.max(0, b.estimatedMinutes - budgetMinutes);
-      if (overrunA !== overrunB) return overrunA - overrunB;
-      return activitySort(a, b);
-    });
+    const fallbackLimit = acceptableFallbackMinutes(budgetMinutes);
+    const fallback = [...sorted]
+      .filter((item) => item.estimatedMinutes <= fallbackLimit)
+      .sort((a, b) => {
+        const overrunA = Math.max(0, a.estimatedMinutes - budgetMinutes);
+        const overrunB = Math.max(0, b.estimatedMinutes - budgetMinutes);
+        if (overrunA !== overrunB) return overrunA - overrunB;
+        return activitySort(a, b);
+      })[0];
+
     if (fallback) {
       selected.push(fallback);
       minutes = fallback.estimatedMinutes;
@@ -173,6 +186,9 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
 }
 
 export function recommendedSessionMessage(session: PracticeSession) {
+  if (session.activities.length === 0) {
+    return `Aucune activité ne tient honnêtement dans ${session.budgetMinutes} min. Choisis plus de temps pour garder une séance complète.`;
+  }
   const repair = session.activities.filter((item) => item.mode === 'repair').length;
   const review = session.activities.filter((item) => item.mode === 'review').length;
   const lab = session.activities.filter((item) => item.mode === 'lab').length;
