@@ -14,28 +14,48 @@ export type EvidenceQuality = {
 const independentKinds = new Set(['lab', 'checkpoint', 'boss', 'project']);
 const transferKinds = new Set(['boss', 'project']);
 
+function validTimestamp(value: string) {
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+}
+
 export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new Date()): EvidenceQuality {
   const state = mastery[skillId];
   const snapshot = masterySnapshot(skillId, mastery, now);
   if (!state) {
     return { skillId, diversity: 0, independence: 0, recency: 0, stability: 0, transferable: false, reasons: ['Aucune preuve enregistrée.'] };
   }
+
   const correct = state.evidence.filter((item) => item.correct);
   const kinds = [...new Set(correct.map((item) => item.activityKind))];
-  const independent = correct.filter((item) => independentKinds.has(item.activityKind));
-  const transferable = correct.some((item) => transferKinds.has(item.activityKind));
-  const latestAt = correct.reduce((latest, item) => Math.max(latest, new Date(item.at).getTime()), 0);
+  const independentContexts = new Set(
+    correct
+      .filter((item) => independentKinds.has(item.activityKind))
+      .map((item) => `${item.activityKind}:${item.lessonId}`),
+  );
+  const transferContexts = new Set(
+    correct
+      .filter((item) => transferKinds.has(item.activityKind))
+      .map((item) => `${item.activityKind}:${item.lessonId}`),
+  );
+  const timestamps = correct
+    .map((item) => validTimestamp(item.at))
+    .filter((value): value is number => value !== null);
+  const latestAt = timestamps.length ? Math.max(...timestamps) : 0;
   const days = latestAt ? Math.max(0, (now.getTime() - latestAt) / 86_400_000) : Number.POSITIVE_INFINITY;
   const recency = !Number.isFinite(days) ? 0 : days <= 3 ? 100 : days <= 7 ? 90 : days <= 14 ? 75 : days <= 30 ? 55 : 30;
   const diversity = Math.min(100, kinds.length * 20);
-  const independence = Math.min(100, independent.length * 25);
+  const independence = Math.min(100, independentContexts.size * 25);
+  const transferable = transferContexts.size > 0;
   const stability = Math.min(100, Math.round(snapshot.effectiveScore * 0.6 + state.confidence * 0.25 + Math.min(state.consecutiveCorrect, 5) * 3));
   const reasons: string[] = [];
+
   if (diversity < 60) reasons.push('Varier les formes de preuve : pratique, Lab, checkpoint et projet.');
-  if (independence < 50) reasons.push('Produire davantage de preuves sans guidage fort.');
+  if (independence < 50) reasons.push('Produire au moins deux preuves indépendantes dans des contextes distincts.');
   if (recency < 60) reasons.push('Réaliser une récupération récente pour confirmer la rétention.');
   if (!transferable) reasons.push('Réutiliser la compétence dans un boss challenge ou un projet.');
   if (snapshot.recurringErrors.length) reasons.push('Corriger les erreurs récurrentes avant de considérer la compétence stable.');
+
   return { skillId, diversity, independence, recency, stability, transferable, reasons };
 }
 
