@@ -1,5 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from 'expo-audio';
 import { Course, Lesson } from '../data/curriculumCore';
@@ -39,6 +39,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const [recallRevealed, setRecallRevealed] = useState(false);
   const [recallConfidence, setRecallConfidence] = useState<RecallConfidence | null>(null);
   const [transferDraft, setTransferDraft] = useState('');
+  const [reduceMotion, setReduceMotion] = useState(false);
   const scale = useRef(new Animated.Value(1)).current;
   const successPlayer = useAudioPlayer(successSound);
   const errorPlayer = useAudioPlayer(errorSound);
@@ -51,7 +52,24 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const mastery = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
+  useEffect(() => {
+    let active = true;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then((enabled) => { if (active) setReduceMotion(enabled); })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
+
   function pulse() {
+    if (reduceMotion) {
+      scale.stopAnimation();
+      scale.setValue(1);
+      return;
+    }
     Animated.sequence([
       Animated.spring(scale, { toValue: 1.08, useNativeDriver: true, speed: 28, bounciness: 10 }),
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 8 }),
@@ -122,7 +140,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
       </View>
 
       <View style={styles.heroRow}>
-        <Animated.View style={[styles.mentor, { transform: [{ scale }] }]}>
+        <Animated.View style={[styles.mentor, { transform: [{ scale }] }]} accessible accessibilityLabel="Mentor Nex">
           <View style={styles.eyeRow}><View style={styles.eye} /><View style={styles.eye} /></View>
           {mentorMood ? <Text style={styles.mentorMood}>{mentorMood}</Text> : <View style={styles.smile} />}
         </Animated.View>
@@ -201,13 +219,13 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
             <>
               <Text style={styles.confidenceTitle}>À quel point ta réponse était proche ?</Text>
               <View style={styles.confidenceRow}>
-                <Pressable accessibilityRole="button" accessibilityState={{ selected: recallConfidence === 'unsure' }} onPress={() => chooseConfidence('unsure')} style={[styles.confidence, recallConfidence === 'unsure' && styles.confidenceActive]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="À revoir" accessibilityState={{ selected: recallConfidence === 'unsure' }} onPress={() => chooseConfidence('unsure')} style={[styles.confidence, recallConfidence === 'unsure' && styles.confidenceActive]}>
                   <Text style={styles.confidenceEmoji}>○</Text><Text style={styles.confidenceText}>À revoir</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityState={{ selected: recallConfidence === 'close' }} onPress={() => chooseConfidence('close')} style={[styles.confidence, recallConfidence === 'close' && styles.confidenceActive]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Presque" accessibilityState={{ selected: recallConfidence === 'close' }} onPress={() => chooseConfidence('close')} style={[styles.confidence, recallConfidence === 'close' && styles.confidenceActive]}>
                   <Text style={styles.confidenceEmoji}>◐</Text><Text style={styles.confidenceText}>Presque</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" accessibilityState={{ selected: recallConfidence === 'ready' }} onPress={() => chooseConfidence('ready')} style={[styles.confidence, recallConfidence === 'ready' && styles.confidenceActive]}>
+                <Pressable accessibilityRole="button" accessibilityLabel="Je l’avais" accessibilityState={{ selected: recallConfidence === 'ready' }} onPress={() => chooseConfidence('ready')} style={[styles.confidence, recallConfidence === 'ready' && styles.confidenceActive]}>
                   <Text style={styles.confidenceEmoji}>●</Text><Text style={styles.confidenceText}>Je l’avais</Text>
                 </Pressable>
               </View>
@@ -231,9 +249,10 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
                   key={`${index}:${choice}`}
                   disabled={submitted}
                   accessibilityRole="button"
+                  accessibilityLabel={`${String.fromCharCode(65 + index)}. ${choice}`}
                   accessibilityState={{ selected, disabled: submitted }}
                   onPress={() => { setAnswer(index); Haptics.selectionAsync().catch(() => undefined); }}
-                  style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, revealCorrect && styles.choiceCorrect, revealWrong && styles.choiceWrong, pressed && styles.pressed]}
+                  style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, revealCorrect && styles.choiceCorrect, revealWrong && styles.choiceWrong, pressed && (reduceMotion ? styles.pressedReducedMotion : styles.pressed)]}
                 >
                   <View style={styles.choiceLetter}><Text style={styles.choiceLetterText}>{String.fromCharCode(65 + index)}</Text></View>
                   <Text style={styles.choiceText}>{choice}</Text>
@@ -243,7 +262,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
           </View>
           {!submitted ? <PrimaryButton label="Vérifier" disabled={answer === null} onPress={submit} /> : null}
           {submitted ? (
-            <View style={[styles.feedback, correct ? styles.feedbackGood : styles.feedbackBad]}>
+            <View style={[styles.feedback, correct ? styles.feedbackGood : styles.feedbackBad]} accessibilityLiveRegion="polite">
               <Text style={styles.feedbackTitle}>{correct ? 'Excellent !' : 'Presque.'}</Text>
               <Text style={styles.feedbackText}>{lesson.explanation}</Text>
               {correct ? <PrimaryButton label="Étape suivante" icon="→" onPress={next} /> : <PrimaryButton label="Réessayer" onPress={retry} />}
@@ -300,7 +319,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
         </View>
       ) : null}
 
-      {stepIndex > 0 ? <Pressable onPress={previous} accessibilityRole="button" style={styles.backButton}><Text style={styles.backText}>← Étape précédente</Text></Pressable> : null}
+      {stepIndex > 0 ? <Pressable onPress={previous} accessibilityRole="button" accessibilityLabel="Étape précédente" style={styles.backButton}><Text style={styles.backText}>← Étape précédente</Text></Pressable> : null}
     </View>
   );
 }
@@ -311,6 +330,6 @@ const styles = StyleSheet.create({
   stage:{gap:14},stepLabel:{color:'#8D99FF',fontSize:10,fontWeight:'900',letterSpacing:1.25},prompt:{color:theme.colors.text,fontSize:25,fontWeight:'900',lineHeight:31},bigCard:{padding:18},concept:{color:theme.colors.text,fontSize:18,lineHeight:28,fontWeight:'700'},coachLine:{color:theme.colors.textMuted,fontSize:12,lineHeight:18,paddingHorizontal:2},
   codeBlock:{backgroundColor:'#070B13',borderWidth:1,borderColor:'#222A3D',borderRadius:20,overflow:'hidden'},codeTop:{height:42,paddingHorizontal:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#1C2435'},codeFile:{color:'#AEB8D5',fontFamily:'monospace',fontSize:11},runBadge:{color:'#7EE6B0',fontSize:9,fontWeight:'900'},code:{color:'#EAF0FF',fontFamily:'monospace',fontSize:13,lineHeight:21,padding:16,minHeight:190},
   recallQuestion:{color:theme.colors.text,fontSize:20,lineHeight:29,fontWeight:'900'},recallChallenge:{marginTop:18,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},recallChallengeTitle:{color:'#AEB8FF',fontSize:12,fontWeight:'900'},recallChallengeText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:6},recallInput:{minHeight:112,marginTop:14,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},recallCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},recallAttempt:{marginTop:18,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},recallAttemptText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:22,marginTop:6},recallReveal:{marginTop:10,padding:14,borderRadius:16,backgroundColor:'rgba(100,118,255,0.12)',borderWidth:1,borderColor:'rgba(100,118,255,0.28)'},recallRevealLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},recallRevealText:{color:theme.colors.text,fontSize:14,lineHeight:22,fontWeight:'700',marginTop:6},confidenceTitle:{color:theme.colors.textSecondary,fontSize:12,fontWeight:'800'},confidenceRow:{flexDirection:'row',gap:8},confidence:{flex:1,minHeight:68,paddingVertical:10,paddingHorizontal:7,borderRadius:15,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.035)',alignItems:'center',justifyContent:'center',gap:5},confidenceActive:{borderColor:'#6677FF',backgroundColor:'rgba(102,119,255,0.16)'},confidenceEmoji:{color:'#AAB4FF',fontSize:15,fontWeight:'900'},confidenceText:{color:theme.colors.text,fontSize:10,fontWeight:'800',textAlign:'center'},
-  question:{color:theme.colors.text,fontSize:23,fontWeight:'900',lineHeight:30},choices:{gap:10},choice:{minHeight:58,flexDirection:'row',alignItems:'center',gap:12,padding:12,borderRadius:16,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.045)'},choiceSelected:{borderColor:'#6476FF',backgroundColor:'rgba(100,118,255,0.15)'},choiceCorrect:{borderColor:'#2E9A69',backgroundColor:'rgba(46,154,105,0.14)'},choiceWrong:{borderColor:'#B94B57',backgroundColor:'rgba(185,75,87,0.13)'},pressed:{transform:[{scale:.985}]},choiceLetter:{width:34,height:34,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,0.07)'},choiceLetterText:{color:theme.colors.text,fontSize:11,fontWeight:'900'},choiceText:{flex:1,color:theme.colors.text,fontSize:14,lineHeight:20,fontWeight:'700'},
+  question:{color:theme.colors.text,fontSize:23,fontWeight:'900',lineHeight:30},choices:{gap:10},choice:{minHeight:58,flexDirection:'row',alignItems:'center',gap:12,padding:12,borderRadius:16,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.045)'},choiceSelected:{borderColor:'#6476FF',backgroundColor:'rgba(100,118,255,0.15)'},choiceCorrect:{borderColor:'#2E9A69',backgroundColor:'rgba(46,154,105,0.14)'},choiceWrong:{borderColor:'#B94B57',backgroundColor:'rgba(185,75,87,0.13)'},pressed:{transform:[{scale:.985}]},pressedReducedMotion:{opacity:.78},choiceLetter:{width:34,height:34,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,0.07)'},choiceLetterText:{color:theme.colors.text,fontSize:11,fontWeight:'900'},choiceText:{flex:1,color:theme.colors.text,fontSize:14,lineHeight:20,fontWeight:'700'},
   feedback:{padding:16,borderRadius:18,borderWidth:1},feedbackGood:{borderColor:'#2D7655',backgroundColor:'rgba(34,116,79,0.16)'},feedbackBad:{borderColor:'#7A4148',backgroundColor:'rgba(122,65,72,0.16)'},feedbackTitle:{color:theme.colors.text,fontSize:18,fontWeight:'900'},feedbackText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginVertical:8},transfer:{color:theme.colors.text,fontSize:18,fontWeight:'800',lineHeight:27},tip:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:12},transferAttempt:{marginTop:16,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},transferAttemptLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},transferInput:{minHeight:118,marginTop:10,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},transferCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},labTitle:{color:theme.colors.text,fontSize:23,fontWeight:'900'},labText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:8},criteria:{gap:8,marginTop:14},criterionRow:{flexDirection:'row',alignItems:'flex-start',gap:8},criterionDot:{color:'#70DEA8',fontSize:12,fontWeight:'900',marginTop:1},criterionText:{flex:1,color:theme.colors.textSecondary,fontSize:12,lineHeight:18},flags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:14},backButton:{alignSelf:'center',padding:12,marginTop:14},backText:{color:theme.colors.textMuted,fontSize:12,fontWeight:'800'},
 });
