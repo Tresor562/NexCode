@@ -26,6 +26,25 @@ function publish(next: Partial<MotionSnapshot>) {
   listeners.forEach((listener) => listener());
 }
 
+function hydrateReduceMotion(generation: number) {
+  const hydrationRevision = reduceMotionRevision;
+  AccessibilityInfo.isReduceMotionEnabled()
+    .then((enabled) => {
+      // Native events are more current than an async hydration read. The same
+      // helper is used on initial subscribe and when the app returns to the
+      // foreground so a setting changed while backgrounded cannot leave the
+      // shared motion state stale.
+      if (
+        listenersActive &&
+        generation === listenerGeneration &&
+        hydrationRevision === reduceMotionRevision
+      ) {
+        publish({ reduceMotion: enabled });
+      }
+    })
+    .catch(() => undefined);
+}
+
 function startNativeListeners() {
   if (listenersActive) return;
   listenersActive = true;
@@ -38,34 +57,24 @@ function startNativeListeners() {
 
   nativeSubscriptions = [
     AppState.addEventListener('change', (nextState) => {
-      publish({ appActive: nextState === 'active' });
+      const appActive = nextState === 'active';
+      publish({ appActive });
+      // Accessibility events are not guaranteed to be delivered while an app is
+      // suspended. Re-read the system preference every time we return to the
+      // foreground, while keeping the same generation/revision race guards used
+      // for initial hydration.
+      if (appActive) hydrateReduceMotion(generation);
     }),
     AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
-      // Native events are more current than the asynchronous hydration read
-      // below. Advance a revision so a late Promise cannot overwrite a newer
-      // system preference while this listener generation is still active.
+      // Native events are more current than asynchronous hydration reads. Advance
+      // a revision so a late Promise cannot overwrite a newer system preference
+      // while this listener generation is still active.
       reduceMotionRevision += 1;
       publish({ reduceMotion: enabled });
     }),
   ];
 
-  const hydrationRevision = reduceMotionRevision;
-  AccessibilityInfo.isReduceMotionEnabled()
-    .then((enabled) => {
-      // A previous async read can resolve after all subscribers unmount and a
-      // later subscriber starts a fresh listener set. It can also resolve after
-      // a newer reduceMotionChanged event in the same generation. Guard both
-      // cases so stale accessibility state never overwrites the latest native
-      // preference.
-      if (
-        listenersActive &&
-        generation === listenerGeneration &&
-        hydrationRevision === reduceMotionRevision
-      ) {
-        publish({ reduceMotion: enabled });
-      }
-    })
-    .catch(() => undefined);
+  hydrateReduceMotion(generation);
 }
 
 function stopNativeListeners() {
