@@ -106,6 +106,10 @@ function isRecoveryMode(mode: PracticeMode) {
   return mode === 'repair' || mode === 'review';
 }
 
+function recoveryActivityKey(activity: PlannedActivity) {
+  return `${activity.courseId}:${activity.lessonId}`;
+}
+
 function acceptableFallbackMinutes(budgetMinutes: PracticeSession['budgetMinutes']) {
   return budgetMinutes + Math.max(3, Math.round(budgetMinutes * 0.5));
 }
@@ -121,6 +125,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   const usedSkills = new Set<string>();
   const usedCourses = new Set<string>();
   const recoveredSkills = new Set<string>();
+  const recoveredUnscopedKeys = new Set<string>();
   const maxNewActivities = maxNewActivitiesForBudget(budgetMinutes);
   let newActivities = 0;
   let minutes = 0;
@@ -131,7 +136,12 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
       .filter((item) => isRecoveryMode(item.mode))
       .flatMap((item) => item.skillIds),
   );
-  const hasPendingRecovery = recoverySkills.size > 0 || sorted.some((item) => isRecoveryMode(item.mode));
+  const unscopedRecoveryKeys = new Set(
+    sorted
+      .filter((item) => isRecoveryMode(item.mode) && item.skillIds.length === 0)
+      .map(recoveryActivityKey),
+  );
+  const hasPendingRecovery = recoverySkills.size > 0 || unscopedRecoveryKeys.size > 0;
   const overrunAllowance = Math.max(2, Math.round(budgetMinutes * 0.15));
   const maxMinutes = budgetMinutes + overrunAllowance;
 
@@ -141,12 +151,16 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (selected.length === 0 && hasPendingRecovery && !isRecoveryMode(candidate.mode)) continue;
 
     const recoveryMode = isRecoveryMode(candidate.mode);
+    const candidateRecoveryKey = recoveryActivityKey(candidate);
     const bringsNewRecoverySkill = candidate.skillIds.some((skill) => !recoveredSkills.has(skill));
     if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
+    if (recoveryMode && candidate.skillIds.length === 0 && recoveredUnscopedKeys.has(candidateRecoveryKey)) continue;
 
     const unresolvedRecoverySkills = [...recoverySkills].filter((skill) => !recoveredSkills.has(skill));
-    const unresolvedRecovery = unresolvedRecoverySkills.length > 0;
-    const supportsUnresolvedRecovery = candidate.skillIds.some((skill) => unresolvedRecoverySkills.includes(skill));
+    const unresolvedUnscopedRecovery = [...unscopedRecoveryKeys].some((key) => !recoveredUnscopedKeys.has(key));
+    const unresolvedRecovery = unresolvedRecoverySkills.length > 0 || unresolvedUnscopedRecovery;
+    const supportsUnresolvedRecovery = !unresolvedUnscopedRecovery
+      && candidate.skillIds.some((skill) => unresolvedRecoverySkills.includes(skill));
     if (unresolvedRecovery && !recoveryMode && !supportsUnresolvedRecovery) continue;
     if (candidate.mode === 'learn' && newActivities >= maxNewActivities) continue;
 
@@ -162,6 +176,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
       usedSkills.add(skill);
       if (recoveryMode || supportsUnresolvedRecovery) recoveredSkills.add(skill);
     });
+    if (recoveryMode && candidate.skillIds.length === 0) recoveredUnscopedKeys.add(candidateRecoveryKey);
     usedCourses.add(candidate.courseId);
     if (minutes >= budgetMinutes) break;
   }
@@ -185,21 +200,15 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
         usedSkills.add(skill);
         if (isRecoveryMode(fallback.mode)) recoveredSkills.add(skill);
       });
+      if (isRecoveryMode(fallback.mode) && fallback.skillIds.length === 0) {
+        recoveredUnscopedKeys.add(recoveryActivityKey(fallback));
+      }
       usedCourses.add(fallback.courseId);
     }
   }
 
-  const selectedRecoveryKeys = new Set(
-    selected
-      .filter((item) => isRecoveryMode(item.mode))
-      .map((item) => `${item.courseId}:${item.lessonId}`),
-  );
   const deferredRecoverySkills = [...recoverySkills].filter((skill) => !recoveredSkills.has(skill));
-  const deferredUnscopedRecovery = sorted.filter(
-    (item) => isRecoveryMode(item.mode)
-      && item.skillIds.length === 0
-      && !selectedRecoveryKeys.has(`${item.courseId}:${item.lessonId}`),
-  ).length;
+  const deferredUnscopedRecovery = [...unscopedRecoveryKeys].filter((key) => !recoveredUnscopedKeys.has(key)).length;
   const deferredRecoveryCount = deferredRecoverySkills.length + deferredUnscopedRecovery;
 
   return {
