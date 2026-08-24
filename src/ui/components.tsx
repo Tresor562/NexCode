@@ -32,7 +32,29 @@ export function GlassCard({ children, style }: { children: React.ReactNode; styl
 }
 
 export function ProgressBar({ value, label = 'Progression' }: { value: number; label?: string }) {
-  const safeValue = Math.max(0, Math.min(100, value));
+  const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+  const reduceMotion = useReduceMotionPreference();
+  const animatedValue = useRef(new Animated.Value(safeValue)).current;
+
+  useEffect(() => {
+    animatedValue.stopAnimation();
+    if (reduceMotion) {
+      animatedValue.setValue(safeValue);
+      return;
+    }
+    Animated.timing(animatedValue, {
+      toValue: safeValue,
+      duration: 260,
+      useNativeDriver: false,
+    }).start();
+  }, [animatedValue, reduceMotion, safeValue]);
+
+  const width = animatedValue.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
   return (
     <View
       accessible
@@ -41,7 +63,7 @@ export function ProgressBar({ value, label = 'Progression' }: { value: number; l
       accessibilityValue={{ min: 0, max: 100, now: Math.round(safeValue) }}
       style={styles.progressTrack}
     >
-      <View style={[styles.progressValue, { width: `${safeValue}%` }]} />
+      <Animated.View style={[styles.progressValue, { width }]} />
     </View>
   );
 }
@@ -67,6 +89,8 @@ function TactileButton({
     const nextScale = pressed ? theme.motion.pressedScale : 1;
     const nextDepth = pressed ? theme.motion.pressedDepth : 0;
     if (reduceMotion) {
+      scale.stopAnimation();
+      depth.stopAnimation();
       scale.setValue(nextScale);
       depth.setValue(nextDepth);
       return;
