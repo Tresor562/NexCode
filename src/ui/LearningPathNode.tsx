@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Animated, AppState, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Pill } from './components';
 import { theme } from './theme';
@@ -29,6 +29,7 @@ export function LearningPathNode({
   const completionPop = useRef(new Animated.Value(1)).current;
   const previousState = useRef<LearningPathNodeState>(state);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
   const translateY = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
@@ -50,7 +51,14 @@ export function LearningPathNode({
   }, []);
 
   useEffect(() => {
-    if (!isCurrent || reduceMotion) {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      setAppActive(nextState === 'active');
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (!isCurrent || reduceMotion || !appActive) {
       focusPulse.stopAnimation();
       shimmer.stopAnimation();
       focusPulse.setValue(0);
@@ -89,7 +97,7 @@ export function LearningPathNode({
       pulseLoop.stop();
       shimmerLoop.stop();
     };
-  }, [focusPulse, isCurrent, reduceMotion, shimmer]);
+  }, [appActive, focusPulse, isCurrent, reduceMotion, shimmer]);
 
   useEffect(() => {
     const previous = previousState.current;
@@ -97,7 +105,7 @@ export function LearningPathNode({
     const becameDone = previous !== 'done' && state === 'done';
 
     completionPop.stopAnimation();
-    if (!becameDone || reduceMotion) {
+    if (!becameDone || reduceMotion || !appActive) {
       completionPop.setValue(1);
       return;
     }
@@ -111,10 +119,10 @@ export function LearningPathNode({
     });
     animation.start();
     return () => animation.stop();
-  }, [completionPop, reduceMotion, state]);
+  }, [appActive, completionPop, reduceMotion, state]);
 
   const animate = (toValue: number) => {
-    if (reduceMotion) {
+    if (reduceMotion || !appActive) {
       press.stopAnimation();
       press.setValue(toValue);
       return;
@@ -128,6 +136,7 @@ export function LearningPathNode({
   };
 
   const handlePress = () => {
+    if (!appActive) return;
     const feedback = isCurrent
       ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
       : state === 'done'
