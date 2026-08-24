@@ -14,6 +14,7 @@ let snapshot: MotionSnapshot = {
 };
 let listenersActive = false;
 let listenerGeneration = 0;
+let reduceMotionRevision = 0;
 let nativeSubscriptions: NativeSubscription[] = [];
 const listeners = new Set<() => void>();
 
@@ -40,16 +41,27 @@ function startNativeListeners() {
       publish({ appActive: nextState === 'active' });
     }),
     AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
+      // Native events are more current than the asynchronous hydration read
+      // below. Advance a revision so a late Promise cannot overwrite a newer
+      // system preference while this listener generation is still active.
+      reduceMotionRevision += 1;
       publish({ reduceMotion: enabled });
     }),
   ];
 
+  const hydrationRevision = reduceMotionRevision;
   AccessibilityInfo.isReduceMotionEnabled()
     .then((enabled) => {
       // A previous async read can resolve after all subscribers unmount and a
-      // later subscriber starts a fresh listener set. Guard by generation so
-      // that stale accessibility state cannot overwrite a newer native event.
-      if (listenersActive && generation === listenerGeneration) {
+      // later subscriber starts a fresh listener set. It can also resolve after
+      // a newer reduceMotionChanged event in the same generation. Guard both
+      // cases so stale accessibility state never overwrites the latest native
+      // preference.
+      if (
+        listenersActive &&
+        generation === listenerGeneration &&
+        hydrationRevision === reduceMotionRevision
+      ) {
         publish({ reduceMotion: enabled });
       }
     })
