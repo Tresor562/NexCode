@@ -14,7 +14,7 @@
     "audit:curriculum": "node scripts/audit-curriculum.mjs",
     "audit:mastery": "node scripts/audit-mastery-expansion.mjs",
     "audit:bots": "node scripts/audit-bot-completion.mjs",
-    "audit:quality": "node scripts/audit-learning-quality.mjs && node scripts/audit-adaptive-practice.mjs && node scripts/audit-mastery-gates.mjs && node scripts/audit-lab-preview.mjs",
+    "audit:quality": "node scripts/audit-learning-quality.mjs && node scripts/audit-adaptive-practice.mjs && node scripts/audit-mastery-gates.mjs && node scripts/audit-lab-preview.mjs && node scripts/audit-lesson-flow.mjs",
     "audit:product": "node scripts/audit-product-readiness.mjs"
   },
   "dependencies": {
