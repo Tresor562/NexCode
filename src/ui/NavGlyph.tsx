@@ -1,29 +1,54 @@
-import React, { memo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import React, { memo, useEffect, useRef } from 'react';
+import { Animated, StyleSheet, View } from 'react-native';
+import { useMotionPreferences } from './motionPreferences';
 import { theme } from './theme';
 
 export type NavGlyphName = 'home' | 'learn' | 'lab' | 'projects' | 'profile';
 
-function GlyphBox({ children }: { children: React.ReactNode }) {
+function GlyphBox({ children, style }: { children: React.ReactNode; style?: object }) {
   return (
-    <View
+    <Animated.View
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       pointerEvents="none"
-      style={styles.box}
+      style={[styles.box, style]}
     >
       {children}
-    </View>
+    </Animated.View>
   );
 }
 
 export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyphName; active: boolean }) {
+  const { reduceMotion, appActive } = useMotionPreferences();
+  const emphasis = useRef(new Animated.Value(active ? 1 : 0)).current;
   const colorStyle = active ? styles.active : styles.inactive;
+
+  useEffect(() => {
+    emphasis.stopAnimation();
+    const target = active ? 1 : 0;
+    if (reduceMotion || !appActive) {
+      emphasis.setValue(target);
+      return;
+    }
+    Animated.spring(emphasis, {
+      toValue: target,
+      damping: 18,
+      stiffness: 230,
+      mass: 0.65,
+      useNativeDriver: true,
+    }).start();
+    return () => emphasis.stopAnimation();
+  }, [active, appActive, emphasis, reduceMotion]);
+
+  const motionStyle = {
+    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }),
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }],
+  };
 
   if (name === 'home') {
     return (
-      <GlyphBox>
+      <GlyphBox style={motionStyle}>
         <View style={[styles.roofLeft, colorStyle]} />
         <View style={[styles.roofRight, colorStyle]} />
         <View style={[styles.homeBody, colorStyle]} />
@@ -34,7 +59,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'learn') {
     return (
-      <GlyphBox>
+      <GlyphBox style={motionStyle}>
         <View style={[styles.bookLeft, colorStyle]} />
         <View style={[styles.bookRight, colorStyle]} />
         <View style={[styles.bookSpine, active ? styles.spineActive : styles.spineInactive]} />
@@ -44,7 +69,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'lab') {
     return (
-      <GlyphBox>
+      <GlyphBox style={motionStyle}>
         <View style={[styles.chevLeftA, colorStyle]} />
         <View style={[styles.chevLeftB, colorStyle]} />
         <View style={[styles.chevRightA, colorStyle]} />
@@ -56,7 +81,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'projects') {
     return (
-      <GlyphBox>
+      <GlyphBox style={motionStyle}>
         <View style={[styles.folderBack, colorStyle]} />
         <View style={[styles.folderTab, colorStyle]} />
         <View style={[styles.folderFront, colorStyle]} />
@@ -65,7 +90,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
   }
 
   return (
-    <GlyphBox>
+    <GlyphBox style={motionStyle}>
       <View style={[styles.head, colorStyle]} />
       <View style={[styles.shoulders, colorStyle]} />
     </GlyphBox>
