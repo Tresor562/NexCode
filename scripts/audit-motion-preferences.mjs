@@ -8,6 +8,8 @@ const checks = [
   ['foreground state refreshed before subscribe', source.includes("publish({ appActive: AppState.currentState === 'active' })")],
   ['app state listener updates shared snapshot', source.includes("AppState.addEventListener('change'")],
   ['reduce-motion native event updates shared snapshot', source.includes("AccessibilityInfo.addEventListener('reduceMotionChanged'")],
+  ['shared reduced-motion hydration helper', source.includes('function hydrateReduceMotion(generation: number)')],
+  ['reduced-motion preference refreshed on app resume', source.includes('if (appActive) hydrateReduceMotion(generation)')],
   ['late hydration guarded by listener generation', source.includes('generation === listenerGeneration')],
   ['late hydration guarded by native event revision', source.includes('hydrationRevision === reduceMotionRevision')],
   ['native subscriptions removed when unused', source.includes('subscription.remove()')],
