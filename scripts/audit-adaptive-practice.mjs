@@ -128,4 +128,25 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
   assert.equal(session.activities.some((item) => item.lessonId === 'review-grid'), true);
 }
 
-console.log('Adaptive practice audit OK: mastery prerequisite gates, recovery priority, bounded fallback, deferred recovery visibility, new-concept pacing and skill diversification are protected.');
+{
+  const session = planPracticeSession([
+    activity({ courseId: 'web', lessonId: 'repair-legacy-a', mode: 'repair', minutes: 3, skills: [], priority: 150 }),
+    activity({ courseId: 'web', lessonId: 'review-legacy-b', mode: 'review', minutes: 9, skills: [], priority: 140 }),
+    activity({ courseId: 'js', lessonId: 'learn-array', mode: 'learn', minutes: 3, skills: ['array'], priority: 60 }),
+  ], 10);
+  assert.deepEqual(session.activities.map((item) => item.lessonId), ['repair-legacy-a'], 'new learning must stay blocked while an unscoped legacy recovery is still pending');
+  assert.equal(session.deferredRecoveryCount, 1, 'unscoped recovery must be counted explicitly when deferred');
+  assert.match(recommendedSessionMessage(session), /Il restera 1 récupération/);
+}
+
+{
+  const session = planPracticeSession([
+    activity({ courseId: 'web', lessonId: 'repair-legacy-a', mode: 'repair', minutes: 3, skills: [], priority: 150 }),
+    activity({ courseId: 'css', lessonId: 'review-legacy-b', mode: 'review', minutes: 3, skills: [], priority: 140 }),
+    activity({ courseId: 'js', lessonId: 'learn-array', mode: 'learn', minutes: 3, skills: ['array'], priority: 60 }),
+  ], 10);
+  assert.deepEqual(session.activities.map((item) => item.lessonId), ['repair-legacy-a', 'review-legacy-b', 'learn-array'], 'new learning may resume only after every unscoped recovery has been covered');
+  assert.equal(session.deferredRecoveryCount, 0);
+}
+
+console.log('Adaptive practice audit OK: mastery prerequisite gates, recovery priority, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing and skill diversification are protected.');
