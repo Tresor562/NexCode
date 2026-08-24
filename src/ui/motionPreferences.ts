@@ -15,6 +15,7 @@ let snapshot: MotionSnapshot = {
 let listenersActive = false;
 let listenerGeneration = 0;
 let reduceMotionRevision = 0;
+let reduceMotionKnown = false;
 let nativeSubscriptions: NativeSubscription[] = [];
 const listeners = new Set<() => void>();
 
@@ -39,10 +40,19 @@ function hydrateReduceMotion(generation: number) {
         generation === listenerGeneration &&
         hydrationRevision === reduceMotionRevision
       ) {
+        reduceMotionKnown = true;
         publish({ reduceMotion: enabled });
       }
     })
-    .catch(() => undefined);
+    .catch(() => {
+      // Keep motion disabled when the OS preference cannot be read. Accessibility
+      // should fail safe rather than briefly animating for a user who may have
+      // requested reduced motion while no subscriber was mounted.
+      if (listenersActive && generation === listenerGeneration) {
+        reduceMotionKnown = false;
+        publish({ reduceMotion: true });
+      }
+    });
 }
 
 function startNativeListeners() {
@@ -55,6 +65,11 @@ function startNativeListeners() {
   // haptics from a stale foreground state.
   publish({ appActive: AppState.currentState === 'active' });
 
+  // AccessibilityInfo only exposes the current reduced-motion value
+  // asynchronously. If the last native listener lifecycle ended, the cached
+  // value may be stale. Disable motion until the OS confirms the current value.
+  if (!reduceMotionKnown) publish({ reduceMotion: true });
+
   nativeSubscriptions = [
     AppState.addEventListener('change', (nextState) => {
       const appActive = nextState === 'active';
@@ -63,13 +78,18 @@ function startNativeListeners() {
       // suspended. Re-read the system preference every time we return to the
       // foreground, while keeping the same generation/revision race guards used
       // for initial hydration.
-      if (appActive) hydrateReduceMotion(generation);
+      if (appActive) {
+        reduceMotionKnown = false;
+        publish({ reduceMotion: true });
+        hydrateReduceMotion(generation);
+      }
     }),
     AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
       // Native events are more current than asynchronous hydration reads. Advance
       // a revision so a late Promise cannot overwrite a newer system preference
       // while this listener generation is still active.
       reduceMotionRevision += 1;
+      reduceMotionKnown = true;
       publish({ reduceMotion: enabled });
     }),
   ];
@@ -81,6 +101,7 @@ function stopNativeListeners() {
   if (!listenersActive) return;
   listenersActive = false;
   listenerGeneration += 1;
+  reduceMotionKnown = false;
   nativeSubscriptions.forEach((subscription) => subscription.remove());
   nativeSubscriptions = [];
 }
