@@ -64,6 +64,19 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
     };
   }, []);
 
+  useEffect(() => {
+    scale.stopAnimation();
+    scale.setValue(1);
+    setStepIndex(0);
+    setAnswer(null);
+    setSubmitted(false);
+    setRecorded(false);
+    setRecallDraft('');
+    setRecallRevealed(false);
+    setRecallConfidence(null);
+    setTransferDraft('');
+  }, [lesson.id, scale]);
+
   function pulse() {
     if (reduceMotion) {
       scale.stopAnimation();
