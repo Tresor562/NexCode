@@ -5,6 +5,7 @@ import { LaunchScreen } from './LaunchScreen';
 import { AuthScreen } from './AuthScreen';
 import { loadLocalState, saveLocalState } from '../lib/localState';
 import { bindLocalStateOwner, scopeLocalStateForUser } from '../lib/accountScope';
+import { requestPasswordReset } from '../lib/authRecovery';
 import {
   CloudSession,
   isCloudConfigured,
@@ -73,8 +74,21 @@ export default function RootApp() {
     }
   }
 
+  async function recoverPassword(email: string) {
+    await requestPasswordReset(email);
+  }
+
   if (!launched) return <LaunchScreen onDone={finishLaunch} />;
-  if (cloudEnabled && !session) return <AuthScreen busy={authBusy} error={authError} onSubmit={submitAuth} />;
+  if (cloudEnabled && !session) {
+    return (
+      <AuthScreen
+        busy={authBusy}
+        error={authError}
+        onSubmit={submitAuth}
+        onResetPassword={recoverPassword}
+      />
+    );
+  }
   if (hydrating) return <SafeAreaView style={styles.safe}><View style={styles.loading}><ActivityIndicator size="small" color="#8390FF" /><Text style={styles.loadingTitle}>Synchronisation de ton parcours</Text><Text style={styles.loadingMeta}>XP, série, maîtrise et projets sont réunis sur cet appareil.</Text></View></SafeAreaView>;
   return <NexCodeApp />;
 }
