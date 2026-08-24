@@ -35,11 +35,17 @@ export default function RootApp() {
 
   useEffect(() => {
     let active = true;
+    let recoveryRequestGeneration = 0;
 
     const handleRecoveryUrl = async (url: string) => {
+      const generation = ++recoveryRequestGeneration;
       try {
         const recovered = await consumePasswordRecoveryUrl(url);
-        if (!active || !recovered) return;
+        // Deep links can arrive nearly simultaneously (for example the initial
+        // URL plus a foreground Linking event). Only the newest request may
+        // take over the recovery UI; an older network response must never
+        // overwrite a newer verified link or its error state.
+        if (!active || generation !== recoveryRequestGeneration || !recovered) return;
         // A verified recovery link temporarily takes over the foreground flow,
         // but its short-lived credentials are not persisted. If the user
         // cancels or the app restarts before success, the previous durable app
@@ -50,7 +56,7 @@ export default function RootApp() {
         setRecoveryError(undefined);
         setRecoverySession(recovered);
       } catch (error) {
-        if (!active) return;
+        if (!active || generation !== recoveryRequestGeneration) return;
         setRecoveryError(undefined);
         setAuthError(error instanceof Error ? error.message : 'Ce lien de réinitialisation est invalide ou a expiré.');
       }
@@ -65,6 +71,7 @@ export default function RootApp() {
 
     return () => {
       active = false;
+      recoveryRequestGeneration += 1;
       subscription.remove();
     };
   }, []);
