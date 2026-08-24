@@ -32,7 +32,7 @@ for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • OBSERVER','RAPPEL A
 for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Déobfusquer','Console','Preview','importFilesFromPhone','importFolderFromPhone']) {
   if (!lab.includes(token)) throw new Error(`Lab workspace UI missing ${token}`);
 }
-for (const token of ['File.pickFileAsync','pickDirectoryAsync','MAX_FILES_PER_IMPORT','uniquePath']) {
+for (const token of ['File.pickFileAsync','pickDirectoryAsync','MAX_FILES_PER_WORKSPACE','MAX_TOTAL_TEXT_CHARS','uniquePath']) {
   if (!imports.includes(token)) throw new Error(`Phone workspace import missing ${token}`);
 }
 for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','defaultProjectRubric','Revue avant portfolio']) {
@@ -48,4 +48,4 @@ for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','portf
   if (!projectEngine.includes(token)) throw new Error(`Portfolio engine missing ${token}`);
 }
 if (requiredFiles.some((source) => source.includes('TODO UI'))) throw new Error('A product UI contains an unfinished TODO marker');
-console.log('Product readiness audit OK: animated launch, path-first learning, active recall, real XP/NexCoins/streak primitives, step lessons, haptic/audio feedback, phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
+console.log('Product readiness audit OK: animated launch, path-first learning, active recall, real XP/NexCoins/streak primitives, step lessons, haptic/audio feedback, bounded phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
