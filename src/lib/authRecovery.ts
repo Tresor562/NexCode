@@ -15,6 +15,7 @@ type RecoveryPayload = {
 
 const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'nexcode://auth/reset';
 const MAX_RECOVERY_TOKEN_LENGTH = 8192;
+const RECOVERY_FETCH_TIMEOUT_MS = 12_000;
 
 function env(): Env {
   return ((globalThis as typeof globalThis & { process?: { env?: Env } }).process?.env ?? {}) as Env;
@@ -62,6 +63,21 @@ function validRecoveryToken(value: unknown): value is string {
     && !/[\s\u0000-\u001f\u007f]/.test(value);
 }
 
+async function recoveryFetch(input: string, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), RECOVERY_FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error('Le service de compte met trop de temps à répondre. Réessaie dans quelques instants.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function recoveryError(response: Response): Promise<Error> {
   try {
     const payload = (await response.json()) as { msg?: string; message?: string; error_description?: string; error?: string };
@@ -80,7 +96,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
     throw new Error('Entre une adresse email valide.');
   }
 
-  const response = await fetch(`${config.url}/auth/v1/recover`, {
+  const response = await recoveryFetch(`${config.url}/auth/v1/recover`, {
     method: 'POST',
     headers: {
       apikey: config.anonKey,
@@ -89,7 +105,9 @@ export async function requestPasswordReset(email: string): Promise<void> {
     body: JSON.stringify({ email: normalizedEmail, redirect_to: recoveryRedirectUrl() }),
   });
 
-  if (!response.ok) throw await recoveryError(response);
+  // Never surface provider-specific recovery errors here. Different backend
+  // responses must not become an account-enumeration oracle in the sign-in UI.
+  if (!response.ok) throw new Error('Impossible d’envoyer le lien pour le moment. Réessaie dans quelques instants.');
 }
 
 export async function consumePasswordRecoveryUrl(value: string): Promise<CloudSession | null> {
@@ -115,7 +133,7 @@ export async function consumePasswordRecoveryUrl(value: string): Promise<CloudSe
 
   const config = cloudConfig();
   if (!config) throw new Error('Supabase n’est pas encore configuré pour ce build.');
-  const userResponse = await fetch(`${config.url}/auth/v1/user`, {
+  const userResponse = await recoveryFetch(`${config.url}/auth/v1/user`, {
     headers: {
       apikey: config.anonKey,
       Authorization: `Bearer ${payload.access_token}`,
@@ -148,7 +166,7 @@ export async function updatePasswordFromRecoverySession(session: CloudSession, p
   if (!config) throw new Error('Supabase n’est pas encore configuré pour ce build.');
   if (password.length < 6) throw new Error('Ton nouveau mot de passe doit contenir au moins 6 caractères.');
 
-  const response = await fetch(`${config.url}/auth/v1/user`, {
+  const response = await recoveryFetch(`${config.url}/auth/v1/user`, {
     method: 'PUT',
     headers: {
       apikey: config.anonKey,
