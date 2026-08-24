@@ -1,4 +1,4 @@
-import { CloudSession, cloudConfig, saveCloudSession } from './cloudAccount';
+import { CloudSession, cloudConfig } from './cloudAccount';
 
 type Env = Record<string, string | undefined>;
 
@@ -120,14 +120,15 @@ export async function consumePasswordRecoveryUrl(value: string): Promise<CloudSe
     ? expiresAtSeconds * 1000
     : Date.now() + (Number.isFinite(expiresInSeconds) && expiresInSeconds > 0 ? expiresInSeconds : 3600) * 1000;
 
-  const session: CloudSession = {
+  // Recovery credentials are intentionally ephemeral. Persisting them here
+  // would let a crash/restart promote a short-lived password-reset session to
+  // the app's normal authenticated session before the password was changed.
+  return {
     accessToken: payload.access_token,
     refreshToken: payload.refresh_token,
     expiresAt,
     user: { id: user.id, email: user.email },
   };
-  saveCloudSession(session);
-  return session;
 }
 
 export async function updatePasswordFromRecoverySession(session: CloudSession, password: string): Promise<CloudSession> {
@@ -150,10 +151,11 @@ export async function updatePasswordFromRecoverySession(session: CloudSession, p
     throw new Error('La session de récupération ne correspond plus à ce compte. Demande un nouveau lien.');
   }
 
-  const updated: CloudSession = {
+  // The caller decides when this verified session becomes the normal app
+  // session. Keeping persistence outside this recovery helper prevents a
+  // half-finished reset from leaking credentials into startup hydration.
+  return {
     ...session,
     user: { id: session.user.id, email: user.email ?? session.user.email },
   };
-  saveCloudSession(updated);
-  return updated;
 }
