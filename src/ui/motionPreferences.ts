@@ -28,6 +28,11 @@ function startNativeListeners() {
   if (listenersActive) return;
   listenersActive = true;
 
+  // AppState can change while no learning-path node is mounted. Refresh the
+  // snapshot before subscribing so a newly mounted path never resumes motion or
+  // haptics from a stale foreground state.
+  publish({ appActive: AppState.currentState === 'active' });
+
   nativeSubscriptions = [
     AppState.addEventListener('change', (nextState) => {
       publish({ appActive: nextState === 'active' });
