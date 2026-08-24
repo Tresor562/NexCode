@@ -14,6 +14,7 @@ type RecoveryPayload = {
 };
 
 const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'nexcode://auth/reset';
+const MAX_RECOVERY_TOKEN_LENGTH = 8192;
 
 function env(): Env {
   return ((globalThis as typeof globalThis & { process?: { env?: Env } }).process?.env ?? {}) as Env;
@@ -23,6 +24,7 @@ function canonicalRecoveryTarget(value: string): string | undefined {
   try {
     const parsed = new URL(value);
     if (parsed.protocol !== 'https:' && parsed.protocol !== 'nexcode:') return undefined;
+    if (parsed.username || parsed.password) return undefined;
     parsed.search = '';
     parsed.hash = '';
     return parsed.toString();
@@ -51,6 +53,13 @@ function recoveryParams(url: URL): RecoveryPayload {
   const hashValues = new URLSearchParams(hash);
   for (const [key, value] of hashValues.entries()) values.set(key, value);
   return Object.fromEntries(values.entries()) as RecoveryPayload;
+}
+
+function validRecoveryToken(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length >= 16
+    && value.length <= MAX_RECOVERY_TOKEN_LENGTH
+    && !/[\s\u0000-\u001f\u007f]/.test(value);
 }
 
 async function recoveryError(response: Response): Promise<Error> {
@@ -96,8 +105,11 @@ export async function consumePasswordRecoveryUrl(value: string): Promise<CloudSe
   if (payload.error || payload.error_code || payload.error_description) {
     throw new Error(payload.error_description ?? 'Ce lien de réinitialisation est invalide ou a expiré.');
   }
-  if (payload.type && payload.type !== 'recovery') return null;
-  if (!payload.access_token || !payload.refresh_token) {
+  // A normal Supabase auth callback must never be promoted into the password
+  // reset UI simply because it contains otherwise-valid session credentials.
+  // Recovery is a privileged flow, so require the explicit recovery marker.
+  if (payload.type !== 'recovery') return null;
+  if (!validRecoveryToken(payload.access_token) || !validRecoveryToken(payload.refresh_token)) {
     throw new Error('Ce lien de réinitialisation ne contient plus de session valide. Demande un nouveau lien.');
   }
 
