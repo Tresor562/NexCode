@@ -1,6 +1,6 @@
 import { Course, Lesson } from '../data/curriculumCore';
 import { MasteryMap, SkillNode } from './skillGraph';
-import { masterySnapshot, remediationTargets } from './masteryEngine';
+import { evaluateSkillGate, masterySnapshot, remediationTargets } from './masteryEngine';
 
 export type PracticeMode = 'learn' | 'repair' | 'review' | 'interleave' | 'lab' | 'checkpoint';
 
@@ -29,7 +29,7 @@ function lessonPrerequisitesReady(skills: string[], mastery: MasteryMap, graphBy
     const node = graphById.get(skillId);
     if (!node?.prerequisiteIds.length) return true;
     const gate = node.prerequisiteGate ?? 55;
-    return node.prerequisiteIds.every((prerequisiteId) => masterySnapshot(prerequisiteId, mastery, now).effectiveScore >= gate);
+    return evaluateSkillGate(node.prerequisiteIds, mastery, gate, now).passed;
   });
 }
 
