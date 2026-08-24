@@ -1,27 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { shadows, theme } from './theme';
+import { useMotionPreferences } from './motionPreferences';
 
 type CardTone = 'default' | 'primary' | 'success';
 type PillTone = 'neutral' | 'success' | 'primary' | 'warning';
-
-function useReduceMotionPreference() {
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => { if (active) setReduceMotion(enabled); })
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
-
-  return reduceMotion;
-}
 
 export function Card({ children, style, tone = 'default' }: { children: React.ReactNode; style?: ViewStyle | ViewStyle[]; tone?: CardTone }) {
   return <View style={[styles.card, tone === 'primary' && styles.cardPrimary, tone === 'success' && styles.cardSuccess, style]}>{children}</View>;
@@ -33,12 +16,12 @@ export function GlassCard({ children, style }: { children: React.ReactNode; styl
 
 export function ProgressBar({ value, label = 'Progression' }: { value: number; label?: string }) {
   const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
-  const reduceMotion = useReduceMotionPreference();
+  const { reduceMotion, appActive } = useMotionPreferences();
   const animatedValue = useRef(new Animated.Value(safeValue)).current;
 
   useEffect(() => {
     animatedValue.stopAnimation();
-    if (reduceMotion) {
+    if (reduceMotion || !appActive) {
       animatedValue.setValue(safeValue);
       return;
     }
@@ -47,7 +30,8 @@ export function ProgressBar({ value, label = 'Progression' }: { value: number; l
       duration: 260,
       useNativeDriver: false,
     }).start();
-  }, [animatedValue, reduceMotion, safeValue]);
+    return () => animatedValue.stopAnimation();
+  }, [animatedValue, appActive, reduceMotion, safeValue]);
 
   const width = animatedValue.interpolate({
     inputRange: [0, 100],
@@ -83,12 +67,25 @@ function TactileButton({
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const depth = useRef(new Animated.Value(0)).current;
-  const reduceMotion = useReduceMotionPreference();
+  const { reduceMotion, appActive } = useMotionPreferences();
+
+  useEffect(() => {
+    if (appActive && !reduceMotion) return;
+    scale.stopAnimation();
+    depth.stopAnimation();
+    scale.setValue(1);
+    depth.setValue(0);
+  }, [appActive, depth, reduceMotion, scale]);
+
+  useEffect(() => () => {
+    scale.stopAnimation();
+    depth.stopAnimation();
+  }, [depth, scale]);
 
   const animate = (pressed: boolean) => {
     const nextScale = pressed ? theme.motion.pressedScale : 1;
     const nextDepth = pressed ? theme.motion.pressedDepth : 0;
-    if (reduceMotion) {
+    if (reduceMotion || !appActive) {
       scale.stopAnimation();
       depth.stopAnimation();
       scale.setValue(nextScale);
@@ -152,7 +149,7 @@ export function SecondaryButton({ label, onPress, icon }: { label: string; onPre
 }
 
 export function IconButton({ icon, label, onPress, active = false }: { icon: string; label: string; onPress: () => void; active?: boolean }) {
-  const reduceMotion = useReduceMotionPreference();
+  const { reduceMotion, appActive } = useMotionPreferences();
   return (
     <Pressable
       accessibilityRole="button"
@@ -163,7 +160,7 @@ export function IconButton({ icon, label, onPress, active = false }: { icon: str
       style={({ pressed }) => [
         styles.iconButton,
         active && styles.iconButtonActive,
-        pressed && (reduceMotion ? styles.iconPressedReducedMotion : styles.iconPressed),
+        pressed && (reduceMotion || !appActive ? styles.iconPressedReducedMotion : styles.iconPressed),
       ]}
     >
       <Text style={[styles.iconButtonText, active && styles.iconButtonTextActive]}>{icon}</Text>
