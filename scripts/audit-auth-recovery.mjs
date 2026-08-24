@@ -18,6 +18,18 @@ assert(recovery.includes('validRecoveryToken(payload.refresh_token)'), 'recovery
 assert(recovery.includes('/auth/v1/user'), 'recovery token must be verified with Supabase before reset UI');
 assert(!recovery.includes('saveCloudSession('), 'recovery helper must never persist short-lived recovery credentials');
 assert(recovery.includes('user.id !== session.user.id'), 'password update must remain bound to the verified user');
+assert(recovery.includes('RECOVERY_FETCH_TIMEOUT_MS = 12_000'), 'recovery network calls must have a bounded timeout');
+assert(recovery.includes('const controller = new AbortController();'), 'recovery fetches must be abortable');
+assert(recovery.includes('signal: controller.signal'), 'all recovery network calls must share the abort signal');
+assert(recovery.includes('clearTimeout(timeout);'), 'recovery timeout handles must be cleaned up');
+assert((recovery.match(/await recoveryFetch\(/g) ?? []).length === 3, 'request, verification and password update must all use bounded recovery fetches');
+
+const requestStart = recovery.indexOf('export async function requestPasswordReset');
+const consumeStart = recovery.indexOf('export async function consumePasswordRecoveryUrl');
+assert(requestStart >= 0 && consumeStart > requestStart, 'password-reset request section must be present');
+const requestSection = recovery.slice(requestStart, consumeStart);
+assert(!requestSection.includes('recoveryError(response)'), 'password-reset request failures must not expose provider-specific account details');
+assert(requestSection.includes('Impossible d’envoyer le lien pour le moment.'), 'password-reset request failures must remain generic');
 
 const recoveryEffectStart = rootApp.indexOf('useEffect(() => {');
 const hydrationEffectStart = rootApp.indexOf('useEffect(() => {', recoveryEffectStart + 1);
@@ -39,4 +51,4 @@ assert(completion.indexOf('saveCloudSession(updated);') < completion.indexOf('se
 assert(cancellation.includes('const restored = loadCloudSession();'), 'cancel must restore the prior durable session');
 assert(!cancellation.includes('saveCloudSession(null)'), 'cancel must not erase a pre-existing durable session');
 
-console.log('Auth recovery audit OK: callbacks are explicit, bounded, credential-safe, ephemeral and latest-link-wins.');
+console.log('Auth recovery audit OK: callbacks are explicit, bounded, non-enumerating, credential-safe, ephemeral and latest-link-wins.');
