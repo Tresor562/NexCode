@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { StyleSheet, View } from 'react-native';
+import { theme } from './theme';
 
 export type NavGlyphName = 'home' | 'learn' | 'lab' | 'projects' | 'profile';
 
@@ -73,19 +74,19 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
 const styles = StyleSheet.create({
   box: { width: 28, height: 28, position: 'relative' },
-  active: { borderColor: '#B9C2FF', backgroundColor: '#B9C2FF' },
-  inactive: { borderColor: '#68738D', backgroundColor: '#68738D' },
+  active: { borderColor: theme.colors.primaryBright, backgroundColor: theme.colors.primaryBright },
+  inactive: { borderColor: theme.colors.textMuted, backgroundColor: theme.colors.textMuted },
   roofLeft: { position: 'absolute', width: 14, height: 3, borderRadius: 2, transform: [{ rotate: '-40deg' }], left: 2, top: 7 },
   roofRight: { position: 'absolute', width: 14, height: 3, borderRadius: 2, transform: [{ rotate: '40deg' }], right: 2, top: 7 },
   homeBody: { position: 'absolute', left: 6, right: 6, bottom: 4, height: 13, borderRadius: 3 },
   homeDoor: { position: 'absolute', width: 5, height: 8, bottom: 4, left: 12, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
-  doorActive: { backgroundColor: '#151B2B' },
-  doorInactive: { backgroundColor: '#111725' },
+  doorActive: { backgroundColor: theme.colors.surfaceRaised },
+  doorInactive: { backgroundColor: theme.colors.code },
   bookLeft: { position: 'absolute', left: 3, top: 5, width: 10, height: 18, borderRadius: 3, borderWidth: 2, backgroundColor: 'transparent' },
   bookRight: { position: 'absolute', right: 3, top: 5, width: 10, height: 18, borderRadius: 3, borderWidth: 2, backgroundColor: 'transparent' },
   bookSpine: { position: 'absolute', left: 13, top: 6, width: 2, height: 16 },
-  spineActive: { backgroundColor: '#B9C2FF' },
-  spineInactive: { backgroundColor: '#68738D' },
+  spineActive: { backgroundColor: theme.colors.primaryBright },
+  spineInactive: { backgroundColor: theme.colors.textMuted },
   chevLeftA: { position: 'absolute', left: 3, top: 8, width: 10, height: 3, borderRadius: 2, transform: [{ rotate: '-38deg' }] },
   chevLeftB: { position: 'absolute', left: 3, top: 16, width: 10, height: 3, borderRadius: 2, transform: [{ rotate: '38deg' }] },
   chevRightA: { position: 'absolute', right: 3, top: 8, width: 10, height: 3, borderRadius: 2, transform: [{ rotate: '38deg' }] },
