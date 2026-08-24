@@ -9,9 +9,14 @@ const checks = [
   ['app state listener updates shared snapshot', source.includes("AppState.addEventListener('change'")],
   ['reduce-motion native event updates shared snapshot', source.includes("AccessibilityInfo.addEventListener('reduceMotionChanged'")],
   ['shared reduced-motion hydration helper', source.includes('function hydrateReduceMotion(generation: number)')],
-  ['reduced-motion preference refreshed on app resume', source.includes('if (appActive) hydrateReduceMotion(generation)')],
+  ['reduced-motion preference refreshed on app resume', source.includes('hydrateReduceMotion(generation)')],
   ['late hydration guarded by listener generation', source.includes('generation === listenerGeneration')],
   ['late hydration guarded by native event revision', source.includes('hydrationRevision === reduceMotionRevision')],
+  ['unknown reduced-motion state fails safe', source.includes('if (!reduceMotionKnown) publish({ reduceMotion: true })')],
+  ['app resume disables motion until OS refresh', source.includes('reduceMotionKnown = false;\n        publish({ reduceMotion: true });\n        hydrateReduceMotion(generation);')],
+  ['failed OS preference read keeps motion disabled', source.includes('.catch(() => {') && source.includes('publish({ reduceMotion: true })')],
+  ['native event marks preference known', source.includes('reduceMotionKnown = true;\n      publish({ reduceMotion: enabled });')],
+  ['listener teardown invalidates cached preference', source.includes('reduceMotionKnown = false;\n  nativeSubscriptions.forEach')],
   ['native subscriptions removed when unused', source.includes('subscription.remove()')],
 ];
 
