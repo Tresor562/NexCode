@@ -40,8 +40,10 @@ export default function RootApp() {
       try {
         const recovered = await consumePasswordRecoveryUrl(url);
         if (!active || !recovered) return;
-        // A verified recovery link is an explicit account transition. Stop any
-        // previous learner hydration before exposing the password reset session.
+        // A verified recovery link temporarily takes over the foreground flow,
+        // but its short-lived credentials are not persisted. If the user
+        // cancels or the app restarts before success, the previous durable app
+        // session (if any) remains the only session eligible for hydration.
         setSession(null);
         setHydrating(false);
         setAuthError(undefined);
@@ -126,6 +128,9 @@ export default function RootApp() {
     setRecoveryError(undefined);
     try {
       const updated = await updatePasswordFromRecoverySession(recoverySession, password);
+      // Promote recovery credentials to the normal app session only after the
+      // password mutation succeeds and Supabase confirms the same user.
+      saveCloudSession(updated);
       setRecoverySession(null);
       setSession(updated);
     } catch (error) {
@@ -137,11 +142,13 @@ export default function RootApp() {
 
   function cancelPasswordReset() {
     if (recoveryBusy) return;
-    // Recovery sessions are short-lived credentials created only to change the
-    // password. Do not keep one as an authenticated app session after cancel.
-    saveCloudSession(null);
+    // Recovery credentials were never persisted. Restore the durable session
+    // that existed before the recovery flow, if one is still available, rather
+    // than signing the learner out or promoting a temporary recovery token.
+    const restored = loadCloudSession();
     setRecoverySession(null);
-    setSession(null);
+    setSession(restored);
+    setHydrating(cloudEnabled && Boolean(restored));
     setRecoveryError(undefined);
     setAuthError(undefined);
   }
