@@ -13,6 +13,7 @@ let snapshot: MotionSnapshot = {
   appActive: AppState.currentState === 'active',
 };
 let listenersActive = false;
+let listenerGeneration = 0;
 let nativeSubscriptions: NativeSubscription[] = [];
 const listeners = new Set<() => void>();
 
@@ -27,6 +28,7 @@ function publish(next: Partial<MotionSnapshot>) {
 function startNativeListeners() {
   if (listenersActive) return;
   listenersActive = true;
+  const generation = ++listenerGeneration;
 
   // AppState can change while no learning-path node is mounted. Refresh the
   // snapshot before subscribing so a newly mounted path never resumes motion or
@@ -44,7 +46,12 @@ function startNativeListeners() {
 
   AccessibilityInfo.isReduceMotionEnabled()
     .then((enabled) => {
-      if (listenersActive) publish({ reduceMotion: enabled });
+      // A previous async read can resolve after all subscribers unmount and a
+      // later subscriber starts a fresh listener set. Guard by generation so
+      // that stale accessibility state cannot overwrite a newer native event.
+      if (listenersActive && generation === listenerGeneration) {
+        publish({ reduceMotion: enabled });
+      }
     })
     .catch(() => undefined);
 }
@@ -52,6 +59,7 @@ function startNativeListeners() {
 function stopNativeListeners() {
   if (!listenersActive) return;
   listenersActive = false;
+  listenerGeneration += 1;
   nativeSubscriptions.forEach((subscription) => subscription.remove());
   nativeSubscriptions = [];
 }
