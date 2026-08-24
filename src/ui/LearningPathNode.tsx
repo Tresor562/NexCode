@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, AppState, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Pill } from './components';
+import { useMotionPreferences } from './motionPreferences';
 import { theme } from './theme';
 
 export type LearningPathNodeState = 'done' | 'current' | 'available' | 'locked';
@@ -28,8 +29,7 @@ export function LearningPathNode({
   const shimmer = useRef(new Animated.Value(0)).current;
   const completionPop = useRef(new Animated.Value(1)).current;
   const previousState = useRef<LearningPathNodeState>(state);
-  const [reduceMotion, setReduceMotion] = useState(false);
-  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const { reduceMotion, appActive } = useMotionPreferences();
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
   const translateY = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
@@ -37,25 +37,6 @@ export function LearningPathNode({
   const ringScale = focusPulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.2] });
   const ringOpacity = focusPulse.interpolate({ inputRange: [0, 0.45, 1], outputRange: [0.16, 0.34, 0] });
   const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-54, 70] });
-
-  useEffect(() => {
-    let mounted = true;
-    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (mounted) setReduceMotion(enabled);
-    }).catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => {
-      mounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      setAppActive(nextState === 'active');
-    });
-    return () => subscription.remove();
-  }, []);
 
   useEffect(() => {
     if (!isCurrent || reduceMotion || !appActive) {
