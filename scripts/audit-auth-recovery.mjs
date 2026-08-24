@@ -10,7 +10,11 @@ function assert(condition, message) {
 }
 
 assert(recovery.includes("const DEFAULT_PASSWORD_RESET_REDIRECT_URL = 'nexcode://auth/reset'"), 'native recovery target must stay explicit');
-assert(recovery.includes("payload.type !== 'recovery'"), 'non-recovery callbacks must be rejected');
+assert(recovery.includes("if (parsed.username || parsed.password) return undefined;"), 'recovery redirect targets must reject embedded credentials');
+assert(recovery.includes("if (payload.type !== 'recovery') return null;"), 'only explicit recovery callbacks may enter the reset flow');
+assert(recovery.includes('MAX_RECOVERY_TOKEN_LENGTH'), 'recovery callback tokens must have a bounded length');
+assert(recovery.includes('validRecoveryToken(payload.access_token)'), 'recovery access token must pass local shape validation');
+assert(recovery.includes('validRecoveryToken(payload.refresh_token)'), 'recovery refresh token must pass local shape validation');
 assert(recovery.includes('/auth/v1/user'), 'recovery token must be verified with Supabase before reset UI');
 assert(!recovery.includes('saveCloudSession('), 'recovery helper must never persist short-lived recovery credentials');
 assert(recovery.includes('user.id !== session.user.id'), 'password update must remain bound to the verified user');
@@ -35,4 +39,4 @@ assert(completion.indexOf('saveCloudSession(updated);') < completion.indexOf('se
 assert(cancellation.includes('const restored = loadCloudSession();'), 'cancel must restore the prior durable session');
 assert(!cancellation.includes('saveCloudSession(null)'), 'cancel must not erase a pre-existing durable session');
 
-console.log('Auth recovery audit OK: recovery credentials stay ephemeral and only the latest deep link may take over the reset flow.');
+console.log('Auth recovery audit OK: callbacks are explicit, bounded, credential-safe, ephemeral and latest-link-wins.');
