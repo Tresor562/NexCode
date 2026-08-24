@@ -26,7 +26,8 @@ export function LearningPathNode({
   const press = useRef(new Animated.Value(0)).current;
   const focusPulse = useRef(new Animated.Value(0)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
-  const completionPop = useRef(new Animated.Value(state === 'done' ? 0.88 : 1)).current;
+  const completionPop = useRef(new Animated.Value(1)).current;
+  const previousState = useRef<LearningPathNodeState>(state);
   const [reduceMotion, setReduceMotion] = useState(false);
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
@@ -91,19 +92,25 @@ export function LearningPathNode({
   }, [focusPulse, isCurrent, reduceMotion, shimmer]);
 
   useEffect(() => {
+    const previous = previousState.current;
+    previousState.current = state;
+    const becameDone = previous !== 'done' && state === 'done';
+
     completionPop.stopAnimation();
-    if (state !== 'done' || reduceMotion) {
+    if (!becameDone || reduceMotion) {
       completionPop.setValue(1);
       return;
     }
 
     completionPop.setValue(0.88);
-    Animated.spring(completionPop, {
+    const animation = Animated.spring(completionPop, {
       toValue: 1,
       useNativeDriver: true,
       speed: 20,
       bounciness: 8,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [completionPop, reduceMotion, state]);
 
   const animate = (toValue: number) => {
