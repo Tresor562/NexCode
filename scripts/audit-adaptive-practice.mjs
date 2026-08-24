@@ -13,6 +13,8 @@ const compiled = ts.transpileModule(source, {
   fileName: 'adaptivePractice.ts',
 }).outputText;
 
+let gatePasses = true;
+let lastGateRequired = null;
 const exports = {};
 const module = { exports };
 const requireStub = (id) => {
@@ -20,14 +22,26 @@ const requireStub = (id) => {
     return {
       masterySnapshot: () => ({ effectiveScore: 0, needsReview: false, recurringErrors: [] }),
       remediationTargets: () => [],
+      evaluateSkillGate: (_skillIds, _mastery, required) => {
+        lastGateRequired = required;
+        return {
+          passed: gatePasses,
+          score: gatePasses ? required : Math.max(0, required - 1),
+          required,
+          missingSkills: gatePasses ? [] : ['prerequisite'],
+          weakSkills: [],
+          missingIndependentEvidence: [],
+        };
+      },
     };
   }
   return {};
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { planPracticeSession, recommendedSessionMessage } = module.exports;
+const { buildAdaptivePool, planPracticeSession, recommendedSessionMessage } = module.exports;
 
+assert.equal(typeof buildAdaptivePool, 'function', 'buildAdaptivePool must stay exported');
 assert.equal(typeof planPracticeSession, 'function', 'planPracticeSession must stay exported');
 assert.equal(typeof recommendedSessionMessage, 'function', 'recommendedSessionMessage must stay exported');
 
@@ -40,6 +54,28 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
   estimatedMinutes: minutes,
   skillIds: skills,
 });
+
+{
+  const course = {
+    id: 'javascript',
+    starterLessons: [
+      { id: 'arrays-next', skillIds: ['arrays'], durationMin: 5, activityKind: 'learn' },
+    ],
+  };
+  const graph = [
+    { id: 'arrays', prerequisiteIds: ['variables'], prerequisiteGate: 55 },
+  ];
+
+  gatePasses = false;
+  lastGateRequired = null;
+  const blockedPool = buildAdaptivePool([course], graph, {}, []);
+  assert.equal(blockedPool.length, 0, 'adaptive recommendations must not bypass an unmet mastery prerequisite gate');
+  assert.equal(lastGateRequired, 55, 'the skill-specific prerequisite gate must be forwarded to mastery evaluation');
+
+  gatePasses = true;
+  const readyPool = buildAdaptivePool([course], graph, {}, []);
+  assert.equal(readyPool.some((item) => item.lessonId === 'arrays-next'), true, 'the lesson should become recommendable once the mastery gate passes');
+}
 
 {
   const session = planPracticeSession([
@@ -92,4 +128,4 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
   assert.equal(session.activities.some((item) => item.lessonId === 'review-grid'), true);
 }
 
-console.log('Adaptive practice audit OK: recovery priority, bounded fallback, deferred recovery visibility, new-concept pacing and skill diversification are protected.');
+console.log('Adaptive practice audit OK: mastery prerequisite gates, recovery priority, bounded fallback, deferred recovery visibility, new-concept pacing and skill diversification are protected.');
