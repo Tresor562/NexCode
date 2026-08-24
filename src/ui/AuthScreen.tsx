@@ -91,10 +91,12 @@ export function AuthScreen({
   busy = false,
   error,
   onSubmit,
+  onResetPassword,
 }: {
   busy?: boolean;
   error?: string;
   onSubmit: (payload: { mode: Mode; email: string; password: string; displayName?: string }) => Promise<void> | void;
+  onResetPassword?: (email: string) => Promise<void> | void;
 }) {
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
@@ -102,6 +104,9 @@ export function AuthScreen({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState<string | undefined>();
+  const [resetFailure, setResetFailure] = useState<string | undefined>();
 
   const normalizedEmail = email.trim().toLowerCase();
   const hasEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
@@ -109,6 +114,7 @@ export function AuthScreen({
   const hasName = displayName.trim().length >= 2;
   const passwordsMatch = mode === 'signin' || (confirmPassword.length > 0 && confirmPassword === password);
   const valid = hasEmail && hasPassword && passwordsMatch && (mode === 'signin' || hasName);
+  const authLocked = busy || resetBusy;
 
   const helper = useMemo(() => {
     if (!email && !password && mode === 'signin') return 'Reprends exactement là où tu t’étais arrêté.';
@@ -123,15 +129,19 @@ export function AuthScreen({
   }, [confirmPassword.length, displayName.length, email, hasEmail, hasName, hasPassword, mode, password.length, passwordsMatch]);
 
   const switchMode = (nextMode: Mode) => {
-    if (nextMode === mode || busy) return;
+    if (nextMode === mode || authLocked) return;
     Haptics.selectionAsync().catch(() => undefined);
     setMode(nextMode);
     setConfirmPassword('');
+    setResetNotice(undefined);
+    setResetFailure(undefined);
   };
 
   const submit = () => {
-    if (!valid || busy) return;
+    if (!valid || authLocked) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    setResetNotice(undefined);
+    setResetFailure(undefined);
     onSubmit({
       mode,
       email: normalizedEmail,
@@ -139,6 +149,32 @@ export function AuthScreen({
       displayName: displayName.trim() || undefined,
     });
   };
+
+  const recoverPassword = async () => {
+    if (!onResetPassword || resetBusy || busy) return;
+    setResetNotice(undefined);
+    setResetFailure(undefined);
+    if (!hasEmail) {
+      setResetFailure('Entre d’abord l’adresse email de ton compte NexCode.');
+      return;
+    }
+
+    setResetBusy(true);
+    Haptics.selectionAsync().catch(() => undefined);
+    try {
+      await onResetPassword(normalizedEmail);
+      // Keep this message deliberately non-enumerating: it must not reveal whether
+      // an email address is registered in Supabase.
+      setResetNotice('Si un compte correspond à cette adresse, un lien de réinitialisation vient d’être envoyé. Vérifie aussi les spams.');
+    } catch (resetError) {
+      setResetFailure(resetError instanceof Error ? resetError.message : 'Impossible d’envoyer le lien pour le moment. Réessaie dans quelques instants.');
+    } finally {
+      setResetBusy(false);
+    }
+  };
+
+  const visibleMessage = resetFailure || resetNotice || error || helper;
+  const visibleError = Boolean(resetFailure || error);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -179,7 +215,7 @@ export function AuthScreen({
               <Pressable
                 onPress={() => switchMode('signin')}
                 accessibilityRole="tab"
-                accessibilityState={{ selected: mode === 'signin' }}
+                accessibilityState={{ selected: mode === 'signin', disabled: authLocked }}
                 style={[styles.switchButton, mode === 'signin' && styles.switchActive]}
               >
                 <Text style={[styles.switchText, mode === 'signin' && styles.switchTextActive]}>Connexion</Text>
@@ -187,7 +223,7 @@ export function AuthScreen({
               <Pressable
                 onPress={() => switchMode('signup')}
                 accessibilityRole="tab"
-                accessibilityState={{ selected: mode === 'signup' }}
+                accessibilityState={{ selected: mode === 'signup', disabled: authLocked }}
                 style={[styles.switchButton, mode === 'signup' && styles.switchActive]}
               >
                 <Text style={[styles.switchText, mode === 'signup' && styles.switchTextActive]}>Créer un compte</Text>
@@ -210,7 +246,11 @@ export function AuthScreen({
             <AuthField
               label="Email"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(value) => {
+                setEmail(value);
+                setResetNotice(undefined);
+                setResetFailure(undefined);
+              }}
               placeholder="toi@exemple.com"
               keyboardType="email-address"
               autoComplete="email"
@@ -237,6 +277,24 @@ export function AuthScreen({
               }}
             />
 
+            {mode === 'signin' && onResetPassword ? (
+              <View style={styles.recoveryRow}>
+                <Pressable
+                  onPress={recoverPassword}
+                  disabled={authLocked}
+                  accessibilityRole="button"
+                  accessibilityLabel="Réinitialiser le mot de passe"
+                  accessibilityHint="Envoie un lien de réinitialisation à l’adresse email saisie"
+                  accessibilityState={{ disabled: authLocked, busy: resetBusy }}
+                  hitSlop={10}
+                  style={({ pressed }) => [styles.recoveryButton, pressed && !authLocked && styles.recoveryButtonPressed]}
+                >
+                  {resetBusy ? <ActivityIndicator color={theme.colors.primary} size="small" /> : null}
+                  <Text style={styles.recoveryText}>{resetBusy ? 'Envoi du lien…' : 'Mot de passe oublié ?'}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {mode === 'signup' ? (
               <AuthField
                 label="Confirmer le mot de passe"
@@ -251,25 +309,25 @@ export function AuthScreen({
               />
             ) : null}
 
-            <View style={[styles.helperCard, error ? styles.helperCardError : null]}>
-              <View style={[styles.helperDot, error ? styles.helperDotError : null]} />
+            <View style={[styles.helperCard, visibleError ? styles.helperCardError : null, resetNotice ? styles.helperCardSuccess : null]}>
+              <View style={[styles.helperDot, visibleError ? styles.helperDotError : null, resetNotice ? styles.helperDotSuccess : null]} />
               <Text
-                style={[styles.helperText, error ? styles.errorText : null]}
-                accessibilityLiveRegion={error ? 'assertive' : 'polite'}
+                style={[styles.helperText, visibleError ? styles.errorText : null, resetNotice ? styles.successText : null]}
+                accessibilityLiveRegion={visibleError ? 'assertive' : 'polite'}
               >
-                {error || helper}
+                {visibleMessage}
               </Text>
             </View>
 
             <Pressable
-              disabled={!valid || busy}
+              disabled={!valid || authLocked}
               onPress={submit}
               accessibilityRole="button"
-              accessibilityState={{ disabled: !valid || busy, busy }}
+              accessibilityState={{ disabled: !valid || authLocked, busy }}
               style={({ pressed }) => [
                 styles.primaryDepth,
-                (!valid || busy) && styles.primaryDisabled,
-                pressed && valid && !busy && styles.primaryDepthPressed,
+                (!valid || authLocked) && styles.primaryDisabled,
+                pressed && valid && !authLocked && styles.primaryDepthPressed,
               ]}
             >
               <View style={styles.primaryFace}>
@@ -361,6 +419,10 @@ const styles = StyleSheet.create({
   inputAction: { minHeight: 40, paddingHorizontal: 14, justifyContent: 'center' },
   inputActionPressed: { opacity: .65 },
   inputActionText: { color: theme.colors.primary, fontSize: 11, fontWeight: '900' },
+  recoveryRow: { alignItems: 'flex-end', marginTop: -4, marginBottom: 10 },
+  recoveryButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, paddingHorizontal: 4 },
+  recoveryButtonPressed: { opacity: .65 },
+  recoveryText: { color: theme.colors.primary, fontSize: 11.5, fontWeight: '900' },
   helperCard: {
     minHeight: 42,
     borderRadius: 14,
@@ -374,10 +436,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   helperCardError: { backgroundColor: 'rgba(255,120,138,.055)', borderColor: 'rgba(255,120,138,.18)' },
+  helperCardSuccess: { backgroundColor: 'rgba(100,230,171,.055)', borderColor: 'rgba(100,230,171,.18)' },
   helperDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.primary, marginRight: 9 },
   helperDotError: { backgroundColor: theme.colors.danger },
+  helperDotSuccess: { backgroundColor: '#64E6AB' },
   helperText: { flex: 1, color: theme.colors.textMuted, fontSize: 11, lineHeight: 16 },
   errorText: { color: '#FF9AA7' },
+  successText: { color: '#8DE9BC' },
   primaryDepth: {
     minHeight: 61,
     borderRadius: 19,
