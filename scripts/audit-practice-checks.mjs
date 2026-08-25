@@ -39,9 +39,13 @@ assert.equal(passes('JavaScript', 'const sample = `console.log(fake)`;'), false,
 
 assert.equal(passes('Python', 'def total():\n    return 4'), true, 'Python function + indented return should pass');
 assert.equal(passes('Python', 'async def total():\n    return 4'), true, 'async Python functions should pass');
+assert.equal(passes('Python', 'def total():\n    if True:\n        return 4'), true, 'returns nested in normal control flow should count for the function');
 assert.equal(passes('Python', '# def total():\n#     return 4'), false, 'comment-only Python must fail');
 assert.equal(passes('Python', 'def total():\n    """return 4"""\n    pass'), false, 'return text inside a docstring must not satisfy the function check');
 assert.equal(passes('Python', 'note = "def total():\\n    return 4"'), false, 'Python code embedded only in a string must fail');
+assert.equal(passes('Python', 'def total():\n    pass\n\nif True:\n    return_value = 4'), false, 'a return-like statement outside the function body must not satisfy the function check');
+assert.equal(passes('Python', 'def outer():\n    def inner():\n        return 4\n    pass'), false, 'a return that belongs only to a nested function must not validate the outer function');
+assert.equal(passes('Python', 'class Result:\n    def value(self):\n        return 4'), true, 'methods with a return should still count as valid function practice');
 
 assert.equal(passes('SQL', 'SELECT id FROM users;'), true, 'basic SELECT should pass');
 assert.equal(passes('SQL', 'WITH active AS (SELECT id FROM users) SELECT id FROM active;'), true, 'CTE SELECT queries should pass');
@@ -52,4 +56,4 @@ assert.equal(passes('SQL', "SELECT 'it''s safe' AS label FROM users;"), true, 'e
 
 assert.match(checkPractice('JavaScript', '   '), /Écris une réponse/i, 'blank practice should keep explicit feedback');
 
-console.log('Practice checks audit OK: fake code, comment-only CSS and scripted markup are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
+console.log('Practice checks audit OK: fake code, comment-only CSS, scripted markup and out-of-scope Python returns are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
