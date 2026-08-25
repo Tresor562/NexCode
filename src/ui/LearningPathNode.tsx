@@ -7,6 +7,9 @@ import { theme } from './theme';
 
 export type LearningPathNodeState = 'done' | 'current' | 'available' | 'locked';
 
+const AMBIENT_PULSE_ITERATIONS = 3;
+const AMBIENT_SHIMMER_ITERATIONS = 2;
+
 export function LearningPathNode({
   title,
   meta,
@@ -47,6 +50,9 @@ export function LearningPathNode({
       return;
     }
 
+    // Give the recommended node a premium entrance cue without leaving an
+    // infinite animation running for the entire time the learner studies the
+    // screen. The static current-state treatment remains visible afterwards.
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(focusPulse, {
@@ -57,6 +63,7 @@ export function LearningPathNode({
         }),
         Animated.timing(focusPulse, { toValue: 0, duration: 0, useNativeDriver: true }),
       ]),
+      { iterations: AMBIENT_PULSE_ITERATIONS },
     );
     const shimmerLoop = Animated.loop(
       Animated.sequence([
@@ -70,6 +77,7 @@ export function LearningPathNode({
         Animated.timing(shimmer, { toValue: 0, duration: 0, useNativeDriver: true }),
         Animated.delay(1100),
       ]),
+      { iterations: AMBIENT_SHIMMER_ITERATIONS },
     );
 
     pulseLoop.start();
@@ -102,12 +110,15 @@ export function LearningPathNode({
     return () => animation.stop();
   }, [appActive, completionPop, reduceMotion, state]);
 
+  useEffect(() => () => press.stopAnimation(), [press]);
+
   const animate = (toValue: number) => {
     if (reduceMotion || !appActive) {
       press.stopAnimation();
       press.setValue(toValue);
       return;
     }
+    press.stopAnimation();
     Animated.spring(press, {
       toValue,
       useNativeDriver: true,
