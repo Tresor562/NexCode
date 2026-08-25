@@ -1,0 +1,48 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+const file = path.resolve('src/ui/LearningPathNode.tsx');
+const source = fs.readFileSync(file, 'utf8');
+
+const requireSnippet = (snippet, message) => {
+  if (!source.includes(snippet)) throw new Error(message);
+};
+
+const forbidPattern = (pattern, message) => {
+  if (pattern.test(source)) throw new Error(message);
+};
+
+requireSnippet("import { useMotionPreferences } from './motionPreferences';", 'Learning path nodes must use the shared motion lifecycle.');
+requireSnippet("import { theme } from './theme';", 'Learning path nodes must use shared design tokens.');
+requireSnippet('const AMBIENT_PULSE_ITERATIONS = 3;', 'Recommended-node pulse must stay bounded.');
+requireSnippet('const AMBIENT_SHIMMER_ITERATIONS = 2;', 'Recommended-node shimmer must stay bounded.');
+requireSnippet('if (!isCurrent || reduceMotion || !appActive)', 'Ambient motion must stop for reduced motion and background state.');
+requireSnippet("const becameDone = previous !== 'done' && state === 'done';", 'Completion motion must only run on a real state transition.');
+requireSnippet("if (!appActive) return;", 'Haptic feedback must not fire while the app is inactive.');
+requireSnippet('accessibilityState={{ disabled, selected: isCurrent }}', 'Learning path node state must remain exposed to assistive technology.');
+requireSnippet("disabled ? 'Termine les étapes précédentes pour débloquer cette activité.'", 'Locked nodes must retain a useful accessibility hint.');
+requireSnippet('hitSlop={8}', 'Learning path touch targets must retain their expanded hit area.');
+
+const tokenUsages = [
+  'theme.colors.primary',
+  'theme.colors.primaryBright',
+  'theme.colors.primarySoft',
+  'theme.colors.primaryGlass',
+  'theme.colors.surfaceRaised',
+  'theme.colors.surfaceGlass',
+  'theme.colors.surfaceGlassStrong',
+  'theme.colors.borderStrong',
+  'theme.colors.borderGlass',
+  'theme.colors.success',
+  'theme.colors.successSoft',
+  'theme.colors.text',
+  'theme.colors.textSecondary',
+  'theme.colors.textMuted',
+];
+for (const token of tokenUsages) requireSnippet(token, `Learning path states must keep using shared token ${token}.`);
+
+// The shimmer highlight may stay a deliberately translucent white overlay, but
+// semantic state colors must not regress back to standalone hex literals.
+forbidPattern(/#[0-9A-Fa-f]{3,8}/, 'Learning path state colors must come from the design system, not hard-coded hex values.');
+
+console.log('Learning path node audit OK: bounded motion, shared lifecycle, accessibility, haptics, and tokenized semantic states.');
