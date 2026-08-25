@@ -23,8 +23,12 @@ const passes = (language, code) => checkPractice(language, code).startsWith('✓
 
 assert.equal(passes('HTML/CSS', '<main>Hello</main><style>main { color: red; }</style>'), true, 'real HTML + CSS should pass');
 assert.equal(passes('HTML/CSS', '<button style="color: red">Go</button>'), true, 'inline CSS should pass');
+assert.equal(passes('HTML/CSS', '<main>Hello</main><style>:root { --accent: #7c3aed; }</style>'), true, 'CSS custom properties should count as real declarations');
 assert.equal(passes('HTML/CSS', '<!-- <main style="color:red">fake</main> -->'), false, 'HTML comments must not satisfy practice checks');
 assert.equal(passes('HTML/CSS', '<main>Hello</main><script>const fake = { color: "red" };</script>'), false, 'JavaScript object syntax must not be mistaken for CSS');
+assert.equal(passes('HTML/CSS', '<main>Hello</main><style>/* main { color: red; } */</style>'), false, 'comment-only CSS blocks must not satisfy practice checks');
+assert.equal(passes('HTML/CSS', '<main style="/* color: red; */">Hello</main>'), false, 'comment-only inline CSS must not satisfy practice checks');
+assert.equal(passes('HTML/CSS', '<script>const fake = "<main>Hello</main>";</script><style>main { color: red; }</style>'), false, 'markup that only exists inside script text must not satisfy practice checks');
 
 assert.equal(passes('JavaScript', 'const total = 2 + 2;\nconsole.log(total);'), true, 'real JavaScript declaration + output should pass');
 assert.equal(passes('JavaScript', '// const total = 4; console.log(total);'), false, 'comment-only JavaScript must fail');
@@ -48,4 +52,4 @@ assert.equal(passes('SQL', "SELECT 'it''s safe' AS label FROM users;"), true, 'e
 
 assert.match(checkPractice('JavaScript', '   '), /Écris une réponse/i, 'blank practice should keep explicit feedback');
 
-console.log('Practice checks audit OK: comments and quoted fake code are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
+console.log('Practice checks audit OK: fake code, comment-only CSS and scripted markup are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
