@@ -5,7 +5,7 @@ import { theme } from './theme';
 
 export type NavGlyphName = 'home' | 'learn' | 'lab' | 'projects' | 'profile';
 
-function GlyphBox({ children, style }: { children: React.ReactNode; style?: object }) {
+function GlyphBox({ children, style, haloStyle }: { children: React.ReactNode; style?: object; haloStyle?: object }) {
   return (
     <Animated.View
       accessible={false}
@@ -14,6 +14,7 @@ function GlyphBox({ children, style }: { children: React.ReactNode; style?: obje
       pointerEvents="none"
       style={[styles.box, style]}
     >
+      <Animated.View pointerEvents="none" style={[styles.activeHalo, haloStyle]} />
       {children}
     </Animated.View>
   );
@@ -45,10 +46,14 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
     opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }),
     transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }],
   };
+  const haloStyle = {
+    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) }],
+  };
 
   if (name === 'home') {
     return (
-      <GlyphBox style={motionStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle}>
         <View style={[styles.roofLeft, colorStyle]} />
         <View style={[styles.roofRight, colorStyle]} />
         <View style={[styles.homeBody, colorStyle]} />
@@ -59,7 +64,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'learn') {
     return (
-      <GlyphBox style={motionStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle}>
         <View style={[styles.bookLeft, colorStyle]} />
         <View style={[styles.bookRight, colorStyle]} />
         <View style={[styles.bookSpine, active ? styles.spineActive : styles.spineInactive]} />
@@ -69,7 +74,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'lab') {
     return (
-      <GlyphBox style={motionStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle}>
         <View style={[styles.chevLeftA, colorStyle]} />
         <View style={[styles.chevLeftB, colorStyle]} />
         <View style={[styles.chevRightA, colorStyle]} />
@@ -81,7 +86,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'projects') {
     return (
-      <GlyphBox style={motionStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle}>
         <View style={[styles.folderBack, colorStyle]} />
         <View style={[styles.folderTab, colorStyle]} />
         <View style={[styles.folderFront, colorStyle]} />
@@ -90,7 +95,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
   }
 
   return (
-    <GlyphBox style={motionStyle}>
+    <GlyphBox style={motionStyle} haloStyle={haloStyle}>
       <View style={[styles.head, colorStyle]} />
       <View style={[styles.shoulders, colorStyle]} />
     </GlyphBox>
@@ -99,6 +104,17 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
 const styles = StyleSheet.create({
   box: { width: 28, height: 28, position: 'relative' },
+  activeHalo: {
+    position: 'absolute',
+    left: -5,
+    right: -5,
+    top: -5,
+    bottom: -5,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: theme.colors.borderGlass,
+    backgroundColor: theme.colors.primaryGlass,
+  },
   active: { borderColor: theme.colors.primaryBright, backgroundColor: theme.colors.primaryBright },
   inactive: { borderColor: theme.colors.textMuted, backgroundColor: theme.colors.textMuted },
   roofLeft: { position: 'absolute', width: 14, height: 3, borderRadius: 2, transform: [{ rotate: '-40deg' }], left: 2, top: 7 },
