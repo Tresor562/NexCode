@@ -29,16 +29,23 @@ assert.equal(passes('HTML/CSS', '<main>Hello</main><script>const fake = { color:
 assert.equal(passes('JavaScript', 'const total = 2 + 2;\nconsole.log(total);'), true, 'real JavaScript declaration + output should pass');
 assert.equal(passes('JavaScript', '// const total = 4; console.log(total);'), false, 'comment-only JavaScript must fail');
 assert.equal(passes('JavaScript', '/* let total = 4; console.log(total); */'), false, 'block-comment JavaScript must fail');
+assert.equal(passes('JavaScript', 'const note = "console.log(total)";'), false, 'console.log text inside a string must not satisfy the output check');
+assert.equal(passes('JavaScript', 'const url = "https://example.com/path";\nconsole.log(url);'), true, 'URL strings must not be mistaken for line comments');
+assert.equal(passes('JavaScript', 'const sample = `console.log(fake)`;'), false, 'template text must not count as executable console output');
 
 assert.equal(passes('Python', 'def total():\n    return 4'), true, 'Python function + indented return should pass');
 assert.equal(passes('Python', 'async def total():\n    return 4'), true, 'async Python functions should pass');
 assert.equal(passes('Python', '# def total():\n#     return 4'), false, 'comment-only Python must fail');
+assert.equal(passes('Python', 'def total():\n    """return 4"""\n    pass'), false, 'return text inside a docstring must not satisfy the function check');
+assert.equal(passes('Python', 'note = "def total():\\n    return 4"'), false, 'Python code embedded only in a string must fail');
 
 assert.equal(passes('SQL', 'SELECT id FROM users;'), true, 'basic SELECT should pass');
 assert.equal(passes('SQL', 'WITH active AS (SELECT id FROM users) SELECT id FROM active;'), true, 'CTE SELECT queries should pass');
 assert.equal(passes('SQL', '-- SELECT id FROM users;'), false, 'comment-only SQL must fail');
 assert.equal(passes('SQL', '/* SELECT id FROM users; */'), false, 'block-comment SQL must fail');
+assert.equal(passes('SQL', "SELECT 'FROM users' AS example;"), false, 'FROM text inside a SQL string literal must not satisfy the table check');
+assert.equal(passes('SQL', "SELECT 'it''s safe' AS label FROM users;"), true, 'escaped SQL string literals must not break real FROM detection');
 
 assert.match(checkPractice('JavaScript', '   '), /Écris une réponse/i, 'blank practice should keep explicit feedback');
 
-console.log('Practice checks audit OK: comment-only answers rejected and real HTML/CSS, JS, Python and SQL structures accepted.');
+console.log('Practice checks audit OK: comments and quoted fake code are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
