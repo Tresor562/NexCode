@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from 'expo-audio';
 import { Course, Lesson } from '../data/curriculumCore';
 import { masterySnapshot } from '../learning/masteryEngine';
 import { LocalState } from '../lib/localState';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
+import { useMotionPreferences } from './motionPreferences';
 import { theme } from './theme';
 
 const successSound = require('../../assets/sounds/success.wav');
@@ -39,7 +40,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const [recallRevealed, setRecallRevealed] = useState(false);
   const [recallConfidence, setRecallConfidence] = useState<RecallConfidence | null>(null);
   const [transferDraft, setTransferDraft] = useState('');
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const { reduceMotion, appActive } = useMotionPreferences();
   const scale = useRef(new Animated.Value(1)).current;
   const successPlayer = useAudioPlayer(successSound);
   const errorPlayer = useAudioPlayer(errorSound);
@@ -53,16 +54,10 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
 
   useEffect(() => {
-    let active = true;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then((enabled) => { if (active) setReduceMotion(enabled); })
-      .catch(() => undefined);
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => {
-      active = false;
-      subscription.remove();
-    };
-  }, []);
+    if (appActive && !reduceMotion) return;
+    scale.stopAnimation();
+    scale.setValue(1);
+  }, [appActive, reduceMotion, scale]);
 
   useEffect(() => {
     scale.stopAnimation();
@@ -78,11 +73,12 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   }, [lesson.id, scale]);
 
   function pulse() {
-    if (reduceMotion) {
+    if (reduceMotion || !appActive) {
       scale.stopAnimation();
       scale.setValue(1);
       return;
     }
+    scale.stopAnimation();
     Animated.sequence([
       Animated.spring(scale, { toValue: 1.08, useNativeDriver: true, speed: 28, bounciness: 10 }),
       Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 24, bounciness: 8 }),
@@ -90,31 +86,47 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   }
 
   function sound(player: ReturnType<typeof useAudioPlayer>) {
+    if (!appActive) return;
     player.seekTo(0).then(() => player.play()).catch(() => undefined);
+  }
+
+  function selectionFeedback() {
+    if (!appActive) return;
+    Haptics.selectionAsync().catch(() => undefined);
+  }
+
+  function notificationFeedback(type: Haptics.NotificationFeedbackType) {
+    if (!appActive) return;
+    Haptics.notificationAsync(type).catch(() => undefined);
+  }
+
+  function impactFeedback(style: Haptics.ImpactFeedbackStyle) {
+    if (!appActive) return;
+    Haptics.impactAsync(style).catch(() => undefined);
   }
 
   function next() {
     sound(tapPlayer);
-    Haptics.selectionAsync().catch(() => undefined);
+    selectionFeedback();
     pulse();
     setStepIndex((value) => Math.min(steps.length - 1, value + 1));
   }
 
   function previous() {
-    Haptics.selectionAsync().catch(() => undefined);
+    selectionFeedback();
     setStepIndex((value) => Math.max(0, value - 1));
   }
 
   function revealRecall() {
     if (!recallAttemptReady) return;
     setRecallRevealed(true);
-    Haptics.selectionAsync().catch(() => undefined);
+    selectionFeedback();
     sound(tapPlayer);
   }
 
   function chooseConfidence(value: RecallConfidence) {
     setRecallConfidence(value);
-    Haptics.selectionAsync().catch(() => undefined);
+    selectionFeedback();
   }
 
   function submit() {
@@ -125,11 +137,11 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
       setRecorded(true);
     }
     if (correct) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      notificationFeedback(Haptics.NotificationFeedbackType.Success);
       sound(successPlayer);
       pulse();
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => undefined);
+      notificationFeedback(Haptics.NotificationFeedbackType.Error);
       sound(errorPlayer);
     }
   }
@@ -264,7 +276,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
                   accessibilityRole="button"
                   accessibilityLabel={`${String.fromCharCode(65 + index)}. ${choice}`}
                   accessibilityState={{ selected, disabled: submitted }}
-                  onPress={() => { setAnswer(index); Haptics.selectionAsync().catch(() => undefined); }}
+                  onPress={() => { setAnswer(index); selectionFeedback(); }}
                   style={({ pressed }) => [styles.choice, selected && styles.choiceSelected, revealCorrect && styles.choiceCorrect, revealWrong && styles.choiceWrong, pressed && (reduceMotion ? styles.pressedReducedMotion : styles.pressed)]}
                 >
                   <View style={styles.choiceLetter}><Text style={styles.choiceLetterText}>{String.fromCharCode(65 + index)}</Text></View>
@@ -328,7 +340,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
             ) : null}
             <View style={styles.flags}><Pill label="Code" tone="primary" /><Pill label="Preview" tone="success" /><Pill label="Console" tone="warning" /><Pill label="Tools" /></View>
           </Card>
-          <PrimaryButton label="Ouvrir le Lab" icon="⌘" onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined); onOpenLab(); }} />
+          <PrimaryButton label="Ouvrir le Lab" icon="⌘" onPress={() => { impactFeedback(Haptics.ImpactFeedbackStyle.Medium); onOpenLab(); }} />
         </View>
       ) : null}
 
