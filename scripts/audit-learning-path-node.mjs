@@ -20,7 +20,9 @@ requireSnippet('if (!isCurrent || reduceMotion || !appActive)', 'Ambient motion 
 requireSnippet("const becameDone = previous !== 'done' && state === 'done';", 'Completion motion must only run on a real state transition.');
 requireSnippet("if (!appActive) return;", 'Haptic feedback must not fire while the app is inactive.');
 requireSnippet('accessibilityState={{ disabled, selected: isCurrent }}', 'Learning path node state must remain exposed to assistive technology.');
-requireSnippet("disabled ? 'Termine les étapes précédentes pour débloquer cette activité.'", 'Locked nodes must retain a useful accessibility hint.');
+requireSnippet('const accessibilityHint = disabled', 'Learning path nodes must keep a state-aware accessibility hint.');
+requireSnippet("'Termine les étapes précédentes pour débloquer cette activité.'", 'Locked nodes must retain a useful accessibility hint.');
+requireSnippet('accessibilityHint={accessibilityHint}', 'The computed accessibility hint must remain wired to the node button.');
 requireSnippet('hitSlop={8}', 'Learning path touch targets must retain their expanded hit area.');
 
 const tokenUsages = [
