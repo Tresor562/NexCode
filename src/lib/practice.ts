@@ -79,13 +79,38 @@ function leadingIndent(line: string) {
   return [...prefix].reduce((total, char) => total + (char === '\t' ? 4 : 1), 0);
 }
 
+const pythonFunctionPattern = /^\s*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:\s*$/;
+const pythonClassPattern = /^\s*class\s+[A-Za-z_]\w*\b[^:]*:\s*$/;
+
+function pythonTopLevelOrMethodDefinitions(lines: string[]) {
+  const definitions = new Set<number>();
+  const scopeStack: Array<{ indent: number; kind: 'function' | 'class' | 'other' }> = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim()) continue;
+
+    const indent = leadingIndent(line);
+    while (scopeStack.length && indent <= scopeStack[scopeStack.length - 1].indent) scopeStack.pop();
+
+    const isFunction = pythonFunctionPattern.test(line);
+    const isClass = pythonClassPattern.test(line);
+    if (isFunction && !scopeStack.some((scope) => scope.kind === 'function')) definitions.add(index);
+
+    if (/\:\s*$/.test(line)) {
+      scopeStack.push({ indent, kind: isFunction ? 'function' : isClass ? 'class' : 'other' });
+    }
+  }
+
+  return definitions;
+}
+
 function pythonHasFunctionReturning(source: string) {
   const lines = source.split('\n');
+  const eligibleDefinitions = pythonTopLevelOrMethodDefinitions(lines);
 
-  for (let functionIndex = 0; functionIndex < lines.length; functionIndex += 1) {
+  for (const functionIndex of eligibleDefinitions) {
     const definition = lines[functionIndex];
-    if (!/^\s*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:\s*$/.test(definition)) continue;
-
     const functionIndent = leadingIndent(definition);
     let nestedBlockIndent: number | null = null;
 
@@ -101,7 +126,7 @@ function pythonHasFunctionReturning(source: string) {
         nestedBlockIndent = null;
       }
 
-      if (/^\s*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:\s*$/.test(line) || /^\s*class\s+[A-Za-z_]\w*\b[^:]*:\s*$/.test(line)) {
+      if (pythonFunctionPattern.test(line) || pythonClassPattern.test(line)) {
         nestedBlockIndent = indent;
         continue;
       }
