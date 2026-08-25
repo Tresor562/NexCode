@@ -74,15 +74,33 @@ function stripPythonCommentsAndStrings(source: string) {
   return stringsMasked.replace(/#.*$/gm, ' ');
 }
 
+function hasCssDeclaration(source: string) {
+  return /(?:^|[;{])\s*(?:--[\w-]+|[a-z-]+)\s*:\s*[^;{}]+/i.test(stripBlockComments(source));
+}
+
+function htmlHasRealMarkup(source: string) {
+  const withoutEmbeddedCode = source
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, ' ');
+  return /<(h1|main|section|p|div|button)\b[^>]*>/i.test(withoutEmbeddedCode);
+}
+
+function htmlHasRealCss(source: string) {
+  const styleBlocks = [...source.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)];
+  if (styleBlocks.some((match) => hasCssDeclaration(match[1] ?? ''))) return true;
+
+  const inlineStyles = [...source.matchAll(/\bstyle\s*=\s*(["'])([\s\S]*?)\1/gi)];
+  return inlineStyles.some((match) => hasCssDeclaration(match[2] ?? ''));
+}
+
 export function checkPractice(language: PracticeLanguage, source: string): string {
   if (!source.trim()) return 'Écris une réponse avant de lancer la vérification.';
 
   if (language === 'HTML/CSS') {
     const visibleSource = stripHtmlComments(source);
-    const hasMarkup = /<(h1|main|section|p|div|button)\b[^>]*>/i.test(visibleSource);
-    const hasStyleBlock = /<style\b[^>]*>[\s\S]*?\{[\s\S]*?[a-z-]+\s*:[\s\S]*?\}[\s\S]*?<\/style\s*>/i.test(visibleSource);
-    const hasInlineStyle = /\bstyle\s*=\s*(["'])[^"']*[a-z-]+\s*:[^"']*\1/i.test(visibleSource);
-    return hasMarkup && (hasStyleBlock || hasInlineStyle)
+    const hasMarkup = htmlHasRealMarkup(visibleSource);
+    const hasCss = htmlHasRealCss(visibleSource);
+    return hasMarkup && hasCss
       ? '✓ Structure Web détectée : HTML et style sont présents. Bien joué.'
       : 'Presque. Ajoute au moins une vraie balise HTML et une règle CSS pour valider cette pratique.';
   }
