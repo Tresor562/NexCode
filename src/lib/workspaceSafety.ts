@@ -18,15 +18,19 @@ const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
 
 function canonicalWorkspacePath(path: string): string | null {
-  const normalized = path.trim().replace(/\\/g, '/');
+  const normalized = path.trim().replace(/\\/g, '/').normalize('NFC');
   if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return null;
   const segments = normalized.split('/');
   if (segments.some((segment) => !segment || segment === '.' || segment === '..' || /[\u0000-\u001f\u007f]/.test(segment))) return null;
   return normalized;
 }
 
+function workspaceCollisionKey(path: string): string {
+  return path.normalize('NFC').toLocaleLowerCase('en-US');
+}
+
 export function isSensitiveWorkspaceFilename(path: string): boolean {
-  const normalized = path.trim().replace(/\\/g, '/').toLowerCase();
+  const normalized = path.trim().replace(/\\/g, '/').normalize('NFC').toLowerCase();
   const basename = normalized.split('/').pop() ?? normalized;
   if (basename === '.env.example') return false;
   if (SENSITIVE_BASENAMES.has(basename)) return true;
@@ -69,6 +73,7 @@ export function restoreWorkspaceDraft({
 
   const source = stored.files && typeof stored.files === 'object' && !Array.isArray(stored.files) ? stored.files : {};
   const files: Record<string, string> = {};
+  const collisionKeys = new Set<string>();
   let totalChars = 0;
   let repaired = false;
 
@@ -87,11 +92,13 @@ export function restoreWorkspaceDraft({
       repaired = true;
       continue;
     }
-    if (Object.prototype.hasOwnProperty.call(files, normalizedName)) {
+    const collisionKey = workspaceCollisionKey(normalizedName);
+    if (collisionKeys.has(collisionKey)) {
       repaired = true;
       continue;
     }
     if (normalizedName !== rawName) repaired = true;
+    collisionKeys.add(collisionKey);
     files[normalizedName] = rawContent;
     totalChars += rawContent.length;
   }
@@ -101,7 +108,10 @@ export function restoreWorkspaceDraft({
   if (!filenames.length) return { draft: fresh(), repaired: true };
 
   const normalizedActiveFile = typeof stored.activeFile === 'string' ? canonicalWorkspacePath(stored.activeFile) : null;
-  const activeFile = normalizedActiveFile && filenames.includes(normalizedActiveFile) ? normalizedActiveFile : filenames[0]!;
+  const activeFileKey = normalizedActiveFile ? workspaceCollisionKey(normalizedActiveFile) : null;
+  const activeFile = activeFileKey
+    ? filenames.find((filename) => workspaceCollisionKey(filename) === activeFileKey) ?? filenames[0]!
+    : filenames[0]!;
   if (activeFile !== stored.activeFile) repaired = true;
   if (stored.language !== expectedLanguage || stored.missionId !== expectedMissionId) repaired = true;
   if (!validIsoDate(stored.updatedAt)) repaired = true;
