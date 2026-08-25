@@ -11,6 +11,7 @@ let latestState: PendingCloudState | null = null;
 let pushInFlight = false;
 let retryDelayMs = 1_500;
 
+const BASE_RETRY_DELAY_MS = 1_500;
 const MAX_RETRY_DELAY_MS = 30_000;
 const FOLLOW_UP_DELAY_MS = 250;
 
@@ -42,7 +43,7 @@ async function flushLatestState(): Promise<void> {
   // queued progress through learner B's Supabase session.
   if (session.user.id !== snapshot.userId) {
     latestState = null;
-    retryDelayMs = 1_500;
+    retryDelayMs = BASE_RETRY_DELAY_MS;
     return;
   }
 
@@ -51,7 +52,7 @@ async function flushLatestState(): Promise<void> {
 
   try {
     await pushCloudState(session, snapshot.state);
-    retryDelayMs = 1_500;
+    retryDelayMs = BASE_RETRY_DELAY_MS;
   } catch {
     // Keep the newest local snapshot queued while offline. If another mutation
     // happened during the request, that newer state already supersedes this one.
@@ -60,11 +61,21 @@ async function flushLatestState(): Promise<void> {
     retryDelayMs = Math.min(MAX_RETRY_DELAY_MS, retryDelayMs * 2);
     pushInFlight = false;
 
-    // If the account changed while the request was in flight, do not keep
-    // retrying the previous learner's snapshot under the new session.
     const current = loadCloudSession();
-    if (!current || current.user.id !== snapshot.userId) {
+    if (!current) {
       if (latestState?.userId === snapshot.userId) latestState = null;
+      retryDelayMs = BASE_RETRY_DELAY_MS;
+      return;
+    }
+
+    if (current.user.id !== snapshot.userId) {
+      // The failed request belonged to learner A, but learner B may already have
+      // queued a newer snapshot while A's request was in flight. Do not strand B's
+      // progress until another mutation happens: discard only A's stale retry and
+      // immediately schedule B's pending state under B's own current session.
+      if (latestState?.userId === snapshot.userId) latestState = null;
+      retryDelayMs = BASE_RETRY_DELAY_MS;
+      if (latestState?.userId === current.user.id) queueFlush(FOLLOW_UP_DELAY_MS);
       return;
     }
 
