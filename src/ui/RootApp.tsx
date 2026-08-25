@@ -20,6 +20,7 @@ import {
   signInWithPassword,
   signUpWithPassword,
 } from '../lib/cloudAccount';
+import { theme } from './theme';
 
 export default function RootApp() {
   const cloudEnabled = isCloudConfigured();
@@ -41,15 +42,7 @@ export default function RootApp() {
       const generation = ++recoveryRequestGeneration;
       try {
         const recovered = await consumePasswordRecoveryUrl(url);
-        // Deep links can arrive nearly simultaneously (for example the initial
-        // URL plus a foreground Linking event). Only the newest request may
-        // take over the recovery UI; an older network response must never
-        // overwrite a newer verified link or its error state.
         if (!active || generation !== recoveryRequestGeneration || !recovered) return;
-        // A verified recovery link temporarily takes over the foreground flow,
-        // but its short-lived credentials are not persisted. If the user
-        // cancels or the app restarts before success, the previous durable app
-        // session (if any) remains the only session eligible for hydration.
         setSession(null);
         setHydrating(false);
         setAuthError(undefined);
@@ -90,9 +83,6 @@ export default function RootApp() {
         setSession(refreshed);
       })
       .catch(() => {
-        // Offline-first: continue with the snapshot scoped to this account. If
-        // the device has just switched accounts, this is intentionally a fresh
-        // local state rather than another learner's XP, mastery or projects.
         if (!active) return;
         bindLocalStateOwner(session.user.id);
         saveLocalState(scopedLocal);
@@ -135,8 +125,6 @@ export default function RootApp() {
     setRecoveryError(undefined);
     try {
       const updated = await updatePasswordFromRecoverySession(recoverySession, password);
-      // Promote recovery credentials to the normal app session only after the
-      // password mutation succeeds and Supabase confirms the same user.
       saveCloudSession(updated);
       setRecoverySession(null);
       setSession(updated);
@@ -149,9 +137,6 @@ export default function RootApp() {
 
   function cancelPasswordReset() {
     if (recoveryBusy) return;
-    // Recovery credentials were never persisted. Restore the durable session
-    // that existed before the recovery flow, if one is still available, rather
-    // than signing the learner out or promoting a temporary recovery token.
     const restored = loadCloudSession();
     setRecoverySession(null);
     setSession(restored);
@@ -182,13 +167,40 @@ export default function RootApp() {
       />
     );
   }
-  if (hydrating) return <SafeAreaView style={styles.safe}><View style={styles.loading}><ActivityIndicator size="small" color="#8390FF" /><Text style={styles.loadingTitle}>Synchronisation de ton parcours</Text><Text style={styles.loadingMeta}>XP, série, maîtrise et projets sont réunis sur cet appareil.</Text></View></SafeAreaView>;
+  if (hydrating) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View
+          style={styles.loading}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Synchronisation de ton parcours NexCode"
+          accessibilityLiveRegion="polite"
+        >
+          <View style={styles.loadingIndicatorShell}>
+            <ActivityIndicator size="small" color={theme.colors.primaryBright} />
+          </View>
+          <Text style={styles.loadingTitle} accessibilityRole="header">Synchronisation de ton parcours</Text>
+          <Text style={styles.loadingMeta}>XP, série, maîtrise et projets sont réunis sur cet appareil.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
   return <NexCodeApp />;
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#070B16' },
+  safe: { flex: 1, backgroundColor: theme.colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
-  loadingTitle: { color: '#F5F7FF', fontSize: 16, fontWeight: '900', marginTop: 18, textAlign: 'center' },
-  loadingMeta: { color: '#7B879F', fontSize: 12, lineHeight: 18, marginTop: 7, textAlign: 'center', maxWidth: 310 },
+  loadingIndicatorShell: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryGlass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.borderGlass,
+  },
+  loadingTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '900', marginTop: 18, textAlign: 'center' },
+  loadingMeta: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 7, textAlign: 'center', maxWidth: 310 },
 });
