@@ -74,6 +74,45 @@ function stripPythonCommentsAndStrings(source: string) {
   return stringsMasked.replace(/#.*$/gm, ' ');
 }
 
+function leadingIndent(line: string) {
+  const prefix = line.match(/^[\t ]*/)?.[0] ?? '';
+  return [...prefix].reduce((total, char) => total + (char === '\t' ? 4 : 1), 0);
+}
+
+function pythonHasFunctionReturning(source: string) {
+  const lines = source.split('\n');
+
+  for (let functionIndex = 0; functionIndex < lines.length; functionIndex += 1) {
+    const definition = lines[functionIndex];
+    if (!/^\s*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:\s*$/.test(definition)) continue;
+
+    const functionIndent = leadingIndent(definition);
+    let nestedBlockIndent: number | null = null;
+
+    for (let index = functionIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (!line.trim()) continue;
+
+      const indent = leadingIndent(line);
+      if (indent <= functionIndent) break;
+
+      if (nestedBlockIndent !== null) {
+        if (indent > nestedBlockIndent) continue;
+        nestedBlockIndent = null;
+      }
+
+      if (/^\s*(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:\s*$/.test(line) || /^\s*class\s+[A-Za-z_]\w*\b[^:]*:\s*$/.test(line)) {
+        nestedBlockIndent = indent;
+        continue;
+      }
+
+      if (/^\s*return\b/.test(line)) return true;
+    }
+  }
+
+  return false;
+}
+
 function hasCssDeclaration(source: string) {
   return /(?:^|[;{])\s*(?:--[\w-]+|[a-z-]+)\s*:\s*[^;{}]+/i.test(stripBlockComments(source));
 }
@@ -107,9 +146,7 @@ export function checkPractice(language: PracticeLanguage, source: string): strin
 
   if (language === 'Python') {
     const visibleSource = stripPythonCommentsAndStrings(source);
-    const hasFunction = /\b(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:/m.test(visibleSource);
-    const hasReturn = /^\s+return\b/m.test(visibleSource);
-    return hasFunction && hasReturn
+    return pythonHasFunctionReturning(visibleSource)
       ? '✓ Structure Python valide : fonction + return détectés.'
       : 'À revoir : crée une fonction avec def puis renvoie une valeur avec return.';
   }
