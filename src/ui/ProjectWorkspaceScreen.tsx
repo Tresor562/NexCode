@@ -12,6 +12,9 @@ import { theme } from './theme';
 type Panel = 'files' | 'code' | 'preview' | 'console';
 const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
 
+const PREVIEW_SECURITY_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; media-src data: blob:; form-action 'none'; base-uri 'none';">`;
+const PREVIEW_VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">';
+
 export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   project: GuidedProject;
   stored?: LabDraft;
@@ -101,7 +104,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   function run() {
     if (preview) {
       setPanel('preview');
-      setConsoleText('Preview Web actualisé.');
+      setConsoleText('Preview Web actualisé en sandbox locale.');
     } else {
       setPanel('console');
       setConsoleText(runtimeMessage(project, draft));
@@ -139,7 +142,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
         <View style={styles.editor}><View style={styles.editorTop}><Text style={styles.editorName}>{draft.activeFile}</Text><Text style={styles.saved}>● sauvegardé</Text></View><TextInput multiline value={content} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.symbols}>{symbols.map((item) => <Pressable key={item} onPress={() => insertSymbol(item)} style={styles.symbol}><Text style={styles.symbolText}>{item}</Text></Pressable>)}</ScrollView></View>
       </View> : null}
 
-      {panel === 'preview' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Preview</Text><Pill label={preview ? 'Live' : 'Non disponible'} tone={preview ? 'success' : 'warning'} /></View>{preview ? <View style={styles.webWrap}><WebView originWhitelist={['*']} source={{ html: preview }} javaScriptEnabled style={styles.web} /></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>Pas de rendu visuel pour cette technologie.</Text><Text style={styles.emptyText}>Utilise la console pour vérifier le projet. Les projets Web disposent d’un aperçu en direct.</Text></View>}</View> : null}
+      {panel === 'preview' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Preview</Text><Pill label={preview ? 'Sandbox locale' : 'Non disponible'} tone={preview ? 'success' : 'warning'} /></View>{preview ? <View style={styles.webWrap}><WebView originWhitelist={['about:blank']} source={{ html: preview, baseUrl: 'about:blank' }} javaScriptEnabled domStorageEnabled={false} setSupportMultipleWindows={false} allowsFullscreenVideo={false} onShouldStartLoadWithRequest={(request) => request.url === 'about:blank' || request.url.startsWith('data:')} style={styles.web} /></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>Pas de rendu visuel pour cette technologie.</Text><Text style={styles.emptyText}>Utilise la console pour vérifier le projet. Les projets Web disposent d’un aperçu local sans accès réseau.</Text></View>}</View> : null}
 
       {panel === 'console' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Console</Text><Pressable onPress={run} style={styles.rerun}><Text style={styles.rerunText}>Relancer</Text></Pressable></View><View style={styles.console}><Text style={styles.prompt}>$ nexcode project run</Text><Text style={styles.consoleText}>{consoleText}</Text></View><PrimaryButton label="Retour au code" onPress={() => setPanel('code')} /></View> : null}
     </View>
@@ -152,12 +155,6 @@ function Nav({ active, label, icon, onPress }: { active: boolean; label: string;
 
 function fileBadge(filename: string) {
   return (filename.split('.').pop() ?? 'TXT').toUpperCase().slice(0, 3);
-}
-
-function createProjectDraft(project: GuidedProject): LabDraft {
-  const files = starterFiles(project);
-  const first = Object.keys(files)[0] ?? 'main.txt';
-  return { missionId: `project:${project.id}`, language: project.tech, files, activeFile: first, updatedAt: new Date().toISOString() };
 }
 
 function starterFiles(project: GuidedProject): Record<string, string> {
@@ -173,14 +170,45 @@ function starterFiles(project: GuidedProject): Record<string, string> {
   return { 'main.txt': `${project.title}\n\n${project.description}\n` };
 }
 
+function escapeInlineStyle(value: string) {
+  return value.replace(/<\/style/gi, '<\\/style');
+}
+
+function escapeInlineScript(value: string) {
+  return value.replace(/<\/script/gi, '<\\/script');
+}
+
+function injectIntoHead(html: string, injection: string) {
+  if (/<head[\s>]/i.test(html)) return html.replace(/<head([^>]*)>/i, `<head$1>${injection}`);
+  if (/<html[\s>]/i.test(html)) return html.replace(/<html([^>]*)>/i, `<html$1><head>${injection}</head>`);
+  return `<!doctype html><html><head>${injection}</head><body>${html}</body></html>`;
+}
+
 function buildPreview(files: Record<string, string>) {
-  const htmlName = Object.keys(files).find((name) => name.endsWith('.html'));
+  const htmlName = Object.keys(files).find((name) => name.toLowerCase().endsWith('.html'));
   if (!htmlName) return '';
-  const css = Object.entries(files).filter(([name]) => name.endsWith('.css')).map(([, value]) => value).join('\n');
-  const js = Object.entries(files).filter(([name]) => name.endsWith('.js')).map(([, value]) => value).join('\n');
-  let html = files[htmlName] ?? '';
-  if (css) html = html.includes('</head>') ? html.replace('</head>', `<style>${css}</style></head>`) : `<style>${css}</style>${html}`;
-  if (js) html = html.includes('</body>') ? html.replace('</body>', `<script>${js}<\/script></body>`) : `${html}<script>${js}<\/script>`;
+
+  const css = Object.entries(files)
+    .filter(([name]) => name.toLowerCase().endsWith('.css'))
+    .map(([, value]) => value)
+    .join('\n');
+  const js = Object.entries(files)
+    .filter(([name]) => name.toLowerCase().endsWith('.js'))
+    .map(([, value]) => value)
+    .join('\n');
+
+  let html = (files[htmlName] ?? '').trim();
+  if (!html) html = '<main></main>';
+  html = injectIntoHead(html, `${PREVIEW_SECURITY_META}${PREVIEW_VIEWPORT_META}`);
+
+  if (css) {
+    const style = `<style>${escapeInlineStyle(css)}</style>`;
+    html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : injectIntoHead(html, style);
+  }
+  if (js) {
+    const script = `<script>${escapeInlineScript(js)}<\/script>`;
+    html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}</body>`) : `${html}${script}`;
+  }
   return html;
 }
 
