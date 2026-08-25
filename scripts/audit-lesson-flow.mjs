@@ -20,12 +20,16 @@ assert.match(source, /disabled=\{recallConfidence === null\}/, 'quiz continuatio
 assert.match(source, /transferDraft\.trim\(\)\.length >= 12/, 'transfer must require a substantive strategy');
 assert.match(source, /disabled=\{!transferAttemptReady\}/, 'Lab transition must stay gated by the transfer attempt');
 
-assert.match(source, /AccessibilityInfo\.isReduceMotionEnabled\(\)/, 'lesson flow must respect the system reduce-motion preference');
-assert.match(source, /if \(reduceMotion\)/, 'mentor animation must fail safe when reduced motion is enabled');
-assert.match(source, /Haptics\.notificationAsync\(Haptics\.NotificationFeedbackType\.Success\)/, 'correct answers must keep explicit success feedback');
-assert.match(source, /Haptics\.notificationAsync\(Haptics\.NotificationFeedbackType\.Error\)/, 'wrong answers must keep explicit error feedback');
+assert.match(source, /useMotionPreferences\(\)/, 'lesson flow must share the app-wide motion preference lifecycle');
+assert.match(source, /const \{ reduceMotion, appActive \} = useMotionPreferences\(\)/, 'lesson flow must consume both reduced-motion and foreground state');
+assert.match(source, /if \(reduceMotion \|\| !appActive\)/, 'mentor animation must stop for reduced motion or while the app is inactive');
+assert.match(source, /if \(!appActive\) return;[\s\S]*player\.seekTo\(0\)/, 'audio feedback must stay silent while the app is inactive');
+assert.match(source, /function selectionFeedback\(\)[\s\S]*if \(!appActive\) return;[\s\S]*Haptics\.selectionAsync\(\)/, 'selection haptics must stay foreground-scoped');
+assert.match(source, /function notificationFeedback\([\s\S]*Haptics\.notificationAsync\(type\)/, 'quiz notification haptics must stay centralized');
+assert.match(source, /notificationFeedback\(Haptics\.NotificationFeedbackType\.Success\)/, 'correct answers must keep explicit success feedback');
+assert.match(source, /notificationFeedback\(Haptics\.NotificationFeedbackType\.Error\)/, 'wrong answers must keep explicit error feedback');
 assert.match(source, /useAudioPlayer\(successSound\)/, 'lesson flow must keep success audio feedback wired');
 assert.match(source, /useAudioPlayer\(errorSound\)/, 'lesson flow must keep error audio feedback wired');
 assert.match(source, /accessibilityLiveRegion="polite"/, 'quiz feedback must stay screen-reader announced');
 
-console.log('Lesson flow audit OK: lesson-switch reset, active recall, transfer gating, motion accessibility, haptics/audio and live feedback are protected.');
+console.log('Lesson flow audit OK: lesson-switch reset, active recall, transfer gating, shared motion lifecycle, foreground-scoped haptics/audio and live feedback are protected.');
