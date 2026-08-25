@@ -17,12 +17,12 @@ const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
 
-function safePath(path: string): boolean {
+function canonicalWorkspacePath(path: string): string | null {
   const normalized = path.trim().replace(/\\/g, '/');
-  if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return false;
+  if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return null;
   const segments = normalized.split('/');
-  if (segments.some((segment) => !segment || segment === '.' || segment === '..' || /[\u0000-\u001f\u007f]/.test(segment))) return false;
-  return true;
+  if (segments.some((segment) => !segment || segment === '.' || segment === '..' || /[\u0000-\u001f\u007f]/.test(segment))) return null;
+  return normalized;
 }
 
 export function isSensitiveWorkspaceFilename(path: string): boolean {
@@ -36,6 +36,10 @@ export function isSensitiveWorkspaceFilename(path: string): boolean {
 
 function validIsoDate(value: unknown): value is string {
   return typeof value === 'string' && Number.isFinite(Date.parse(value));
+}
+
+function validTextContent(value: string): boolean {
+  return !value.includes('\0');
 }
 
 export function restoreWorkspaceDraft({
@@ -69,7 +73,13 @@ export function restoreWorkspaceDraft({
   let repaired = false;
 
   for (const [rawName, rawContent] of Object.entries(source).slice(0, MAX_RESTORED_FILES)) {
-    if (typeof rawContent !== 'string' || !safePath(rawName) || isSensitiveWorkspaceFilename(rawName)) {
+    const normalizedName = canonicalWorkspacePath(rawName);
+    if (
+      typeof rawContent !== 'string'
+      || !normalizedName
+      || isSensitiveWorkspaceFilename(normalizedName)
+      || !validTextContent(rawContent)
+    ) {
       repaired = true;
       continue;
     }
@@ -77,7 +87,12 @@ export function restoreWorkspaceDraft({
       repaired = true;
       continue;
     }
-    files[rawName] = rawContent;
+    if (Object.prototype.hasOwnProperty.call(files, normalizedName)) {
+      repaired = true;
+      continue;
+    }
+    if (normalizedName !== rawName) repaired = true;
+    files[normalizedName] = rawContent;
     totalChars += rawContent.length;
   }
 
@@ -85,7 +100,8 @@ export function restoreWorkspaceDraft({
   const filenames = Object.keys(files);
   if (!filenames.length) return { draft: fresh(), repaired: true };
 
-  const activeFile = filenames.includes(stored.activeFile) ? stored.activeFile : filenames[0]!;
+  const normalizedActiveFile = typeof stored.activeFile === 'string' ? canonicalWorkspacePath(stored.activeFile) : null;
+  const activeFile = normalizedActiveFile && filenames.includes(normalizedActiveFile) ? normalizedActiveFile : filenames[0]!;
   if (activeFile !== stored.activeFile) repaired = true;
   if (stored.language !== expectedLanguage || stored.missionId !== expectedMissionId) repaired = true;
   if (!validIsoDate(stored.updatedAt)) repaired = true;
