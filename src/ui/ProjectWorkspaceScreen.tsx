@@ -14,6 +14,34 @@ const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', 
 
 const PREVIEW_SECURITY_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; media-src data: blob:; form-action 'none'; base-uri 'none';">`;
 const PREVIEW_VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">';
+const PREVIEW_CONSOLE_PREFIX = 'NEXCODE_CONSOLE:';
+const MAX_PREVIEW_CONSOLE_LINES = 80;
+const MAX_PREVIEW_CONSOLE_CHARS = 6000;
+const PREVIEW_CONSOLE_BRIDGE = `<script>(function(){
+  var PREFIX='${PREVIEW_CONSOLE_PREFIX}';
+  function safe(value){
+    try {
+      if (typeof value === 'string') return value;
+      if (value instanceof Error) return value.name + ': ' + value.message;
+      var json = JSON.stringify(value);
+      return typeof json === 'string' ? json : String(value);
+    } catch (_) {
+      try { return String(value); } catch (_) { return '[valeur illisible]'; }
+    }
+  }
+  function send(level, args){
+    try {
+      var message = Array.prototype.map.call(args, safe).join(' ').slice(0, 1200);
+      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(PREFIX + JSON.stringify({ level: level, message: message }));
+    } catch (_) {}
+  }
+  ['log','info','warn','error'].forEach(function(level){
+    var original = console[level] && console[level].bind(console);
+    console[level] = function(){ send(level, arguments); if (original) original.apply(console, arguments); };
+  });
+  window.addEventListener('error', function(event){ send('error', [event.message || 'Erreur JavaScript']); });
+  window.addEventListener('unhandledrejection', function(event){ send('error', ['Promise rejetée', event.reason]); });
+})();<\/script>`;
 
 export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   project: GuidedProject;
@@ -33,6 +61,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
     ? 'Workspace restauré en mode sûr. Les fichiers sensibles, invalides ou incompatibles ont été retirés.'
     : 'Projet prêt. Écris ton code puis lance-le.');
   const [importing, setImporting] = useState(false);
+  const [previewRunId, setPreviewRunId] = useState(0);
   const files = Object.keys(draft.files);
   const content = draft.files[draft.activeFile] ?? '';
   const preview = useMemo(() => buildPreview(draft.files), [draft.files]);
@@ -55,6 +84,12 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   function insertSymbol(value: string) {
     changeContent(`${content}${value === 'Tab' ? '  ' : value}`);
     Haptics.selectionAsync().catch(() => undefined);
+  }
+
+  function handlePreviewMessage(raw: string) {
+    const line = parsePreviewConsoleMessage(raw);
+    if (!line) return;
+    setConsoleText((current) => appendPreviewConsoleLine(current, line));
   }
 
   async function importFiles() {
@@ -103,8 +138,9 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
 
   function run() {
     if (preview) {
+      setConsoleText('Preview Web lancée. Les console.log, warnings et erreurs JavaScript apparaîtront ici.');
+      setPreviewRunId((value) => value + 1);
       setPanel('preview');
-      setConsoleText('Preview Web actualisé en sandbox locale.');
     } else {
       setPanel('console');
       setConsoleText(runtimeMessage(project, draft));
@@ -142,7 +178,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
         <View style={styles.editor}><View style={styles.editorTop}><Text style={styles.editorName}>{draft.activeFile}</Text><Text style={styles.saved}>● sauvegardé</Text></View><TextInput multiline value={content} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.symbols}>{symbols.map((item) => <Pressable key={item} onPress={() => insertSymbol(item)} style={styles.symbol}><Text style={styles.symbolText}>{item}</Text></Pressable>)}</ScrollView></View>
       </View> : null}
 
-      {panel === 'preview' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Preview</Text><Pill label={preview ? 'Sandbox locale' : 'Non disponible'} tone={preview ? 'success' : 'warning'} /></View>{preview ? <View style={styles.webWrap}><WebView originWhitelist={['about:blank']} source={{ html: preview, baseUrl: 'about:blank' }} javaScriptEnabled domStorageEnabled={false} setSupportMultipleWindows={false} allowsFullscreenVideo={false} onShouldStartLoadWithRequest={(request) => request.url === 'about:blank' || request.url.startsWith('data:')} style={styles.web} /></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>Pas de rendu visuel pour cette technologie.</Text><Text style={styles.emptyText}>Utilise la console pour vérifier le projet. Les projets Web disposent d’un aperçu local sans accès réseau.</Text></View>}</View> : null}
+      {panel === 'preview' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Preview</Text><Pill label={preview ? 'Sandbox + console live' : 'Non disponible'} tone={preview ? 'success' : 'warning'} /></View>{preview ? <View style={styles.webWrap}><WebView key={`preview-${previewRunId}`} originWhitelist={['about:blank']} source={{ html: preview, baseUrl: 'about:blank' }} javaScriptEnabled domStorageEnabled={false} setSupportMultipleWindows={false} allowsFullscreenVideo={false} onMessage={(event) => handlePreviewMessage(event.nativeEvent.data)} onShouldStartLoadWithRequest={(request) => request.url === 'about:blank' || request.url.startsWith('data:')} style={styles.web} /></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>Pas de rendu visuel pour cette technologie.</Text><Text style={styles.emptyText}>Utilise la console pour vérifier le projet. Les projets Web disposent d’un aperçu local sans accès réseau.</Text></View>}</View> : null}
 
       {panel === 'console' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Console</Text><Pressable onPress={run} style={styles.rerun}><Text style={styles.rerunText}>Relancer</Text></Pressable></View><View style={styles.console}><Text style={styles.prompt}>$ nexcode project run</Text><Text style={styles.consoleText}>{consoleText}</Text></View><PrimaryButton label="Retour au code" onPress={() => setPanel('code')} /></View> : null}
     </View>
@@ -184,6 +220,26 @@ function injectIntoHead(html: string, injection: string) {
   return `<!doctype html><html><head>${injection}</head><body>${html}</body></html>`;
 }
 
+function parsePreviewConsoleMessage(raw: string) {
+  if (!raw.startsWith(PREVIEW_CONSOLE_PREFIX)) return '';
+  try {
+    const payload = JSON.parse(raw.slice(PREVIEW_CONSOLE_PREFIX.length)) as { level?: unknown; message?: unknown };
+    if (!['log', 'info', 'warn', 'error'].includes(String(payload.level))) return '';
+    if (typeof payload.message !== 'string') return '';
+    const message = payload.message.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '').trim().slice(0, 1200);
+    if (!message) return '';
+    const marker = payload.level === 'error' ? '✖' : payload.level === 'warn' ? '⚠' : payload.level === 'info' ? 'ℹ' : '›';
+    return `${marker} ${message}`;
+  } catch {
+    return '';
+  }
+}
+
+function appendPreviewConsoleLine(current: string, line: string) {
+  const lines = `${current}\n${line}`.split('\n').slice(-MAX_PREVIEW_CONSOLE_LINES);
+  return lines.join('\n').slice(-MAX_PREVIEW_CONSOLE_CHARS);
+}
+
 function buildPreview(files: Record<string, string>) {
   const htmlName = Object.keys(files).find((name) => name.toLowerCase().endsWith('.html'));
   if (!htmlName) return '';
@@ -199,7 +255,7 @@ function buildPreview(files: Record<string, string>) {
 
   let html = (files[htmlName] ?? '').trim();
   if (!html) html = '<main></main>';
-  html = injectIntoHead(html, `${PREVIEW_SECURITY_META}${PREVIEW_VIEWPORT_META}`);
+  html = injectIntoHead(html, `${PREVIEW_SECURITY_META}${PREVIEW_VIEWPORT_META}${PREVIEW_CONSOLE_BRIDGE}`);
 
   if (css) {
     const style = `<style>${escapeInlineStyle(css)}</style>`;
