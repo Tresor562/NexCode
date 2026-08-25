@@ -88,10 +88,14 @@ function pythonTopLevelOrMethodDefinitions(lines: string[]) {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    if (!line.trim()) continue;
+    if (line === undefined || !line.trim()) continue;
 
     const indent = leadingIndent(line);
-    while (scopeStack.length && indent <= scopeStack[scopeStack.length - 1].indent) scopeStack.pop();
+    let currentScope = scopeStack.at(-1);
+    while (currentScope && indent <= currentScope.indent) {
+      scopeStack.pop();
+      currentScope = scopeStack.at(-1);
+    }
 
     const isFunction = pythonFunctionPattern.test(line);
     const isClass = pythonClassPattern.test(line);
@@ -111,12 +115,14 @@ function pythonHasFunctionReturning(source: string) {
 
   for (const functionIndex of eligibleDefinitions) {
     const definition = lines[functionIndex];
+    if (definition === undefined) continue;
+
     const functionIndent = leadingIndent(definition);
     let nestedBlockIndent: number | null = null;
 
     for (let index = functionIndex + 1; index < lines.length; index += 1) {
       const line = lines[index];
-      if (!line.trim()) continue;
+      if (line === undefined || !line.trim()) continue;
 
       const indent = leadingIndent(line);
       if (indent <= functionIndent) break;
