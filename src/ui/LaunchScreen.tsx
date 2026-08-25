@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { theme } from './theme';
+import { useMotionPreferences } from './motionPreferences';
 
 export function LaunchScreen({ onDone }: { onDone: () => void }) {
   const nX = useRef(new Animated.Value(0)).current;
@@ -8,10 +10,68 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
   const restX = useRef(new Animated.Value(18)).current;
   const robotScale = useRef(new Animated.Value(0.7)).current;
   const glow = useRef(new Animated.Value(0)).current;
+  const completed = useRef(false);
+  const onDoneRef = useRef(onDone);
+  const completionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { reduceMotion, appActive } = useMotionPreferences();
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   const glowOpacity = useMemo(() => glow.interpolate({ inputRange: [0, 1], outputRange: [0.08, 0.42] }), [glow]);
 
   useEffect(() => {
+    const stopAnimations = () => {
+      nX.stopAnimation();
+      restOpacity.stopAnimation();
+      restX.stopAnimation();
+      robotScale.stopAnimation();
+      glow.stopAnimation();
+    };
+
+    const clearCompletionTimer = () => {
+      if (completionTimer.current) {
+        clearTimeout(completionTimer.current);
+        completionTimer.current = null;
+      }
+    };
+
+    const finish = () => {
+      if (completed.current) return;
+      completed.current = true;
+      onDoneRef.current();
+    };
+
+    stopAnimations();
+    clearCompletionTimer();
+
+    if (!appActive) {
+      return () => {
+        clearCompletionTimer();
+        stopAnimations();
+      };
+    }
+
+    if (reduceMotion) {
+      nX.setValue(-76);
+      restOpacity.setValue(1);
+      restX.setValue(0);
+      robotScale.setValue(1);
+      glow.setValue(0.35);
+      completionTimer.current = setTimeout(finish, 180);
+      return () => {
+        clearCompletionTimer();
+        stopAnimations();
+      };
+    }
+
+    nX.setValue(0);
+    restOpacity.setValue(0);
+    restX.setValue(18);
+    robotScale.setValue(0.7);
+    glow.setValue(0);
+
     const sequence = Animated.sequence([
       Animated.delay(180),
       Animated.parallel([
@@ -28,19 +88,27 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       ]),
       Animated.delay(260),
     ]);
-    sequence.start(({ finished }) => { if (finished) onDone(); });
-    return () => sequence.stop();
-  }, [glow, nX, onDone, restOpacity, restX, robotScale]);
+
+    sequence.start(({ finished }) => {
+      if (finished) finish();
+    });
+
+    return () => {
+      sequence.stop();
+      clearCompletionTimer();
+      stopAnimations();
+    };
+  }, [appActive, glow, nX, reduceMotion, restOpacity, restX, robotScale]);
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} accessibilityViewIsModal>
       <StatusBar style="light" />
-      <Animated.View style={[styles.glow, { opacity: glowOpacity }]} />
-      <View style={styles.wordmarkRow}>
+      <Animated.View pointerEvents="none" style={[styles.glow, { opacity: glowOpacity }]} />
+      <View style={styles.wordmarkRow} accessible accessibilityRole="header" accessibilityLabel="NexCode">
         <Animated.Text style={[styles.n, { transform: [{ translateX: nX }] }]}>N</Animated.Text>
         <Animated.View style={[styles.rest, { opacity: restOpacity, transform: [{ translateX: restX }] }]}> 
           <Text style={styles.letters}>exC</Text>
-          <Animated.View style={[styles.robot, { transform: [{ scale: robotScale }] }]}> 
+          <Animated.View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[styles.robot, { transform: [{ scale: robotScale }] }]}> 
             <View style={styles.robotEyeRow}><View style={styles.eye} /><View style={styles.eye} /></View>
             <View style={styles.robotMouth} />
           </Animated.View>
@@ -53,15 +121,15 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#070B16', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  glow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, backgroundColor: '#476CFF' },
+  root: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  glow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, backgroundColor: theme.colors.primary },
   wordmarkRow: { height: 86, minWidth: 330, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
-  n: { position: 'absolute', color: '#EEF2FF', fontSize: 60, lineHeight: 70, fontWeight: '900', letterSpacing: -5, textShadowColor: '#5576FF', textShadowRadius: 18 },
+  n: { position: 'absolute', color: theme.colors.text, fontSize: 60, lineHeight: 70, fontWeight: theme.weight.black, letterSpacing: -5, textShadowColor: theme.colors.primary, textShadowRadius: 18 },
   rest: { marginLeft: 45, flexDirection: 'row', alignItems: 'center' },
-  letters: { color: '#EEF2FF', fontSize: 52, lineHeight: 62, fontWeight: '900', letterSpacing: -4 },
-  robot: { width: 48, height: 44, borderRadius: 15, marginHorizontal: 3, backgroundColor: '#657BFF', borderWidth: 1, borderColor: '#A9B5FF', alignItems: 'center', justifyContent: 'center', shadowColor: '#7C4DFF', shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 10 },
+  letters: { color: theme.colors.text, fontSize: 52, lineHeight: 62, fontWeight: theme.weight.black, letterSpacing: -4 },
+  robot: { width: 48, height: 44, borderRadius: 15, marginHorizontal: 3, backgroundColor: theme.colors.primary, borderWidth: 1, borderColor: theme.colors.primaryBright, alignItems: 'center', justifyContent: 'center', shadowColor: theme.colors.purple, shadowOpacity: 0.8, shadowRadius: 14, shadowOffset: { width: 0, height: 0 }, elevation: 10 },
   robotEyeRow: { flexDirection: 'row', gap: 9 },
-  eye: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#F8FAFF' },
-  robotMouth: { width: 18, height: 3, borderRadius: 2, backgroundColor: '#DCE3FF', marginTop: 7 },
-  tagline: { color: '#6F7892', fontSize: 11, fontWeight: '700', letterSpacing: 1.4, marginTop: 12 },
+  eye: { width: 6, height: 6, borderRadius: 3, backgroundColor: theme.colors.text },
+  robotMouth: { width: 18, height: 3, borderRadius: 2, backgroundColor: theme.colors.textSecondary, marginTop: 7 },
+  tagline: { color: theme.colors.textMuted, fontSize: theme.type.caption, fontWeight: theme.weight.semibold, letterSpacing: 1.4, marginTop: 12 },
 });
