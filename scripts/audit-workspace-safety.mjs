@@ -81,6 +81,42 @@ const options = {
     stored: {
       ...base,
       files: {
+        'src/App.js': 'first',
+        'src/app.js': 'second',
+      },
+      activeFile: 'src/app.js',
+    },
+  });
+  assert.equal(result.repaired, true, 'Case-only path collisions must be repaired for cross-filesystem safety');
+  assert.deepEqual(result.draft.files, { 'src/App.js': 'first' }, 'Case-insensitive collisions must preserve the first restored file');
+  assert.equal(result.draft.activeFile, 'src/App.js', 'Active file lookup must follow the collision-safe identity');
+}
+
+{
+  const decomposed = 'src/cafe\u0301.js';
+  const composed = 'src/café.js';
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      files: {
+        [decomposed]: 'first',
+        [composed]: 'second',
+      },
+      activeFile: decomposed,
+    },
+  });
+  assert.equal(result.repaired, true, 'Unicode-equivalent paths must collapse to one canonical identity');
+  assert.deepEqual(result.draft.files, { [composed]: 'first' }, 'NFC-equivalent collisions must never overwrite the first restored file');
+  assert.equal(result.draft.activeFile, composed, 'Active file must follow Unicode path canonicalization');
+}
+
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      files: {
         'index.html': '<main>Safe</main>',
         'binary.txt': 'abc\0def',
         'config/.env.local': 'SECRET=1',
@@ -106,4 +142,4 @@ const options = {
   assert.deepEqual(result.draft.files, options.fallbackFiles, 'An unusable workspace must fail closed to the trusted starter files');
 }
 
-console.log('Workspace safety audit OK: canonical paths, collision handling, sensitive/binary filtering and validation invalidation are protected.');
+console.log('Workspace safety audit OK: slash, case and Unicode path identity, collision handling, sensitive/binary filtering and validation invalidation are protected.');
