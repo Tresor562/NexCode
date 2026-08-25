@@ -89,7 +89,7 @@ function assertPreviewPolicy(output) {
   assert.equal(parsePreviewConsoleMessage('NEXCODE_CONSOLE:{"level":"debug","message":"x"}'), '', 'Unknown console levels must be ignored');
   assert.equal(parsePreviewConsoleMessage('NEXCODE_CONSOLE:{"level":"warn","message":"attention"}'), '⚠ attention', 'Warnings must be surfaced with a stable marker');
   assert.equal(parsePreviewConsoleMessage('NEXCODE_CONSOLE:{"level":"error","message":"boom"}'), '✖ boom', 'Errors must be surfaced with a stable marker');
-  assert.equal(parsePreviewConsoleMessage('NEXCODE_CONSOLE:{"level":"log","message":"\u0000hello"}'), '› hello', 'Control characters must be stripped from console output');
+  assert.equal(parsePreviewConsoleMessage('NEXCODE_CONSOLE:{"level":"log","message":"\\u0000hello"}'), '› hello', 'Control characters must be stripped from console output');
 }
 
 {
