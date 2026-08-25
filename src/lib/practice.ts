@@ -1,23 +1,77 @@
 export type PracticeLanguage = 'HTML/CSS' | 'JavaScript' | 'Python' | 'SQL';
 
+function maskQuotedStrings(source: string, quotes: string[], doubledQuote = false) {
+  let output = '';
+  let index = 0;
+
+  while (index < source.length) {
+    const quote = quotes.find((candidate) => source.startsWith(candidate, index));
+    if (!quote) {
+      output += source[index];
+      index += 1;
+      continue;
+    }
+
+    output += ' '.repeat(quote.length);
+    index += quote.length;
+
+    while (index < source.length) {
+      if (source[index] === '\n') {
+        output += '\n';
+        index += 1;
+        continue;
+      }
+
+      if (source[index] === '\\' && quote.length === 1) {
+        output += ' ';
+        index += 1;
+        if (index < source.length) {
+          output += source[index] === '\n' ? '\n' : ' ';
+          index += 1;
+        }
+        continue;
+      }
+
+      if (source.startsWith(quote, index)) {
+        if (doubledQuote && quote.length === 1 && source.startsWith(quote + quote, index)) {
+          output += '  ';
+          index += 2;
+          continue;
+        }
+        output += ' '.repeat(quote.length);
+        index += quote.length;
+        break;
+      }
+
+      output += ' ';
+      index += 1;
+    }
+  }
+
+  return output;
+}
+
 function stripBlockComments(source: string) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, ' ');
+  return source.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ' '));
 }
 
 function stripJsComments(source: string) {
-  return stripBlockComments(source).replace(/(^|[^:])\/\/.*$/gm, '$1 ');
+  const stringsMasked = maskQuotedStrings(source, ['"', "'", '`']);
+  return stripBlockComments(stringsMasked).replace(/\/\/.*$/gm, ' ');
 }
 
 function stripSqlComments(source: string) {
-  return stripBlockComments(source).replace(/--.*$/gm, ' ');
+  const stringsMasked = maskQuotedStrings(source, ["'"], true);
+  return stripBlockComments(stringsMasked).replace(/--.*$/gm, ' ');
 }
 
 function stripHtmlComments(source: string) {
   return source.replace(/<!--[\s\S]*?-->/g, ' ');
 }
 
-function stripPythonCommentLines(source: string) {
-  return source.replace(/^\s*#.*$/gm, ' ');
+function stripPythonCommentsAndStrings(source: string) {
+  const stringsMasked = maskQuotedStrings(source, ["'''", '\"\"\"', "'", '"']);
+  return stringsMasked.replace(/#.*$/gm, ' ');
 }
 
 export function checkPractice(language: PracticeLanguage, source: string): string {
@@ -34,7 +88,7 @@ export function checkPractice(language: PracticeLanguage, source: string): strin
   }
 
   if (language === 'Python') {
-    const visibleSource = stripPythonCommentLines(source);
+    const visibleSource = stripPythonCommentsAndStrings(source);
     const hasFunction = /\b(?:async\s+)?def\s+[A-Za-z_]\w*\s*\([^)]*\)\s*:/m.test(visibleSource);
     const hasReturn = /^\s+return\b/m.test(visibleSource);
     return hasFunction && hasReturn
@@ -46,7 +100,7 @@ export function checkPractice(language: PracticeLanguage, source: string): strin
     const normalized = stripSqlComments(source).toLowerCase().replace(/\s+/g, ' ').trim();
     const hasQueryStart = /^(select|with)\b/.test(normalized);
     const hasSelect = /\bselect\b/.test(normalized);
-    const hasFrom = /\bfrom\s+[a-z_][\w$.]*/i.test(normalized);
+    const hasFrom = /\bfrom\s+(?:[a-z_][\w$]*\.)*[a-z_][\w$]*/i.test(normalized);
     return hasQueryStart && hasSelect && hasFrom
       ? '✓ Requête SQL reconnue : SELECT et FROM sont présents.'
       : 'À revoir : commence par SELECT puis indique la table avec FROM.';
