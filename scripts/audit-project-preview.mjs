@@ -5,11 +5,16 @@ import ts from 'typescript';
 const sourceUrl = new URL('../src/ui/ProjectWorkspaceScreen.tsx', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
 
-const helperStart = source.indexOf('const PREVIEW_SECURITY_META');
-const helperEnd = source.indexOf('function runtimeMessage');
-assert.ok(helperStart >= 0 && helperEnd > helperStart, 'Project preview helper block must stay discoverable');
+const constantsStart = source.indexOf('const PREVIEW_SECURITY_META');
+const constantsEnd = source.indexOf('export function ProjectWorkspaceScreen');
+const helpersStart = source.indexOf('function escapeInlineStyle');
+const helpersEnd = source.indexOf('function runtimeMessage');
+assert.ok(
+  constantsStart >= 0 && constantsEnd > constantsStart && helpersStart >= 0 && helpersEnd > helpersStart,
+  'Project preview helper blocks must stay discoverable without evaluating the React component',
+);
 
-const previewHelpers = `${source.slice(helperStart, helperEnd)}\nexport { buildPreview, parsePreviewConsoleMessage, appendPreviewConsoleLine };`;
+const previewHelpers = `${source.slice(constantsStart, constantsEnd)}\n${source.slice(helpersStart, helpersEnd)}\nexport { buildPreview, parsePreviewConsoleMessage, appendPreviewConsoleLine };`;
 const compiled = ts.transpileModule(previewHelpers, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
