@@ -65,8 +65,13 @@ export function projectReadinessAgainstGraph(project: GuidedProject, graph: Skil
     const confidence = boundedPercent(state.confidence);
     return score >= gate && confidence < confidenceGate;
   });
-  const score = skillIds.length
-    ? Math.round(skillIds.reduce((sum, id) => sum + skillReadinessScore(id, mastery), 0) / skillIds.length)
+
+  // Unmapped prerequisite labels are real readiness gaps. Treat each unresolved
+  // label as a zero-score prerequisite so the percentage cannot claim 100%
+  // consolidated while the project is still blocked by unknown skills.
+  const prerequisiteCount = skillIds.length + unresolved.length;
+  const score = prerequisiteCount > 0
+    ? Math.round(skillIds.reduce((sum, id) => sum + skillReadinessScore(id, mastery), 0) / prerequisiteCount)
     : 0;
 
   return {
