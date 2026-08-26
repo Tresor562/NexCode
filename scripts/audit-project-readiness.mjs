@@ -83,6 +83,22 @@ const state = (score, confidence) => ({
 }
 
 {
+  const result = projectReadinessAgainstGraph(project, graph, state(10, 90), Number.NaN);
+  assert.equal(result.ready, false, 'an invalid readiness gate must fall back to the product default instead of silently becoming permissive');
+  assert.deepEqual(result.weakSkillIds, ['html-structure']);
+}
+
+{
+  const result = projectReadinessAgainstGraph(project, graph, state(10, 90), -20);
+  assert.equal(result.ready, true, 'a finite readiness gate below zero should be bounded to zero rather than producing contradictory comparisons');
+}
+
+{
+  const result = projectReadinessAgainstGraph(project, graph, state(100, 100), 180);
+  assert.equal(result.ready, true, 'a finite readiness gate above 100 should be bounded to the maximum valid percentage');
+}
+
+{
   const partiallyMappedProject = {
     ...project,
     skills: ['HTML structure', 'Mystery deployment skill'],
@@ -93,4 +109,4 @@ const state = (score, confidence) => ({
   assert.equal(result.score, 50, 'unmapped prerequisite labels must lower the readiness percentage instead of showing a misleading 100%');
 }
 
-console.log('Project readiness audit OK: corrupted mastery values are bounded and unresolved skills lower readiness honestly.');
+console.log('Project readiness audit OK: mastery values and readiness gates are bounded, and unresolved skills lower readiness honestly.');
