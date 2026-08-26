@@ -31,6 +31,7 @@ export function PasswordResetScreen({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState<'password' | 'confirm' | null>(null);
 
   const hasPassword = password.length >= 6;
   const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
@@ -76,7 +77,7 @@ export function PasswordResetScreen({
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Nouveau mot de passe</Text>
-              <View style={styles.inputShell}>
+              <View style={[styles.inputShell, focusedField === 'password' && styles.inputShellFocused]}>
                 <TextInput
                   value={password}
                   onChangeText={setPassword}
@@ -89,6 +90,8 @@ export function PasswordResetScreen({
                   autoComplete="new-password"
                   textContentType="newPassword"
                   returnKeyType="next"
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
                   accessibilityLabel="Nouveau mot de passe"
                 />
                 <Pressable
@@ -108,7 +111,7 @@ export function PasswordResetScreen({
 
             <View style={styles.fieldGroup}>
               <Text style={styles.fieldLabel}>Confirmer le mot de passe</Text>
-              <View style={styles.inputShell}>
+              <View style={[styles.inputShell, focusedField === 'confirm' && styles.inputShellFocused]}>
                 <TextInput
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
@@ -122,6 +125,8 @@ export function PasswordResetScreen({
                   textContentType="newPassword"
                   returnKeyType="go"
                   onSubmitEditing={submit}
+                  onFocus={() => setFocusedField('confirm')}
+                  onBlur={() => setFocusedField(null)}
                   accessibilityLabel="Confirmer le nouveau mot de passe"
                 />
               </View>
@@ -145,7 +150,7 @@ export function PasswordResetScreen({
               accessibilityState={{ disabled: !valid, busy }}
               style={({ pressed }) => [styles.primary, !valid && styles.primaryDisabled, pressed && valid && styles.primaryPressed]}
             >
-              {busy ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
+              {busy ? <ActivityIndicator color={theme.colors.white} size="small" /> : null}
               <Text style={styles.primaryText}>{busy ? 'Mise à jour…' : 'Enregistrer et continuer'}</Text>
             </Pressable>
 
@@ -173,60 +178,67 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: 'rgba(109,124,255,.08)',
+    backgroundColor: theme.colors.primaryGlass,
     top: -180,
     right: -110,
+    opacity: 0.5,
   },
   scrollContent: { flexGrow: 1, justifyContent: 'center' },
   content: { paddingHorizontal: 22, paddingVertical: 28 },
   brandMark: {
     width: 58,
     height: 58,
-    borderRadius: 19,
-    backgroundColor: 'rgba(78,103,255,.16)',
+    borderRadius: theme.radius.lg,
+    backgroundColor: theme.colors.primaryGlass,
     borderWidth: 1,
-    borderColor: 'rgba(139,154,255,.34)',
+    borderColor: theme.colors.primaryBorderStrong,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 28,
   },
-  brandMarkText: { color: '#DDE3FF', fontSize: 20, fontWeight: '900', letterSpacing: -2 },
-  eyebrow: { color: theme.colors.primary, fontSize: 10, fontWeight: '900', letterSpacing: 1.4, marginBottom: 7 },
-  title: { color: theme.colors.text, fontSize: 34, lineHeight: 39, fontWeight: '900', letterSpacing: -1.2 },
+  brandMarkText: { color: theme.colors.primaryText, fontSize: 20, fontWeight: theme.weight.black, letterSpacing: -2 },
+  eyebrow: { color: theme.colors.primary, fontSize: 10, fontWeight: theme.weight.black, letterSpacing: 1.4, marginBottom: 7 },
+  title: { color: theme.colors.text, fontSize: 34, lineHeight: 39, fontWeight: theme.weight.black, letterSpacing: -1.2 },
   subtitle: { color: theme.colors.textSecondary, fontSize: 14, lineHeight: 21, marginTop: 9, marginBottom: 28 },
   fieldGroup: { marginBottom: 16 },
-  fieldLabel: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '800', marginBottom: 8 },
+  fieldLabel: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.weight.bold, marginBottom: 8 },
   inputShell: {
     minHeight: 58,
-    borderRadius: 18,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(139,154,255,.22)',
-    backgroundColor: 'rgba(255,255,255,.045)',
+    borderColor: theme.colors.borderControl,
+    backgroundColor: theme.colors.surfaceStat,
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  inputShellFocused: {
+    borderColor: theme.colors.primaryBorderStrong,
+    backgroundColor: theme.colors.primarySurface,
   },
   input: { flex: 1, color: theme.colors.text, fontSize: 15, paddingHorizontal: 16, paddingVertical: 15 },
   inlineAction: { minHeight: 44, minWidth: 72, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
   inlineActionPressed: { opacity: 0.7 },
-  inlineActionText: { color: theme.colors.primary, fontSize: 12, fontWeight: '900' },
+  inlineActionText: { color: theme.colors.primary, fontSize: 12, fontWeight: theme.weight.black },
   helperCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-    borderRadius: 16,
-    backgroundColor: 'rgba(109,124,255,.07)',
+    borderRadius: theme.radius.md,
+    backgroundColor: theme.colors.primarySurface,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorder,
     padding: 13,
     marginTop: 2,
     marginBottom: 20,
   },
-  helperCardError: { backgroundColor: 'rgba(255,94,115,.08)' },
+  helperCardError: { backgroundColor: theme.colors.warningGlass, borderColor: theme.colors.danger },
   helperDot: { width: 7, height: 7, borderRadius: 4, marginTop: 5, backgroundColor: theme.colors.primary },
-  helperDotError: { backgroundColor: '#FF6B81' },
+  helperDotError: { backgroundColor: theme.colors.danger },
   helperText: { flex: 1, color: theme.colors.textSecondary, fontSize: 12, lineHeight: 18 },
-  errorText: { color: '#FFB2BE' },
+  errorText: { color: theme.colors.danger },
   primary: {
     minHeight: 58,
-    borderRadius: 18,
+    borderRadius: theme.radius.lg,
     backgroundColor: theme.colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
@@ -235,8 +247,8 @@ const styles = StyleSheet.create({
   },
   primaryDisabled: { opacity: 0.42 },
   primaryPressed: { transform: [{ translateY: 1 }] },
-  primaryText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
+  primaryText: { color: theme.colors.white, fontSize: 14, fontWeight: theme.weight.black },
   secondary: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 10 },
   secondaryPressed: { opacity: 0.65 },
-  secondaryText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: '800' },
+  secondaryText: { color: theme.colors.textSecondary, fontSize: 12, fontWeight: theme.weight.bold },
 });
