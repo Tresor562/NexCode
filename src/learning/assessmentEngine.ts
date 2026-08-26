@@ -27,7 +27,12 @@ function evenlySampleLessons(lessons: Lesson[], maxItems: number) {
   });
 }
 
-function coverageSampleLessons(lessons: Lesson[], targetSkillIds: string[], maxItems: number) {
+function coverageSampleLessons(
+  lessons: Lesson[],
+  targetSkillIds: string[],
+  maxItems: number,
+  preferredLessonIds = new Set<string>(),
+) {
   if (maxItems <= 0 || lessons.length === 0) return [];
   if (lessons.length <= maxItems) return lessons;
 
@@ -37,13 +42,16 @@ function coverageSampleLessons(lessons: Lesson[], targetSkillIds: string[], maxI
   while (selected.size < maxItems && uncovered.size > 0) {
     let best: Lesson | undefined;
     let bestCoverage = 0;
+    let bestPreferred = false;
 
     for (const lesson of lessons) {
       if (selected.has(lesson.id)) continue;
       const coverage = (lesson.skillIds ?? []).reduce((count, skillId) => count + (uncovered.has(skillId) ? 1 : 0), 0);
-      if (coverage > bestCoverage) {
+      const preferred = preferredLessonIds.has(lesson.id);
+      if (coverage > bestCoverage || (coverage === bestCoverage && coverage > 0 && preferred && !bestPreferred)) {
         best = lesson;
         bestCoverage = coverage;
+        bestPreferred = preferred;
       }
     }
 
@@ -55,7 +63,15 @@ function coverageSampleLessons(lessons: Lesson[], targetSkillIds: string[], maxI
   const remainingSlots = maxItems - selected.size;
   if (remainingSlots > 0) {
     const remaining = lessons.filter((lesson) => !selected.has(lesson.id));
-    for (const lesson of evenlySampleLessons(remaining, remainingSlots)) selected.add(lesson.id);
+    const preferredRemaining = remaining.filter((lesson) => preferredLessonIds.has(lesson.id));
+    const preferredSample = evenlySampleLessons(preferredRemaining, Math.min(remainingSlots, preferredRemaining.length));
+    for (const lesson of preferredSample) selected.add(lesson.id);
+
+    const fallbackSlots = maxItems - selected.size;
+    if (fallbackSlots > 0) {
+      const fallbackRemaining = lessons.filter((lesson) => !selected.has(lesson.id));
+      for (const lesson of evenlySampleLessons(fallbackRemaining, fallbackSlots)) selected.add(lesson.id);
+    }
   }
 
   return lessons.filter((lesson) => selected.has(lesson.id));
@@ -87,11 +103,7 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
 export function courseExam(course: Course): AssessmentPlan {
   const evidenceLessons = course.starterLessons.filter((lesson) => ['checkpoint', 'boss', 'project', 'lab'].includes(lesson.activityKind ?? 'learn'));
   const evidenceIds = new Set(evidenceLessons.map((lesson) => lesson.id));
-  const candidates = [
-    ...evidenceLessons,
-    ...course.starterLessons.filter((lesson) => !evidenceIds.has(lesson.id)),
-  ];
-  const selectedLessons = coverageSampleLessons(candidates, course.skillIds, 20);
+  const selectedLessons = coverageSampleLessons(course.starterLessons, course.skillIds, 20, evidenceIds);
   return {
     id: `${course.id}.course-exam`,
     kind: 'course-exam',
