@@ -16,8 +16,12 @@ requireSnippet("import { useMotionPreferences } from './motionPreferences';", 'L
 requireSnippet("import { theme } from './theme';", 'Learning path nodes must use shared design tokens.');
 requireSnippet('const AMBIENT_PULSE_ITERATIONS = 3;', 'Recommended-node pulse must stay bounded.');
 requireSnippet('const AMBIENT_SHIMMER_ITERATIONS = 2;', 'Recommended-node shimmer must stay bounded.');
+requireSnippet('const COMPLETION_TRAIL_DURATION_MS = 420;', 'Completion trail must stay short and bounded.');
 requireSnippet('if (!isCurrent || reduceMotion || !appActive)', 'Ambient motion must stop for reduced motion and background state.');
 requireSnippet("const becameDone = previous !== 'done' && state === 'done';", 'Completion motion must only run on a real state transition.');
+requireSnippet("completionTrail.setValue(state === 'done' ? 1 : 0);", 'Reduced-motion/background completion must resolve immediately to a stable trail state.');
+requireSnippet('Animated.parallel([popAnimation, trailAnimation]).start();', 'Completion check and connector trail must remain synchronized.');
+requireSnippet('opacity: completionTrail, transform: [{ translateY: completionTrailY }]', 'Completed connectors must render the bounded progress trail.');
 requireSnippet("if (!appActive) return;", 'Haptic feedback must not fire while the app is inactive.');
 requireSnippet('accessibilityState={{ disabled, selected: isCurrent }}', 'Learning path node state must remain exposed to assistive technology.');
 requireSnippet('const accessibilityHint = disabled', 'Learning path nodes must keep a state-aware accessibility hint.');
@@ -47,4 +51,4 @@ for (const token of tokenUsages) requireSnippet(token, `Learning path states mus
 // semantic state colors must not regress back to standalone hex literals.
 forbidPattern(/#[0-9A-Fa-f]{3,8}/, 'Learning path state colors must come from the design system, not hard-coded hex values.');
 
-console.log('Learning path node audit OK: bounded motion, shared lifecycle, accessibility, haptics, and tokenized semantic states.');
+console.log('Learning path node audit OK: bounded ambient/completion motion, shared lifecycle, accessibility, haptics, and tokenized semantic states.');
