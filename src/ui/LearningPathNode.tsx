@@ -9,6 +9,7 @@ export type LearningPathNodeState = 'done' | 'current' | 'available' | 'locked';
 
 const AMBIENT_PULSE_ITERATIONS = 3;
 const AMBIENT_SHIMMER_ITERATIONS = 2;
+const COMPLETION_TRAIL_DURATION_MS = 420;
 
 export function LearningPathNode({
   title,
@@ -31,6 +32,7 @@ export function LearningPathNode({
   const focusPulse = useRef(new Animated.Value(0)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
   const completionPop = useRef(new Animated.Value(1)).current;
+  const completionTrail = useRef(new Animated.Value(state === 'done' ? 1 : 0)).current;
   const previousState = useRef<LearningPathNodeState>(state);
   const { reduceMotion, appActive } = useMotionPreferences();
   const disabled = state === 'locked';
@@ -40,6 +42,7 @@ export function LearningPathNode({
   const ringScale = focusPulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.2] });
   const ringOpacity = focusPulse.interpolate({ inputRange: [0, 0.45, 1], outputRange: [0.16, 0.34, 0] });
   const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-54, 70] });
+  const completionTrailY = completionTrail.interpolate({ inputRange: [0, 1], outputRange: [-18, 0] });
 
   useEffect(() => {
     if (!isCurrent || reduceMotion || !appActive) {
@@ -94,23 +97,38 @@ export function LearningPathNode({
     const becameDone = previous !== 'done' && state === 'done';
 
     completionPop.stopAnimation();
+    completionTrail.stopAnimation();
     if (!becameDone || reduceMotion || !appActive) {
       completionPop.setValue(1);
+      completionTrail.setValue(state === 'done' ? 1 : 0);
       return;
     }
 
     completionPop.setValue(0.88);
-    const animation = Animated.spring(completionPop, {
+    completionTrail.setValue(0);
+    const popAnimation = Animated.spring(completionPop, {
       toValue: 1,
       useNativeDriver: true,
       speed: 20,
       bounciness: 8,
     });
-    animation.start();
-    return () => animation.stop();
-  }, [appActive, completionPop, reduceMotion, state]);
+    const trailAnimation = Animated.timing(completionTrail, {
+      toValue: 1,
+      duration: COMPLETION_TRAIL_DURATION_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    });
+    Animated.parallel([popAnimation, trailAnimation]).start();
+    return () => {
+      popAnimation.stop();
+      trailAnimation.stop();
+    };
+  }, [appActive, completionPop, completionTrail, reduceMotion, state]);
 
-  useEffect(() => () => press.stopAnimation(), [press]);
+  useEffect(() => () => {
+    press.stopAnimation();
+    completionTrail.stopAnimation();
+  }, [completionTrail, press]);
 
   const animate = (toValue: number) => {
     if (reduceMotion || !appActive) {
@@ -158,7 +176,15 @@ export function LearningPathNode({
     <View style={[styles.row, { transform: [{ translateX: offset }] }]}>
       {showConnector ? (
         <View style={[styles.connectorTrack, state === 'done' && styles.connectorTrackDone]}>
-          {state === 'done' ? <View style={styles.connectorGlow} /> : null}
+          {state === 'done' ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.connectorGlow,
+                { opacity: completionTrail, transform: [{ translateY: completionTrailY }] },
+              ]}
+            />
+          ) : null}
         </View>
       ) : null}
 
@@ -261,7 +287,6 @@ const styles = StyleSheet.create({
     height: '76%',
     borderRadius: 99,
     backgroundColor: theme.colors.success,
-    opacity: 0.46,
   },
   nodeStack: { width: 70, height: 78, position: 'relative', alignItems: 'center' },
   focusRing: {
