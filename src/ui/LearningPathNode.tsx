@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
     top: -10,
     bottom: -10,
     width: 18,
-    backgroundColor: 'rgba(255,255,255,.15)',
+    backgroundColor: theme.colors.surfaceShimmer,
   },
   iconWell: {
     width: 39,
