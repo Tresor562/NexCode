@@ -25,6 +25,10 @@ function boundedPercent(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 }
 
+function readinessGate(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 55;
+}
+
 export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[]): ResolvedProjectSkill[] {
   return project.skills.map((requested) => {
     const terms = normalize(requested).split(/\s+/).filter((term) => term.length >= 3);
@@ -52,18 +56,19 @@ function skillReadinessScore(skillId: string, mastery: MasteryMap) {
 }
 
 export function projectReadinessAgainstGraph(project: GuidedProject, graph: SkillNode[], mastery: MasteryMap, gate = 55) {
+  const safeGate = readinessGate(gate);
   const resolved = resolveProjectSkills(project, graph);
   const skillIds = [...new Set(resolved.flatMap((item) => item.skillIds))];
   const unresolved = resolved.filter((item) => item.skillIds.length === 0).map((item) => item.requested);
   const missing = skillIds.filter((id) => !mastery[id]);
-  const weak = skillIds.filter((id) => mastery[id] && boundedPercent(mastery[id]?.score) < gate);
-  const confidenceGate = Math.min(70, Math.max(40, gate));
+  const weak = skillIds.filter((id) => mastery[id] && boundedPercent(mastery[id]?.score) < safeGate);
+  const confidenceGate = Math.min(70, Math.max(40, safeGate));
   const uncertain = skillIds.filter((id) => {
     const state = mastery[id];
     if (!state) return false;
     const score = boundedPercent(state.score);
     const confidence = boundedPercent(state.confidence);
-    return score >= gate && confidence < confidenceGate;
+    return score >= safeGate && confidence < confidenceGate;
   });
 
   // Unmapped prerequisite labels are real readiness gaps. Treat each unresolved
