@@ -14,6 +14,16 @@ for (const value of ['nX', 'restOpacity', 'restX', 'robotScale', 'glow']) {
   assert.match(source, new RegExp(`${value}\\.stopAnimation\\(\\)`), `Launch cleanup must stop ${value}`);
 }
 
+assert.match(source, /useWindowDimensions\(\)/, 'Launch wordmark must react to the current viewport width');
+assert.match(
+  source,
+  /wordmarkScale\s*=\s*Math\.min\(1,\s*Math\.max\(0\.78,\s*\(width\s*-\s*theme\.space\.xxl\)\s*\/\s*330\)\)/,
+  'Launch wordmark must keep a bounded responsive scale on narrow phones',
+);
+assert.match(source, /transform:\s*\[\{\s*scale:\s*wordmarkScale\s*\}\\?\]/, 'Responsive wordmark scale must be applied to the visual wordmark');
+assert.match(source, /wordmarkRow:\s*\{[^}]*width:\s*330/, 'Launch wordmark must have a stable design width before responsive scaling');
+assert.doesNotMatch(source, /wordmarkRow:\s*\{[^}]*minWidth:\s*330/, 'Launch wordmark must not force a minimum width that can clip narrow screens');
+
 assert.match(source, /backgroundColor:\s*theme\.colors\.background/, 'Launch surface must use the central background token');
 assert.match(source, /backgroundColor:\s*theme\.colors\.primary/, 'Launch accent must use the central primary token');
 assert.match(source, /color:\s*theme\.colors\.text/, 'Launch wordmark must use the central text token');
@@ -21,4 +31,4 @@ assert.match(source, /accessibilityRole="header"/, 'Launch wordmark must expose 
 assert.match(source, /importantForAccessibility="no-hide-descendants"/, 'Decorative robot internals must stay hidden from screen readers');
 assert.match(source, /pointerEvents="none"/, 'Decorative launch glow must never intercept interaction');
 
-console.log('Launch screen audit OK: shared motion lifecycle, reduced-motion completion, design tokens and accessibility are protected.');
+console.log('Launch screen audit OK: shared motion lifecycle, responsive wordmark, reduced-motion completion, design tokens and accessibility are protected.');
