@@ -45,10 +45,14 @@ function hydrateReduceMotion(generation: number) {
       }
     })
     .catch(() => {
-      // Keep motion disabled when the OS preference cannot be read. Accessibility
-      // should fail safe rather than briefly animating for a user who may have
-      // requested reduced motion while no subscriber was mounted.
-      if (listenersActive && generation === listenerGeneration) {
+      // A native event that arrived after this hydration started is newer than
+      // the failed async read. Do not let a late rejection overwrite that newer
+      // preference with the fail-safe value.
+      if (
+        listenersActive &&
+        generation === listenerGeneration &&
+        hydrationRevision === reduceMotionRevision
+      ) {
         reduceMotionKnown = false;
         publish({ reduceMotion: true });
       }
