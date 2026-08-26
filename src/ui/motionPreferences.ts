@@ -16,6 +16,7 @@ let listenersActive = false;
 let listenerGeneration = 0;
 let reduceMotionRevision = 0;
 let reduceMotionKnown = false;
+let hydrationRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let nativeSubscriptions: NativeSubscription[] = [];
 const listeners = new Set<() => void>();
 
@@ -27,7 +28,13 @@ function publish(next: Partial<MotionSnapshot>) {
   listeners.forEach((listener) => listener());
 }
 
-function hydrateReduceMotion(generation: number) {
+function clearHydrationRetry() {
+  if (!hydrationRetryTimer) return;
+  clearTimeout(hydrationRetryTimer);
+  hydrationRetryTimer = null;
+}
+
+function hydrateReduceMotion(generation: number, attempt = 0) {
   const hydrationRevision = reduceMotionRevision;
   AccessibilityInfo.isReduceMotionEnabled()
     .then((enabled) => {
@@ -40,6 +47,7 @@ function hydrateReduceMotion(generation: number) {
         generation === listenerGeneration &&
         hydrationRevision === reduceMotionRevision
       ) {
+        clearHydrationRetry();
         reduceMotionKnown = true;
         publish({ reduceMotion: enabled });
       }
@@ -55,6 +63,23 @@ function hydrateReduceMotion(generation: number) {
       ) {
         reduceMotionKnown = false;
         publish({ reduceMotion: true });
+
+        // A single transient native failure should not disable premium motion for
+        // the rest of the foreground session. Stay fail-safe while the preference
+        // is unknown, then retry once with the same generation/revision guards.
+        if (attempt === 0) {
+          clearHydrationRetry();
+          hydrationRetryTimer = setTimeout(() => {
+            hydrationRetryTimer = null;
+            if (
+              listenersActive &&
+              generation === listenerGeneration &&
+              hydrationRevision === reduceMotionRevision
+            ) {
+              hydrateReduceMotion(generation, 1);
+            }
+          }, 1200);
+        }
       }
     });
 }
@@ -83,6 +108,7 @@ function startNativeListeners() {
       // foreground, while keeping the same generation/revision race guards used
       // for initial hydration.
       if (appActive) {
+        clearHydrationRetry();
         reduceMotionKnown = false;
         publish({ reduceMotion: true });
         hydrateReduceMotion(generation);
@@ -93,6 +119,7 @@ function startNativeListeners() {
       // a revision so a late Promise cannot overwrite a newer system preference
       // while this listener generation is still active.
       reduceMotionRevision += 1;
+      clearHydrationRetry();
       reduceMotionKnown = true;
       publish({ reduceMotion: enabled });
     }),
@@ -106,6 +133,7 @@ function stopNativeListeners() {
   listenersActive = false;
   listenerGeneration += 1;
   reduceMotionKnown = false;
+  clearHydrationRetry();
   nativeSubscriptions.forEach((subscription) => subscription.remove());
   nativeSubscriptions = [];
 }
