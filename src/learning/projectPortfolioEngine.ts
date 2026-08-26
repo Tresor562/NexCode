@@ -21,6 +21,10 @@ function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function boundedPercent(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+}
+
 export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[]): ResolvedProjectSkill[] {
   return project.skills.map((requested) => {
     const terms = normalize(requested).split(/\s+/).filter((term) => term.length >= 3);
@@ -37,8 +41,8 @@ export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[])
 function skillReadinessScore(skillId: string, mastery: MasteryMap) {
   const state = mastery[skillId];
   if (!state) return 0;
-  const score = Number.isFinite(state.score) ? Math.max(0, Math.min(100, state.score)) : 0;
-  const confidence = Number.isFinite(state.confidence) ? Math.max(0, Math.min(100, state.confidence)) : 0;
+  const score = boundedPercent(state.score);
+  const confidence = boundedPercent(state.confidence);
 
   // Projects are a transfer activity: the learner does not need prior project
   // evidence to start one, but a high raw score from too little evidence should
@@ -52,11 +56,14 @@ export function projectReadinessAgainstGraph(project: GuidedProject, graph: Skil
   const skillIds = [...new Set(resolved.flatMap((item) => item.skillIds))];
   const unresolved = resolved.filter((item) => item.skillIds.length === 0).map((item) => item.requested);
   const missing = skillIds.filter((id) => !mastery[id]);
-  const weak = skillIds.filter((id) => mastery[id] && (mastery[id]?.score ?? 0) < gate);
+  const weak = skillIds.filter((id) => mastery[id] && boundedPercent(mastery[id]?.score) < gate);
   const confidenceGate = Math.min(70, Math.max(40, gate));
   const uncertain = skillIds.filter((id) => {
     const state = mastery[id];
-    return Boolean(state) && (state?.score ?? 0) >= gate && (state?.confidence ?? 0) < confidenceGate;
+    if (!state) return false;
+    const score = boundedPercent(state.score);
+    const confidence = boundedPercent(state.confidence);
+    return score >= gate && confidence < confidenceGate;
   });
   const score = skillIds.length
     ? Math.round(skillIds.reduce((sum, id) => sum + skillReadinessScore(id, mastery), 0) / skillIds.length)
