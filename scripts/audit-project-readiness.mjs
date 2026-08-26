@@ -82,4 +82,15 @@ const state = (score, confidence) => ({
   assert.equal(result.score, 0, 'readiness score must never fall below zero');
 }
 
-console.log('Project readiness audit OK: corrupted mastery values are bounded and fail closed consistently.');
+{
+  const partiallyMappedProject = {
+    ...project,
+    skills: ['HTML structure', 'Mystery deployment skill'],
+  };
+  const result = projectReadinessAgainstGraph(partiallyMappedProject, graph, state(100, 100), 55);
+  assert.equal(result.ready, false, 'an unmapped prerequisite must keep the project not ready');
+  assert.deepEqual(result.unresolvedSkillLabels, ['Mystery deployment skill']);
+  assert.equal(result.score, 50, 'unmapped prerequisite labels must lower the readiness percentage instead of showing a misleading 100%');
+}
+
+console.log('Project readiness audit OK: corrupted mastery values are bounded and unresolved skills lower readiness honestly.');
