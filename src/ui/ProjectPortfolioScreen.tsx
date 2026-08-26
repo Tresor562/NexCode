@@ -9,6 +9,25 @@ import { ProjectWorkspaceScreen } from './ProjectWorkspaceScreen';
 import { Card, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
 import { theme } from './theme';
 
+type ProjectReadiness = ReturnType<typeof projectReadinessAgainstGraph>;
+
+function skillTitle(skillId: string, graph: SkillNode[]) {
+  return graph.find((node) => node.id === skillId)?.title ?? skillId;
+}
+
+function readinessGuidance(readiness: ProjectReadiness, graph: SkillNode[]) {
+  const missing = readiness.missingSkillIds.map((id) => skillTitle(id, graph));
+  const weak = readiness.weakSkillIds.map((id) => skillTitle(id, graph));
+  const uncertain = readiness.uncertainSkillIds.map((id) => skillTitle(id, graph));
+  return {
+    missing,
+    weak,
+    uncertain,
+    unresolved: readiness.unresolvedSkillLabels,
+    summary: [...missing, ...weak, ...uncertain, ...readiness.unresolvedSkillLabels].slice(0, 3),
+  };
+}
+
 export function ProjectPortfolioScreen({ projects, graph, state, onProgress, onProof, onSaveProjectDraft }: {
   projects: GuidedProject[];
   graph: SkillNode[];
@@ -34,13 +53,19 @@ export function ProjectPortfolioScreen({ projects, graph, state, onProgress, onP
     {projects.map((project) => {
       const progress = state.projectProgress[project.id] ?? 0;
       const readiness = projectReadinessAgainstGraph(project, graph, state.mastery);
+      const guidance = readinessGuidance(readiness, graph);
       const proof = state.portfolioProofs.find((item) => item.projectId === project.id);
       const hasDraft = Boolean(state.projectDrafts[project.id]);
+      const readinessHint = readiness.ready
+        ? 'Prêt à commencer.'
+        : guidance.summary.length
+          ? `À renforcer : ${guidance.summary.join(', ')}.`
+          : `${readiness.score}% des prérequis consolidés.`;
       return <Pressable
         key={project.id}
         accessibilityRole="button"
         accessibilityLabel={`Ouvrir le projet ${project.title}`}
-        accessibilityHint={`${progress}% terminé. ${readiness.ready ? 'Prêt à commencer.' : `${readiness.score}% des prérequis consolidés.`}`}
+        accessibilityHint={`${progress}% terminé. ${readinessHint}`}
         onPress={() => setSelected(project)}
         style={({ pressed }) => [styles.projectPressable, pressed && styles.pressed]}
       >
@@ -50,6 +75,7 @@ export function ProjectPortfolioScreen({ projects, graph, state, onProgress, onP
           <View style={styles.rowBetween}><Text style={styles.meta}>{project.steps.length} étapes • ~{project.estimatedMinutes} min</Text><Text style={styles.progressText}>{progress}%</Text></View>
           <ProgressBar value={progress} />
           <Text style={styles.readiness}>{readiness.ready ? '✓ Prêt à commencer' : `${readiness.score}% des prérequis consolidés`}</Text>
+          {!readiness.ready && guidance.summary.length ? <Text style={styles.readinessDetail} numberOfLines={2}>À renforcer : {guidance.summary.join(' • ')}</Text> : null}
         </Card>
       </Pressable>;
     })}
@@ -68,6 +94,7 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const progress = state.projectProgress[project.id] ?? 0;
   const readiness = useMemo(() => projectReadinessAgainstGraph(project, graph, state.mastery), [project.id, graph, state.mastery]);
+  const guidance = useMemo(() => readinessGuidance(readiness, graph), [readiness, graph]);
   const rubric = useMemo(() => defaultProjectRubric(project), [project.id]);
   const [achieved, setAchieved] = useState<string[]>([]);
   const review = reviewProject(project, achieved);
@@ -96,7 +123,15 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
     </Pressable>
     <Text style={styles.eyebrow}>{project.track.toUpperCase()} • {project.tech}</Text><Text style={styles.title}>{project.title}</Text><Text style={styles.lead}>{project.description}</Text>
     <Card tone="primary" style={styles.ideCard}><View style={styles.ideIcon} accessible={false}><Text style={styles.ideIconText}>⌘</Text></View><View style={styles.flex}><Text style={styles.ideTitle}>{state.projectDrafts[project.id] ? 'Reprendre le code' : 'Ouvrir le Project IDE'}</Text><Text style={styles.ideText}>Fichiers, éditeur mobile, preview Web et console dans un seul workspace.</Text></View><PrimaryButton label={state.projectDrafts[project.id] ? 'Reprendre' : 'Coder'} icon="→" onPress={() => setWorkspaceOpen(true)} /></Card>
-    <Card><View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.kicker}>PRÉREQUIS</Text><Text style={styles.big}>{readiness.score}%</Text></View><Pill label={readiness.ready ? 'Prêt' : 'À renforcer'} tone={readiness.ready ? 'success' : 'warning'} /></View></Card>
+    <Card>
+      <View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.kicker}>PRÉREQUIS</Text><Text style={styles.big}>{readiness.score}%</Text></View><Pill label={readiness.ready ? 'Prêt' : 'À renforcer'} tone={readiness.ready ? 'success' : 'warning'} /></View>
+      {readiness.ready ? <Text style={styles.body}>Tes bases sont assez solides pour apprendre en construisant.</Text> : <View style={styles.guidanceBlock}>
+        {guidance.missing.length ? <Text style={styles.guidanceText}><Text style={styles.guidanceLabel}>À découvrir : </Text>{guidance.missing.join(' • ')}</Text> : null}
+        {guidance.weak.length ? <Text style={styles.guidanceText}><Text style={styles.guidanceLabel}>À renforcer : </Text>{guidance.weak.join(' • ')}</Text> : null}
+        {guidance.uncertain.length ? <Text style={styles.guidanceText}><Text style={styles.guidanceLabel}>Confiance à consolider : </Text>{guidance.uncertain.join(' • ')}</Text> : null}
+        {guidance.unresolved.length ? <Text style={styles.guidanceText}><Text style={styles.guidanceLabel}>À mapper : </Text>{guidance.unresolved.join(' • ')}</Text> : null}
+      </View>}
+    </Card>
     <SectionHeader title="Plan de construction" action={`${completedSteps}/${project.steps.length}`} />
     <Card>{project.steps.map((step, index) => { const done=index<completedSteps||progress>=100; const current=!done&&index===completedSteps; return <View key={step} style={styles.step}><View style={[styles.stepMark,done&&styles.stepDone,current&&styles.stepCurrent]}><Text style={styles.stepMarkText}>{done?'✓':index+1}</Text></View><View style={styles.flex}><Text style={styles.stepTitle}>{step}</Text><Text style={styles.meta}>{done?'Terminée':current?'Étape actuelle':'À venir'}</Text></View></View>})}<PrimaryButton label={progress>=100?'Construction terminée ✓':'Étape terminée'} disabled={progress>=100} onPress={() => onProgress(project, nextProgress)} /></Card>
     <SectionHeader title="Revue avant portfolio" action={`${review.score}/100`} />
@@ -124,6 +159,10 @@ const styles = StyleSheet.create({
   heroCard: { flex: 1 },
   progressText: { color: theme.colors.primaryText, fontSize: 10, fontWeight: theme.weight.black },
   readiness: { color: theme.colors.textMuted, fontSize: 10, fontWeight: theme.weight.semibold, marginTop: 9 },
+  readinessDetail: { color: theme.colors.textSecondary, fontSize: 11, lineHeight: 16, marginTop: theme.space.xxs },
+  guidanceBlock: { marginTop: theme.space.sm, gap: theme.space.xxs },
+  guidanceText: { color: theme.colors.textSecondary, fontSize: theme.type.label, lineHeight: 19 },
+  guidanceLabel: { color: theme.colors.text, fontWeight: theme.weight.bold },
   ideCard: { gap: theme.space.sm },
   ideIcon: { width: theme.control.heightSm, height: theme.control.heightSm, borderRadius: theme.radius.md, backgroundColor: theme.colors.primaryGlass, borderWidth: 1, borderColor: theme.colors.primaryBorder, alignItems: 'center', justifyContent: 'center' },
   ideIconText: { color: theme.colors.primaryTextSoft, fontSize: theme.type.title, fontWeight: theme.weight.black },
