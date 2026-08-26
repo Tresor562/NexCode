@@ -12,6 +12,7 @@ const checks = [
   ['reduced-motion preference refreshed on app resume', source.includes('hydrateReduceMotion(generation)')],
   ['late hydration guarded by listener generation', source.includes('generation === listenerGeneration')],
   ['late hydration guarded by native event revision', source.includes('hydrationRevision === reduceMotionRevision')],
+  ['failed hydration also guarded by native event revision', source.includes('.catch(() => {') && source.match(/hydrationRevision === reduceMotionRevision/g)?.length >= 2],
   ['unknown reduced-motion state fails safe', source.includes('if (!reduceMotionKnown) publish({ reduceMotion: true })')],
   ['app resume disables motion until OS refresh', source.includes('reduceMotionKnown = false;\n        publish({ reduceMotion: true });\n        hydrateReduceMotion(generation);')],
   ['failed OS preference read keeps motion disabled', source.includes('.catch(() => {') && source.includes('publish({ reduceMotion: true })')],
