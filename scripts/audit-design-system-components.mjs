@@ -46,4 +46,31 @@ if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
 }
 
-console.log('Design system components audit OK: semantic colors, shared motion lifecycle, and tokenized touch targets are centralized.');
+const readHexToken = (token) => {
+  const match = theme.match(new RegExp(`${token}:\\s*'(#(?:[0-9A-Fa-f]{6}))'`));
+  if (!match) throw new Error(`Expected ${token} to be a six-digit hex color for contrast auditing.`);
+  return match[1];
+};
+
+const relativeLuminance = (hex) => {
+  const channels = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
+  const linear = channels.map((value) => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+};
+
+const contrastRatio = (foreground, background) => {
+  const foregroundLuminance = relativeLuminance(foreground);
+  const backgroundLuminance = relativeLuminance(background);
+  const lighter = Math.max(foregroundLuminance, backgroundLuminance);
+  const darker = Math.min(foregroundLuminance, backgroundLuminance);
+  return (lighter + 0.05) / (darker + 0.05);
+};
+
+const mutedText = readHexToken('textMuted');
+const darkestSurfaces = [readHexToken('background'), readHexToken('surface')];
+const minimumMutedContrast = Math.min(...darkestSurfaces.map((surface) => contrastRatio(mutedText, surface)));
+if (minimumMutedContrast < 4.5) {
+  throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
+}
+
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
