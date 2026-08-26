@@ -22,14 +22,17 @@ export type ProjectReview = {
   feedback: string[];
 };
 
-function boundedPercent(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value)
-    ? Math.max(0, Math.min(100, value))
-    : 0;
+const DEFAULT_PROJECT_READINESS_GATE = 55;
+
+function boundedPercent(value: unknown, fallback = 0): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(100, value));
 }
 
-export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = 55): ProjectReadiness {
-  const safeGate = boundedPercent(gate);
+export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = DEFAULT_PROJECT_READINESS_GATE): ProjectReadiness {
+  // A malformed runtime gate must never make a project easier to unlock.
+  // Fall back to the product default rather than coercing invalid input to 0.
+  const safeGate = boundedPercent(gate, DEFAULT_PROJECT_READINESS_GATE);
   const missingSkills = project.skills.filter((skillId) => !mastery[skillId]);
   const weakSkills = project.skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
   const masteredScore = project.skills.length
