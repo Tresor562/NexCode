@@ -1,10 +1,17 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { shadows, theme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
 
 type CardTone = 'default' | 'primary' | 'success';
 type PillTone = 'neutral' | 'success' | 'primary' | 'warning';
+type HapticTone = 'light' | 'medium';
+
+function fireImpactHaptic(tone: HapticTone) {
+  const style = tone === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light;
+  void Haptics.impactAsync(style).catch(() => undefined);
+}
 
 export function Card({ children, style, tone = 'default' }: { children: React.ReactNode; style?: ViewStyle | ViewStyle[]; tone?: CardTone }) {
   return <View style={[styles.card, tone === 'primary' && styles.cardPrimary, tone === 'success' && styles.cardSuccess, style]}>{children}</View>;
@@ -58,12 +65,14 @@ function TactileButton({
   disabled,
   style,
   accessibilityLabel,
+  haptic = 'light',
 }: {
   children: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
   style: ViewStyle;
   accessibilityLabel: string;
+  haptic?: HapticTone;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const depth = useRef(new Animated.Value(0)).current;
@@ -116,6 +125,12 @@ function TactileButton({
     ]).start();
   };
 
+  const handlePress = () => {
+    if (disabled) return;
+    if (appActive) fireImpactHaptic(haptic);
+    onPress();
+  };
+
   return (
     <Animated.View style={{ transform: [{ translateY: depth }, { scale }] }}>
       <Pressable
@@ -123,7 +138,7 @@ function TactileButton({
         accessibilityLabel={accessibilityLabel}
         accessibilityState={{ disabled: Boolean(disabled) }}
         disabled={disabled}
-        onPress={onPress}
+        onPress={handlePress}
         onPressIn={() => animate(true)}
         onPressOut={() => animate(false)}
         style={[style, disabled && styles.disabled]}
@@ -136,7 +151,7 @@ function TactileButton({
 
 export function PrimaryButton({ label, onPress, disabled = false, icon }: { label: string; onPress: () => void; disabled?: boolean; icon?: string }) {
   return (
-    <TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled} style={styles.primaryButton}>
+    <TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled} haptic="medium" style={styles.primaryButton}>
       <View style={styles.buttonRow}>
         {icon ? <Text style={styles.primaryButtonIcon}>{icon}</Text> : null}
         <Text style={styles.primaryButtonText}>{label}</Text>
@@ -147,7 +162,7 @@ export function PrimaryButton({ label, onPress, disabled = false, icon }: { labe
 
 export function SecondaryButton({ label, onPress, icon }: { label: string; onPress: () => void; icon?: string }) {
   return (
-    <TactileButton accessibilityLabel={label} onPress={onPress} style={styles.secondaryButton}>
+    <TactileButton accessibilityLabel={label} onPress={onPress} haptic="light" style={styles.secondaryButton}>
       <View style={styles.buttonRow}>
         {icon ? <Text style={styles.secondaryButtonText}>{icon}</Text> : null}
         <Text style={styles.secondaryButtonText}>{label}</Text>
@@ -158,12 +173,16 @@ export function SecondaryButton({ label, onPress, icon }: { label: string; onPre
 
 export function IconButton({ icon, label, onPress, active = false }: { icon: string; label: string; onPress: () => void; active?: boolean }) {
   const { reduceMotion, appActive } = useMotionPreferences();
+  const handlePress = () => {
+    if (appActive) fireImpactHaptic('light');
+    onPress();
+  };
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
-      onPress={onPress}
+      onPress={handlePress}
       hitSlop={4}
       style={({ pressed }) => [
         styles.iconButton,
