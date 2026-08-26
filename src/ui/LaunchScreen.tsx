@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { theme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
@@ -14,6 +14,8 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
   const onDoneRef = useRef(onDone);
   const completionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { reduceMotion, appActive } = useMotionPreferences();
+  const { width } = useWindowDimensions();
+  const wordmarkScale = Math.min(1, Math.max(0.78, (width - theme.space.xxl) / 330));
 
   useEffect(() => {
     onDoneRef.current = onDone;
@@ -104,11 +106,16 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
     <View style={styles.root} accessibilityViewIsModal>
       <StatusBar style="light" />
       <Animated.View pointerEvents="none" style={[styles.glow, { opacity: glowOpacity }]} />
-      <View style={styles.wordmarkRow} accessible accessibilityRole="header" accessibilityLabel="NexCode">
+      <View
+        style={[styles.wordmarkRow, { transform: [{ scale: wordmarkScale }] }]}
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel="NexCode"
+      >
         <Animated.Text style={[styles.n, { transform: [{ translateX: nX }] }]}>N</Animated.Text>
-        <Animated.View style={[styles.rest, { opacity: restOpacity, transform: [{ translateX: restX }] }]}> 
+        <Animated.View style={[styles.rest, { opacity: restOpacity, transform: [{ translateX: restX }] }]}>
           <Text style={styles.letters}>exC</Text>
-          <Animated.View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[styles.robot, { transform: [{ scale: robotScale }] }]}> 
+          <Animated.View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[styles.robot, { transform: [{ scale: robotScale }] }]}>
             <View style={styles.robotEyeRow}><View style={styles.eye} /><View style={styles.eye} /></View>
             <View style={styles.robotMouth} />
           </Animated.View>
@@ -123,7 +130,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   glow: { position: 'absolute', width: 330, height: 330, borderRadius: 165, backgroundColor: theme.colors.primary },
-  wordmarkRow: { height: 86, minWidth: 330, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
+  wordmarkRow: { height: 86, width: 330, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' },
   n: { position: 'absolute', color: theme.colors.text, fontSize: 60, lineHeight: 70, fontWeight: theme.weight.black, letterSpacing: -5, textShadowColor: theme.colors.primary, textShadowRadius: 18 },
   rest: { marginLeft: 45, flexDirection: 'row', alignItems: 'center' },
   letters: { color: theme.colors.text, fontSize: 52, lineHeight: 62, fontWeight: theme.weight.black, letterSpacing: -4 },
