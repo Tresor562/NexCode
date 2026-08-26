@@ -160,9 +160,9 @@ export function PrimaryButton({ label, onPress, disabled = false, icon }: { labe
   );
 }
 
-export function SecondaryButton({ label, onPress, icon }: { label: string; onPress: () => void; icon?: string }) {
+export function SecondaryButton({ label, onPress, icon, disabled = false }: { label: string; onPress: () => void; icon?: string; disabled?: boolean }) {
   return (
-    <TactileButton accessibilityLabel={label} onPress={onPress} haptic="light" style={styles.secondaryButton}>
+    <TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled} haptic="light" style={styles.secondaryButton}>
       <View style={styles.buttonRow}>
         {icon ? <Text style={styles.secondaryButtonText}>{icon}</Text> : null}
         <Text style={styles.secondaryButtonText}>{label}</Text>
@@ -171,9 +171,10 @@ export function SecondaryButton({ label, onPress, icon }: { label: string; onPre
   );
 }
 
-export function IconButton({ icon, label, onPress, active = false }: { icon: string; label: string; onPress: () => void; active?: boolean }) {
+export function IconButton({ icon, label, onPress, active = false, disabled = false }: { icon: string; label: string; onPress: () => void; active?: boolean; disabled?: boolean }) {
   const { reduceMotion, appActive } = useMotionPreferences();
   const handlePress = () => {
+    if (disabled) return;
     if (appActive) fireImpactHaptic('light');
     onPress();
   };
@@ -181,13 +182,15 @@ export function IconButton({ icon, label, onPress, active = false }: { icon: str
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
+      accessibilityState={{ selected: active, disabled }}
+      disabled={disabled}
       onPress={handlePress}
       hitSlop={4}
       style={({ pressed }) => [
         styles.iconButton,
         active && styles.iconButtonActive,
-        pressed && (reduceMotion || !appActive ? styles.iconPressedReducedMotion : styles.iconPressed),
+        disabled && styles.disabled,
+        pressed && !disabled && (reduceMotion || !appActive ? styles.iconPressedReducedMotion : styles.iconPressed),
       ]}
     >
       <Text style={[styles.iconButtonText, active && styles.iconButtonTextActive]}>{icon}</Text>
