@@ -9,6 +9,7 @@ export const theme = {
     surfaceGlassStrong: 'rgba(255,255,255,.085)',
     surfaceCard: 'rgba(17,23,39,.92)',
     surfaceStat: 'rgba(255,255,255,.045)',
+    surfaceShimmer: 'rgba(255,255,255,.15)',
     border: '#202B45',
     borderStrong: '#31405F',
     borderGlass: 'rgba(255,255,255,.10)',
