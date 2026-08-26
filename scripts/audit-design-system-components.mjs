@@ -41,6 +41,10 @@ requireSnippet(components, 'minHeight: theme.control.heightLg', 'Primary control
 requireSnippet(components, 'width: theme.control.heightSm', 'Icon controls must keep tokenized 44pt sizing.');
 requireSnippet(components, 'backgroundColor: theme.colors.primary', 'Primary button must keep the semantic primary token.');
 requireSnippet(components, 'backgroundColor: theme.colors.surfaceGlassStrong', 'Progress track must keep a shared surface token.');
+requireSnippet(components, 'if (appActive && !reduceMotion && !disabled) return;', 'Disabled tactile controls must reset active press motion.');
+requireSnippet(components, 'if (disabled) {', 'Tactile animation must fail safe when a control is disabled.');
+requireSnippet(components, 'scale.setValue(1);', 'Disabled tactile controls must restore neutral scale.');
+requireSnippet(components, 'depth.setValue(0);', 'Disabled tactile controls must restore neutral depth.');
 
 if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
@@ -73,4 +77,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, disabled-state motion reset, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
