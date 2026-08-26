@@ -72,7 +72,9 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
   const [achieved, setAchieved] = useState<string[]>([]);
   const review = reviewProject(project, achieved);
   const existingProof = state.portfolioProofs.find((item) => item.projectId === project.id);
-  const completedSteps = Math.min(project.steps.length, Math.floor((progress / 100) * project.steps.length + Number.EPSILON));
+  const completedSteps = project.steps.length > 0
+    ? Math.min(project.steps.length, Math.max(0, Math.round((progress / 100) * project.steps.length)))
+    : 0;
   const nextProgress = project.steps.length > 0
     ? Math.round((Math.min(project.steps.length, completedSteps + 1) / project.steps.length) * 100)
     : 100;
