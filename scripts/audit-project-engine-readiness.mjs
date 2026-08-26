@@ -51,8 +51,15 @@ const masteryState = (htmlScore, cssScore) => ({
 
 {
   const result = projectReadiness(project, masteryState(60, 60), Number.NaN);
-  assert.equal(result.ready, true, 'invalid gate should normalize instead of poisoning readiness');
+  assert.equal(result.ready, true, 'invalid gate should use the default gate when mastery is strong enough');
   assert.equal(result.score, 60);
+}
+
+{
+  const result = projectReadiness(project, masteryState(10, 10), Number.NaN);
+  assert.equal(result.ready, false, 'invalid gate must not collapse to zero and unlock weak projects');
+  assert.deepEqual(result.weakSkills, ['html', 'css']);
+  assert.equal(result.score, 10);
 }
 
 {
@@ -62,4 +69,4 @@ const masteryState = (htmlScore, cssScore) => ({
   assert.equal(result.score, 45, 'missing mastery contributes zero to the readiness summary');
 }
 
-console.log('Project engine readiness audit OK: invalid mastery and gate values are bounded fail-safe.');
+console.log('Project engine readiness audit OK: invalid mastery is bounded and invalid gates fall back safely.');
