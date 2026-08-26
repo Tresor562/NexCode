@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   ideIconText: { color: theme.colors.primaryTextSoft, fontSize: theme.type.title, fontWeight: theme.weight.black },
   ideTitle: { color: theme.colors.text, fontSize: theme.type.title, fontWeight: theme.weight.black },
   ideText: { color: theme.colors.textSecondary, fontSize: theme.type.label, lineHeight: 18, marginTop: theme.space.xxs },
-  step: { flexDirection: 'row', gap: theme.space.sm, alignItems: 'center', marginBottom: theme.space.label ?? 12 },
+  step: { flexDirection: 'row', gap: theme.space.sm, alignItems: 'center', marginBottom: theme.space.md },
   stepMark: { width: 30, height: 30, borderRadius: theme.radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surfaceSoft, borderWidth: 1, borderColor: theme.colors.border },
   stepDone: { backgroundColor: theme.colors.successSoft, borderColor: theme.colors.successBorderStrong },
   stepCurrent: { borderColor: theme.colors.primary },
