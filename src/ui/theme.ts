@@ -18,7 +18,10 @@ export const theme = {
     borderEmphasis: 'rgba(255,255,255,.14)',
     text: '#F7F9FF',
     textSecondary: '#A7B0C6',
-    textMuted: '#69758F',
+    // Muted copy is still secondary information, but it appears throughout
+    // lesson metadata, Lab counters and navigation hints. Keep it above a
+    // comfortable AA contrast threshold on the darkest premium surfaces.
+    textMuted: '#7E89A3',
     primary: '#6D7CFF',
     primaryBright: '#8996FF',
     primarySoft: '#202A5D',
