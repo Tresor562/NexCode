@@ -22,11 +22,18 @@ export type ProjectReview = {
   feedback: string[];
 };
 
+function boundedPercent(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : 0;
+}
+
 export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = 55): ProjectReadiness {
+  const safeGate = boundedPercent(gate);
   const missingSkills = project.skills.filter((skillId) => !mastery[skillId]);
-  const weakSkills = project.skills.filter((skillId) => mastery[skillId] && (mastery[skillId]?.score ?? 0) < gate);
+  const weakSkills = project.skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
   const masteredScore = project.skills.length
-    ? Math.round(project.skills.reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0) / project.skills.length)
+    ? Math.round(project.skills.reduce((sum, id) => sum + boundedPercent(mastery[id]?.score), 0) / project.skills.length)
     : 0;
   return {
     ready: missingSkills.length === 0 && weakSkills.length === 0,
