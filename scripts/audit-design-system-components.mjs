@@ -35,6 +35,7 @@ for (const token of requiredTokens) {
   requireSnippet(components, `theme.colors.${token}`, `Shared components must consume semantic token theme.colors.${token}.`);
 }
 
+requireSnippet(components, "import * as Haptics from 'expo-haptics';", 'Shared tactile controls must keep native haptic feedback wired through expo-haptics.');
 requireSnippet(components, "import { shadows, theme } from './theme';", 'Shared components must use the central theme.');
 requireSnippet(components, "import { useMotionPreferences } from './motionPreferences';", 'Shared controls must retain the shared motion lifecycle.');
 requireSnippet(components, 'minHeight: theme.control.heightLg', 'Primary controls must keep tokenized touch target sizing.');
@@ -45,6 +46,11 @@ requireSnippet(components, 'if (appActive && !reduceMotion && !disabled) return;
 requireSnippet(components, 'if (disabled) {', 'Tactile animation must fail safe when a control is disabled.');
 requireSnippet(components, 'scale.setValue(1);', 'Disabled tactile controls must restore neutral scale.');
 requireSnippet(components, 'depth.setValue(0);', 'Disabled tactile controls must restore neutral depth.');
+requireSnippet(components, 'void Haptics.impactAsync(style).catch(() => undefined);', 'Shared haptic feedback must fail softly when the native haptics API is unavailable.');
+requireSnippet(components, 'if (disabled) return;\n    if (appActive) fireImpactHaptic(haptic);', 'Disabled tactile controls must never emit haptics and shared haptics must stay foreground-only.');
+requireSnippet(components, 'haptic="medium"', 'Primary actions must keep a distinct medium haptic emphasis.');
+requireSnippet(components, 'haptic="light"', 'Secondary actions must keep light haptic emphasis.');
+requireSnippet(components, "if (appActive) fireImpactHaptic('light');", 'Icon controls must keep foreground-only light haptic feedback.');
 
 if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
@@ -77,4 +83,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, disabled-state motion reset, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, foreground-only resilient haptics, disabled-state motion reset, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
