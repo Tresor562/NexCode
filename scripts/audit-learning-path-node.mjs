@@ -37,6 +37,7 @@ const tokenUsages = [
   'theme.colors.surfaceRaised',
   'theme.colors.surfaceGlass',
   'theme.colors.surfaceGlassStrong',
+  'theme.colors.surfaceShimmer',
   'theme.colors.borderStrong',
   'theme.colors.borderGlass',
   'theme.colors.success',
@@ -47,8 +48,7 @@ const tokenUsages = [
 ];
 for (const token of tokenUsages) requireSnippet(token, `Learning path states must keep using shared token ${token}.`);
 
-// The shimmer highlight may stay a deliberately translucent white overlay, but
-// semantic state colors must not regress back to standalone hex literals.
 forbidPattern(/#[0-9A-Fa-f]{3,8}/, 'Learning path state colors must come from the design system, not hard-coded hex values.');
+forbidPattern(/rgba?\s*\(/, 'Learning path visuals must use shared design tokens, not local rgb/rgba literals.');
 
-console.log('Learning path node audit OK: bounded ambient/completion motion, shared lifecycle, accessibility, haptics, and tokenized semantic states.');
+console.log('Learning path node audit OK: bounded ambient/completion motion, shared lifecycle, accessibility, haptics, and fully tokenized visual states.');
