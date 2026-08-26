@@ -70,12 +70,12 @@ function TactileButton({
   const { reduceMotion, appActive } = useMotionPreferences();
 
   useEffect(() => {
-    if (appActive && !reduceMotion) return;
+    if (appActive && !reduceMotion && !disabled) return;
     scale.stopAnimation();
     depth.stopAnimation();
     scale.setValue(1);
     depth.setValue(0);
-  }, [appActive, depth, reduceMotion, scale]);
+  }, [appActive, depth, disabled, reduceMotion, scale]);
 
   useEffect(() => () => {
     scale.stopAnimation();
@@ -83,6 +83,14 @@ function TactileButton({
   }, [depth, scale]);
 
   const animate = (pressed: boolean) => {
+    if (disabled) {
+      scale.stopAnimation();
+      depth.stopAnimation();
+      scale.setValue(1);
+      depth.setValue(0);
+      return;
+    }
+
     const nextScale = pressed ? theme.motion.pressedScale : 1;
     const nextDepth = pressed ? theme.motion.pressedDepth : 0;
     if (reduceMotion || !appActive) {
