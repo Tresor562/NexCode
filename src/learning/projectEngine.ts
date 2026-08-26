@@ -55,10 +55,18 @@ export function reviewProject(project: GuidedProject, achievedRubricIds: string[
 }
 
 export function nextProjectStep(project: GuidedProject, progress: number) {
-  const completed = Math.min(project.steps.length, Math.floor((Math.max(0, progress) / 100) * project.steps.length));
+  const safeProgress = typeof progress === 'number' && Number.isFinite(progress)
+    ? Math.max(0, Math.min(100, progress))
+    : 0;
+  // Progress is persisted as a rounded percentage (e.g. 33/67 for 3 steps).
+  // Reconstruct the completed step count with the same rounding semantics so a
+  // saved 33% project restores to 1/3 instead of falling back to 0/3.
+  const completed = project.steps.length
+    ? Math.min(project.steps.length, Math.max(0, Math.round((safeProgress / 100) * project.steps.length)))
+    : 0;
   return {
     completedSteps: completed,
     nextStep: project.steps[Math.min(completed, project.steps.length - 1)],
-    complete: progress >= 100,
+    complete: safeProgress >= 100,
   };
 }
