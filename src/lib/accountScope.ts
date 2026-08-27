@@ -2,6 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import type { LocalState } from './localState';
 
 const ownerFile = new File(Paths.document, 'nexcode-local-owner.txt');
+const ownerBoundMarker = new File(Paths.document, 'nexcode-local-owner-bound-v1');
 
 function readOwnerId(): string | null {
   try {
@@ -13,12 +14,29 @@ function readOwnerId(): string | null {
   }
 }
 
+function ownerBindingWasInitialized(): boolean {
+  try {
+    return ownerBoundMarker.exists;
+  } catch {
+    // If the filesystem cannot answer reliably, prefer account isolation over
+    // reusing progression whose owner cannot be proven.
+    return true;
+  }
+}
+
 export function bindLocalStateOwner(userId: string): void {
   const normalized = userId.trim();
   if (!normalized) return;
   try {
     if (!ownerFile.exists) ownerFile.create();
     ownerFile.write(normalized);
+
+    // This marker distinguishes a genuinely old pre-account-scope install from
+    // a modern install whose owner metadata was later deleted or corrupted.
+    // Once account scoping has been initialized, losing owner metadata must not
+    // make another authenticated account inherit the previous learner's state.
+    if (!ownerBoundMarker.exists) ownerBoundMarker.create();
+    ownerBoundMarker.write('1');
   } catch {
     // Cloud hydration can still continue; the next launch will fail safe again.
   }
@@ -56,10 +74,13 @@ export function scopeLocalStateForUser(local: LocalState, userId: string): Local
   if (!normalized) return freshState();
   const ownerId = readOwnerId();
 
-  // Existing installs predate owner binding. Treat that snapshot as belonging to
-  // the currently authenticated account once, then all future account changes
-  // are isolated. When an owner is known and differs, never merge that learner's
-  // local XP, projects or mastery into another account.
-  if (!ownerId || ownerId === normalized) return local;
-  return freshState();
+  // Existing installs predate owner binding. They may adopt their snapshot once
+  // only when there is no evidence account scoping was ever initialized.
+  if (!ownerId) {
+    return ownerBindingWasInitialized() ? freshState() : local;
+  }
+
+  // Once an owner is known, never merge that learner's local XP, projects,
+  // drafts or mastery into another authenticated account.
+  return ownerId === normalized ? local : freshState();
 }
