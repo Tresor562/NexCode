@@ -46,6 +46,15 @@ function canHydrateReduceMotion(generation: number, hydrationRevision: number) {
   );
 }
 
+function invalidateReduceMotionHydration() {
+  // App lifecycle transitions form a freshness boundary just like native
+  // reduce-motion events. Any async read started before this boundary must never
+  // become authoritative if it resolves after a later foreground session starts.
+  reduceMotionRevision += 1;
+  clearHydrationRetry();
+  reduceMotionKnown = false;
+}
+
 function hydrateReduceMotion(generation: number, attempt = 0) {
   const hydrationRevision = reduceMotionRevision;
   if (!canHydrateReduceMotion(generation, hydrationRevision)) return;
@@ -104,14 +113,14 @@ function startNativeListeners() {
   nativeSubscriptions = [
     AppState.addEventListener('change', (nextState) => {
       const appActive = nextState === 'active';
+      const appActiveChanged = appActive !== snapshot.appActive;
       publish({ appActive });
 
       if (!appActive) {
         // Do not spend native work while the application is suspended. Any
-        // pending retry is no longer useful and the preference is considered
-        // unknown until a fresh foreground hydration succeeds.
-        clearHydrationRetry();
-        reduceMotionKnown = false;
+        // pending retry and in-flight hydration belong to the previous foreground
+        // session, so invalidate them before the next resume can become active.
+        if (appActiveChanged) invalidateReduceMotionHydration();
         publish({ reduceMotion: true });
         return;
       }
@@ -119,9 +128,9 @@ function startNativeListeners() {
       // Accessibility events are not guaranteed to be delivered while an app is
       // suspended. Re-read the system preference every time we return to the
       // foreground, while keeping the same generation/revision race guards used
-      // for initial hydration.
-      clearHydrationRetry();
-      reduceMotionKnown = false;
+      // for initial hydration. Advancing the revision prevents a Promise started
+      // before backgrounding from publishing into this newer foreground session.
+      if (appActiveChanged) invalidateReduceMotionHydration();
       publish({ reduceMotion: true });
       hydrateReduceMotion(generation);
     }),
