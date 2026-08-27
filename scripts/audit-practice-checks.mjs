@@ -31,9 +31,14 @@ assert.equal(passes('HTML/CSS', '<main style="/* color: red; */">Hello</main>'),
 assert.equal(passes('HTML/CSS', '<script>const fake = "<main>Hello</main>";</script><style>main { color: red; }</style>'), false, 'markup that only exists inside script text must not satisfy practice checks');
 
 assert.equal(passes('JavaScript', 'const total = 2 + 2;\nconsole.log(total);'), true, 'real JavaScript declaration + output should pass');
+assert.equal(passes('JavaScript', 'const first = 2;\nconst second = 3;\nconsole.log(first + second);'), true, 'console output may use declared values inside an expression');
+assert.equal(passes('JavaScript', 'const $total = 4;\nconsole.log($total);'), true, 'valid dollar-prefixed identifiers should be recognised');
 assert.equal(passes('JavaScript', '// const total = 4; console.log(total);'), false, 'comment-only JavaScript must fail');
 assert.equal(passes('JavaScript', '/* let total = 4; console.log(total); */'), false, 'block-comment JavaScript must fail');
 assert.equal(passes('JavaScript', 'const note = "console.log(total)";'), false, 'console.log text inside a string must not satisfy the output check');
+assert.equal(passes('JavaScript', 'const total = 4;\nconsole.log("hello");'), false, 'output unrelated to the declared value must not validate the practice');
+assert.equal(passes('JavaScript', 'const total = 4;\nconsole.log(4);'), false, 'printing only a literal must not stand in for using the declared value');
+assert.equal(passes('JavaScript', 'const total = 4;\nconsole.log(totalValue);'), false, 'a longer unrelated identifier must not be mistaken for the declared value');
 assert.equal(passes('JavaScript', 'const url = "https://example.com/path";\nconsole.log(url);'), true, 'URL strings must not be mistaken for line comments');
 assert.equal(passes('JavaScript', 'const sample = `console.log(fake)`;'), false, 'template text must not count as executable console output');
 
@@ -56,4 +61,4 @@ assert.equal(passes('SQL', "SELECT 'it''s safe' AS label FROM users;"), true, 'e
 
 assert.match(checkPractice('JavaScript', '   '), /Écris une réponse/i, 'blank practice should keep explicit feedback');
 
-console.log('Practice checks audit OK: fake code, comment-only CSS, scripted markup and out-of-scope Python returns are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
+console.log('Practice checks audit OK: fake code, unrelated JavaScript output, comment-only CSS, scripted markup and out-of-scope Python returns are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
