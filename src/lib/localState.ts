@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 import { AttemptEvidence, MasteryMap, SkillMastery, masteryBand } from '../learning/skillGraph';
-import type { OfflinePack } from '../learning/offlineEngine';
+import type { OfflinePack, OfflinePackKind } from '../learning/offlineEngine';
 import type { PortfolioProof } from '../learning/projectPortfolioEngine';
 import { scheduleCloudStatePush } from './cloudSync';
 
@@ -179,6 +179,15 @@ function normalizeNumberRecord(value: unknown): Record<string, number> {
   return result;
 }
 
+function normalizePercentRecord(value: unknown): Record<string, number> {
+  const result: Record<string, number> = {};
+  for (const [key, raw] of Object.entries(plainRecord(value))) {
+    if (!key.trim() || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    result[key] = Math.max(0, Math.min(100, raw));
+  }
+  return result;
+}
+
 function normalizeErrorTags(value: unknown): Record<string, string[]> {
   const result: Record<string, string[]> = {};
   for (const [key, raw] of Object.entries(plainRecord(value))) {
@@ -188,13 +197,73 @@ function normalizeErrorTags(value: unknown): Record<string, string[]> {
   return result;
 }
 
+const OFFLINE_PACK_KINDS = new Set<OfflinePackKind>(['lite', 'standard', 'full']);
+const OFFLINE_PACK_INCLUDES = new Set<OfflinePack['includes'][number]>(['content', 'examples', 'exercise-assets', 'lab-starters', 'media']);
+
+function normalizeOfflinePacks(value: unknown): OfflinePack[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: OfflinePack[] = [];
+  const seenIds = new Set<string>();
+
+  for (const rawValue of value.slice(0, 500)) {
+    const raw = plainRecord(rawValue);
+    const id = cleanString(raw.id, '', 240);
+    const courseId = cleanString(raw.courseId, '', 160);
+    const kind = typeof raw.kind === 'string' && OFFLINE_PACK_KINDS.has(raw.kind as OfflinePackKind)
+      ? raw.kind as OfflinePackKind
+      : undefined;
+    const chapterIds = stringList(raw.chapterIds, 200);
+    const includes = stringList(raw.includes, 20)
+      .filter((item): item is OfflinePack['includes'][number] => OFFLINE_PACK_INCLUDES.has(item as OfflinePack['includes'][number]));
+
+    if (!id || !courseId || !kind || !chapterIds.length || seenIds.has(id)) continue;
+    seenIds.add(id);
+    normalized.push({
+      id,
+      courseId,
+      kind,
+      chapterIds,
+      estimatedMb: finiteInteger(raw.estimatedMb, 0, 0, 100_000),
+      includes: [...new Set(includes)],
+      curriculumVersion: finiteInteger(raw.curriculumVersion, 0, 0, 1_000_000),
+    });
+  }
+
+  return normalized;
+}
+
+function normalizePortfolioProofs(value: unknown): PortfolioProof[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: PortfolioProof[] = [];
+
+  for (const rawValue of value.slice(-2_000)) {
+    const raw = plainRecord(rawValue);
+    const projectId = cleanString(raw.projectId, '', 160);
+    const title = cleanString(raw.title, '', 240);
+    const completedAt = optionalIsoDate(raw.completedAt);
+    if (!projectId || !title || !completedAt) continue;
+
+    normalized.push({
+      projectId,
+      title,
+      completedAt,
+      score: finiteInteger(raw.score, 0, 0, 100),
+      skillIds: stringList(raw.skillIds, 200),
+      rubricIds: stringList(raw.rubricIds, 100),
+      evidenceSummary: cleanString(raw.evidenceSummary, `${title} • preuve restaurée`, 1_000),
+    });
+  }
+
+  return normalized;
+}
+
 function normalizeLabDrafts(value: unknown): Record<string, LabDraft> {
   const result: Record<string, LabDraft> = {};
   for (const [key, raw] of Object.entries(plainRecord(value))) {
     const draft = plainRecord(raw);
     const filesRaw = plainRecord(draft.files);
     const files: Record<string, string> = {};
-    for (const [path, content] of Object.entries(filesRaw)) {
+    for (const [path, content] of Object.entries(filesRaw))) {
       if (!path.trim() || typeof content !== 'string') continue;
       files[path] = content;
     }
@@ -278,13 +347,11 @@ function normalizeState(value: Partial<LocalState>): LocalState {
     totalLearningMinutes: finiteInteger(value.totalLearningMinutes, initialState.totalLearningMinutes),
     downloadedCourses: stringList(value.downloadedCourses),
     downloadedChapters: stringList(value.downloadedChapters),
-    installedOfflinePacks: Array.isArray(value.installedOfflinePacks) ? value.installedOfflinePacks.slice(0, 500) : [],
+    installedOfflinePacks: normalizeOfflinePacks(value.installedOfflinePacks),
     completedLessons: stringList(value.completedLessons, 20_000),
-    projectProgress: normalizeNumberRecord(value.projectProgress),
+    projectProgress: normalizePercentRecord(value.projectProgress),
     projectDrafts: normalizeLabDrafts(value.projectDrafts),
-    portfolioProofs: Array.isArray(value.portfolioProofs)
-      ? value.portfolioProofs.filter((proof) => proof && typeof proof === 'object').slice(0, 2_000) as PortfolioProof[]
-      : [],
+    portfolioProofs: normalizePortfolioProofs(value.portfolioProofs),
     mastery: normalizeMastery(value.mastery),
     lessonAttempts: normalizeNumberRecord(value.lessonAttempts),
     lessonErrorTags: normalizeErrorTags(value.lessonErrorTags),
