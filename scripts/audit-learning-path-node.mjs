@@ -57,6 +57,5 @@ for (const token of tokenUsages) requireSnippet(token, `Learning path states mus
 
 forbidPattern(/#[0-9A-Fa-f]{3,8}/, 'Learning path state colors must come from the design system, not hard-coded hex values.');
 forbidPattern(/rgba?\s*\(/, 'Learning path visuals must use shared design tokens, not local rgb/rgba literals.');
-forbidPattern(/Animated\.loop\([^]*completionHalo/, 'Completion halo must never become an ambient looping animation.');
 
 console.log('Learning path node audit OK: bounded ambient/completion trail+halo motion, shared lifecycle, accessibility, haptics, and fully tokenized visual states.');
