@@ -16,6 +16,7 @@ const checks = [
   ['background transition invalidates stale hydration', source.includes('if (appActiveChanged) invalidateReduceMotionHydration();\n        publish({ reduceMotion: true });')],
   ['foreground transition invalidates stale hydration', source.includes('if (appActiveChanged) invalidateReduceMotionHydration();\n      publish({ reduceMotion: true });\n      hydrateReduceMotion(generation);')],
   ['background transition returns to fail-safe motion state', source.includes('publish({ reduceMotion: true });\n        return;')],
+  ['background accessibility event stays fail-safe', source.includes('if (!snapshot.appActive) {\n        reduceMotionKnown = false;\n        publish({ reduceMotion: true });\n        return;\n      }')],
   ['reduced-motion preference refreshed on app resume', source.includes('hydrateReduceMotion(generation)')],
   ['late hydration guarded by listener generation', source.includes('generation === listenerGeneration')],
   ['late hydration guarded by native event revision', source.includes('hydrationRevision === reduceMotionRevision')],
