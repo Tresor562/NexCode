@@ -140,6 +140,17 @@ function startNativeListeners() {
       // while this listener generation is still active.
       reduceMotionRevision += 1;
       clearHydrationRetry();
+
+      // Keep the shared snapshot fail-safe while backgrounded. Accessibility
+      // events are not guaranteed to be complete while suspended, so never let a
+      // background event re-enable motion before the foreground refresh confirms
+      // the current OS preference.
+      if (!snapshot.appActive) {
+        reduceMotionKnown = false;
+        publish({ reduceMotion: true });
+        return;
+      }
+
       reduceMotionKnown = true;
       publish({ reduceMotion: enabled });
     }),
