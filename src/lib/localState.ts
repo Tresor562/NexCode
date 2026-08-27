@@ -263,7 +263,7 @@ function normalizeLabDrafts(value: unknown): Record<string, LabDraft> {
     const draft = plainRecord(raw);
     const filesRaw = plainRecord(draft.files);
     const files: Record<string, string> = {};
-    for (const [path, content] of Object.entries(filesRaw))) {
+    for (const [path, content] of Object.entries(filesRaw)) {
       if (!path.trim() || typeof content !== 'string') continue;
       files[path] = content;
     }
