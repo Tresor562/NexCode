@@ -14,7 +14,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Haptics from 'expo-haptics';
-import { shadows, theme } from './theme';
+import { PrimaryButton } from './components';
+import { theme } from './theme';
 
 type Mode = 'signin' | 'signup';
 
@@ -139,7 +140,6 @@ export function AuthScreen({
 
   const submit = () => {
     if (!valid || authLocked) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     setResetNotice(undefined);
     setResetFailure(undefined);
     onSubmit({
@@ -175,6 +175,8 @@ export function AuthScreen({
 
   const visibleMessage = resetFailure || resetNotice || error || helper;
   const visibleError = Boolean(resetFailure || error);
+  const submitLabel = mode === 'signin' ? 'Continuer' : 'Créer mon compte';
+  const submitLoadingLabel = mode === 'signin' ? 'Connexion…' : 'Création du compte…';
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -319,24 +321,14 @@ export function AuthScreen({
               </Text>
             </View>
 
-            <Pressable
-              disabled={!valid || authLocked}
+            <PrimaryButton
+              label={submitLabel}
+              loading={busy}
+              loadingLabel={submitLoadingLabel}
+              disabled={!valid || resetBusy}
               onPress={submit}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !valid || authLocked, busy }}
-              style={({ pressed }) => [
-                styles.primaryDepth,
-                (!valid || authLocked) && styles.primaryDisabled,
-                pressed && valid && !authLocked && styles.primaryDepthPressed,
-              ]}
-            >
-              <View style={styles.primaryFace}>
-                {busy ? <ActivityIndicator color={theme.colors.white} size="small" /> : null}
-                <Text style={styles.primaryText}>
-                  {busy ? 'Synchronisation…' : mode === 'signin' ? 'Continuer' : 'Créer mon compte'}
-                </Text>
-              </View>
-            </Pressable>
+              accessibilityHint={mode === 'signin' ? 'Ouvre ton espace apprenant et synchronise ta progression' : 'Crée ton compte NexCode et démarre la synchronisation de ta progression'}
+            />
 
             <Text style={styles.privacy}>
               Tes données de progression restent liées à ton compte NexCode et sont récupérables sur tes appareils.
@@ -444,25 +436,5 @@ const styles = StyleSheet.create({
   helperText: { flex: 1, color: theme.colors.textMuted, fontSize: 11, lineHeight: 16 },
   errorText: { color: theme.colors.danger },
   successText: { color: theme.colors.success },
-  primaryDepth: {
-    minHeight: 61,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.primarySoft,
-    marginTop: theme.space.xxs,
-    paddingBottom: 5,
-    ...shadows.primaryGlow,
-  },
-  primaryFace: {
-    minHeight: 56,
-    borderRadius: theme.radius.lg,
-    backgroundColor: theme.colors.primary,
-    flexDirection: 'row',
-    gap: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryDepthPressed: { paddingBottom: 2, transform: [{ translateY: theme.motion.pressedDepth }] },
-  primaryDisabled: { opacity: .38 },
-  primaryText: { color: theme.colors.white, fontSize: theme.type.body, fontWeight: theme.weight.black, letterSpacing: .15 },
   privacy: { color: theme.colors.textMuted, fontSize: theme.type.caption, lineHeight: 16, textAlign: 'center', marginTop: 15, paddingHorizontal: theme.space.sm },
 });
