@@ -50,16 +50,31 @@ requireSnippet(components, 'void Haptics.impactAsync(style).catch(() => undefine
 requireSnippet(components, 'if (disabled) return;\n    if (appActive) fireImpactHaptic(haptic);', 'Disabled tactile controls must never emit haptics and shared haptics must stay foreground-only.');
 requireSnippet(components, 'haptic="medium"', 'Primary actions must keep a distinct medium haptic emphasis.');
 requireSnippet(components, 'haptic="light"', 'Secondary and icon actions must keep light haptic emphasis.');
-requireSnippet(components, 'SecondaryButton({ label, onPress, icon, disabled = false }', 'Secondary actions must expose the same disable-safe contract as primary actions.');
-requireSnippet(components, '<TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled}', 'Secondary disabled state must flow through the shared tactile control.');
-requireSnippet(components, 'IconButton({ icon, label, onPress, active = false, disabled = false }', 'Icon controls must expose a disable-safe contract.');
+requireSnippet(components, 'accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected, busy: accessibilityBusy }}', 'The shared tactile boundary must expose disabled, selected, and busy state to assistive technologies.');
+requireSnippet(components, 'loading = false', 'Shared premium controls must expose a loading state.');
+requireSnippet(components, "loadingLabel = 'Chargement'", 'Shared premium controls must expose a readable loading label.');
+requireSnippet(components, 'const inactive = disabled || loading;', 'Loading controls must become interaction-safe through the same inactive boundary as disabled controls.');
+requireSnippet(components, 'accessibilityBusy={loading}', 'Loading state must flow to assistive technologies through the shared tactile boundary.');
+requireSnippet(components, 'loading ? <ActivityIndicator', 'Loading controls must expose native progress feedback.');
+requireSnippet(components, 'accessibilityHint={accessibilityHint}', 'Shared premium controls must preserve screen-specific accessibility guidance.');
 requireSnippet(components, 'accessibilitySelected={active}', 'Selected icon state must flow through the shared tactile accessibility contract.');
-requireSnippet(components, 'accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected }}', 'The shared tactile boundary must expose disabled and selected state to assistive technologies.');
 requireSnippet(components, 'style={[styles.iconButton, active && styles.iconButtonActive]}', 'Icon active visuals must stay within the shared tactile boundary.');
+
+const primaryButtonBody = components.slice(components.indexOf('export function PrimaryButton'), components.indexOf('export function SecondaryButton'));
+requireSnippet(primaryButtonBody, 'loading = false', 'Primary actions must expose a loading-safe contract.');
+requireSnippet(primaryButtonBody, 'disabled={inactive}', 'Primary loading state must disable interaction through TactileButton.');
+requireSnippet(primaryButtonBody, 'haptic="medium"', 'Primary actions must retain medium foreground-only haptics.');
+
+const secondaryButtonBody = components.slice(components.indexOf('export function SecondaryButton'), components.indexOf('export function IconButton'));
+requireSnippet(secondaryButtonBody, '<TactileButton', 'Secondary controls must reuse the shared tactile boundary.');
+requireSnippet(secondaryButtonBody, 'loading = false', 'Secondary actions must expose a loading-safe contract.');
+requireSnippet(secondaryButtonBody, 'disabled={inactive}', 'Secondary loading state must disable interaction through TactileButton.');
+requireSnippet(secondaryButtonBody, 'haptic="light"', 'Secondary actions must keep light foreground-only haptic feedback.');
 
 const iconButtonBody = components.slice(components.indexOf('export function IconButton'), components.indexOf('export function Pill'));
 requireSnippet(iconButtonBody, '<TactileButton', 'Icon controls must reuse the shared tactile motion boundary instead of a separate Pressable implementation.');
-requireSnippet(iconButtonBody, 'disabled={disabled}', 'Disabled icon controls must flow through the shared tactile boundary.');
+requireSnippet(iconButtonBody, 'loading = false', 'Icon controls must expose a loading-safe contract.');
+requireSnippet(iconButtonBody, 'disabled={inactive}', 'Icon loading state must disable interaction through the shared tactile boundary.');
 requireSnippet(iconButtonBody, 'haptic="light"', 'Icon controls must keep light foreground-only haptic feedback through the shared tactile boundary.');
 if (iconButtonBody.includes('useMotionPreferences()') || iconButtonBody.includes('<Pressable')) {
   throw new Error('IconButton must not duplicate motion lifecycle or Pressable behavior outside TactileButton.');
@@ -67,6 +82,10 @@ if (iconButtonBody.includes('useMotionPreferences()') || iconButtonBody.includes
 if (components.includes('iconPressed:') || components.includes('iconPressedReducedMotion:')) {
   throw new Error('Legacy icon-only pressed styles must stay removed now that IconButton uses shared tactile motion.');
 }
+
+const sectionHeaderBody = components.slice(components.indexOf('export function SectionHeader'), components.indexOf('export function EmptyState'));
+requireSnippet(sectionHeaderBody, 'actionLoading', 'Section header actions must expose their shared loading state.');
+requireSnippet(sectionHeaderBody, 'loading={actionLoading}', 'Section header loading must flow through the shared tactile action control.');
 
 if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
@@ -114,4 +133,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, unified disable-safe primary/secondary/icon controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, unified loading/disable-safe primary/secondary/icon/section controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
