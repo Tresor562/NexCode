@@ -206,11 +206,33 @@ export function StatTile({ label, value, hint }: { label: string; value: string;
   );
 }
 
-export function SectionHeader({ title, action }: { title: string; action?: string }) {
+export function SectionHeader({
+  title,
+  action,
+  onAction,
+  actionDisabled = false,
+}: {
+  title: string;
+  action?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
+}) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {action ? <Text style={styles.sectionAction}>{action}</Text> : null}
+      <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
+      {action && onAction ? (
+        <TactileButton
+          accessibilityLabel={action}
+          onPress={onAction}
+          disabled={actionDisabled}
+          haptic="light"
+          style={styles.sectionActionButton}
+        >
+          <Text style={styles.sectionAction}>{action}</Text>
+        </TactileButton>
+      ) : action ? (
+        <Text style={styles.sectionAction}>{action}</Text>
+      ) : null}
     </View>
   );
 }
@@ -325,5 +347,11 @@ const styles = StyleSheet.create({
     marginBottom: theme.space.sm,
   },
   sectionTitle: { color: theme.colors.text, fontSize: theme.type.title, fontWeight: theme.weight.black },
+  sectionActionButton: {
+    minHeight: theme.control.heightSm,
+    justifyContent: 'center',
+    paddingHorizontal: theme.space.sm,
+    marginHorizontal: -theme.space.sm,
+  },
   sectionAction: { color: theme.colors.primaryTextSoft, fontSize: 11.5, fontWeight: theme.weight.bold },
 });
