@@ -10,6 +10,8 @@ export type LearningPathNodeState = 'done' | 'current' | 'available' | 'locked';
 const AMBIENT_PULSE_ITERATIONS = 3;
 const AMBIENT_SHIMMER_ITERATIONS = 2;
 const COMPLETION_TRAIL_DURATION_MS = 420;
+const COMPLETION_HALO_IN_MS = 160;
+const COMPLETION_HALO_OUT_MS = 260;
 
 export function LearningPathNode({
   title,
@@ -33,6 +35,7 @@ export function LearningPathNode({
   const shimmer = useRef(new Animated.Value(0)).current;
   const completionPop = useRef(new Animated.Value(1)).current;
   const completionTrail = useRef(new Animated.Value(state === 'done' ? 1 : 0)).current;
+  const completionHalo = useRef(new Animated.Value(0)).current;
   const previousState = useRef<LearningPathNodeState>(state);
   const { reduceMotion, appActive } = useMotionPreferences();
   const disabled = state === 'locked';
@@ -43,6 +46,7 @@ export function LearningPathNode({
   const ringOpacity = focusPulse.interpolate({ inputRange: [0, 0.45, 1], outputRange: [0.16, 0.34, 0] });
   const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-54, 70] });
   const completionTrailY = completionTrail.interpolate({ inputRange: [0, 1], outputRange: [-18, 0] });
+  const completionHaloScale = completionHalo.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.18] });
 
   useEffect(() => {
     if (!isCurrent || reduceMotion || !appActive) {
@@ -98,14 +102,17 @@ export function LearningPathNode({
 
     completionPop.stopAnimation();
     completionTrail.stopAnimation();
+    completionHalo.stopAnimation();
     if (!becameDone || reduceMotion || !appActive) {
       completionPop.setValue(1);
       completionTrail.setValue(state === 'done' ? 1 : 0);
+      completionHalo.setValue(0);
       return;
     }
 
     completionPop.setValue(0.88);
     completionTrail.setValue(0);
+    completionHalo.setValue(0);
     const popAnimation = Animated.spring(completionPop, {
       toValue: 1,
       useNativeDriver: true,
@@ -118,17 +125,33 @@ export function LearningPathNode({
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     });
-    Animated.parallel([popAnimation, trailAnimation]).start();
+    const haloAnimation = Animated.sequence([
+      Animated.timing(completionHalo, {
+        toValue: 1,
+        duration: COMPLETION_HALO_IN_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(completionHalo, {
+        toValue: 0,
+        duration: COMPLETION_HALO_OUT_MS,
+        easing: Easing.in(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]);
+    Animated.parallel([popAnimation, trailAnimation, haloAnimation]).start();
     return () => {
       popAnimation.stop();
       trailAnimation.stop();
+      haloAnimation.stop();
     };
-  }, [appActive, completionPop, completionTrail, reduceMotion, state]);
+  }, [appActive, completionHalo, completionPop, completionTrail, reduceMotion, state]);
 
   useEffect(() => () => {
     press.stopAnimation();
     completionTrail.stopAnimation();
-  }, [completionTrail, press]);
+    completionHalo.stopAnimation();
+  }, [completionHalo, completionTrail, press]);
 
   const animate = (toValue: number) => {
     if (reduceMotion || !appActive) {
@@ -189,6 +212,15 @@ export function LearningPathNode({
       ) : null}
 
       <View style={styles.nodeStack}>
+        {state === 'done' ? (
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.completionHalo,
+              { opacity: completionHalo, transform: [{ scale: completionHaloScale }] },
+            ]}
+          />
+        ) : null}
         {isCurrent ? (
           <Animated.View
             pointerEvents="none"
@@ -289,6 +321,16 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.success,
   },
   nodeStack: { width: 70, height: 78, position: 'relative', alignItems: 'center' },
+  completionHalo: {
+    position: 'absolute',
+    top: -6,
+    width: 80,
+    height: 80,
+    borderRadius: 31,
+    borderWidth: 2,
+    borderColor: theme.colors.success,
+    backgroundColor: theme.colors.successSoft,
+  },
   focusRing: {
     position: 'absolute',
     top: -4,
