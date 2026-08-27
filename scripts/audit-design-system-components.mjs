@@ -62,6 +62,21 @@ if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
 }
 
+const readNumericToken = (token) => {
+  const match = theme.match(new RegExp(`${token}:\\s*(-?\\d+(?:\\.\\d+)?)`));
+  if (!match) throw new Error(`Expected numeric design-system token theme.motion.${token}.`);
+  return Number(match[1]);
+};
+
+const pressedScale = readNumericToken('pressedScale');
+const pressedDepth = readNumericToken('pressedDepth');
+const springSpeed = readNumericToken('springSpeed');
+const springBounciness = readNumericToken('springBounciness');
+if (pressedScale < 0.975 || pressedScale > 0.99) throw new Error(`Shared tactile pressedScale must stay subtle (found ${pressedScale}).`);
+if (pressedDepth < 1 || pressedDepth > 3) throw new Error(`Shared tactile pressedDepth must stay shallow (found ${pressedDepth}).`);
+if (springSpeed < 28 || springSpeed > 36) throw new Error(`Shared tactile springSpeed must stay responsive (found ${springSpeed}).`);
+if (springBounciness < 0 || springBounciness > 5) throw new Error(`Shared tactile springBounciness must stay controlled (found ${springBounciness}).`);
+
 const readHexToken = (token) => {
   const match = theme.match(new RegExp(`${token}:\\s*'(#(?:[0-9A-Fa-f]{6}))'`));
   if (!match) throw new Error(`Expected ${token} to be a six-digit hex color for contrast auditing.`);
@@ -89,4 +104,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, foreground-only resilient haptics, disable-safe primary/secondary/icon controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, disable-safe primary/secondary/icon controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
