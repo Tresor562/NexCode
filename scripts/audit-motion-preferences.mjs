@@ -4,6 +4,7 @@ const source = fs.readFileSync(new URL('../src/ui/motionPreferences.ts', import.
 
 const checks = [
   ['shared external store', source.includes('useSyncExternalStore')],
+  ['first render fails safe before native hydration', /let snapshot: MotionSnapshot = \{[\s\S]*reduceMotion: true,/.test(source)],
   ['single native listener lifecycle', source.includes('if (listeners.size === 1) startNativeListeners()') && source.includes('if (listeners.size === 0) stopNativeListeners()')],
   ['foreground state refreshed before subscribe', source.includes("publish({ appActive: AppState.currentState === 'active' })")],
   ['app state listener updates shared snapshot', source.includes("AppState.addEventListener('change'")],
