@@ -24,9 +24,15 @@ export type GateResult = {
   missingIndependentEvidence: string[];
 };
 
+const MAX_FUTURE_PRACTICE_SKEW_MS = 5 * 60 * 1000;
+
 function ageDays(iso: string | undefined, now: Date) {
   if (!iso) return Number.POSITIVE_INFINITY;
-  return Math.max(0, (now.getTime() - new Date(iso).getTime()) / 86_400_000);
+  const nowMs = now.getTime();
+  const practicedMs = new Date(iso).getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(practicedMs)) return Number.POSITIVE_INFINITY;
+  if (practicedMs - nowMs > MAX_FUTURE_PRACTICE_SKEW_MS) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (nowMs - practicedMs) / 86_400_000);
 }
 
 function retentionFactor(state: SkillMastery, now: Date) {
