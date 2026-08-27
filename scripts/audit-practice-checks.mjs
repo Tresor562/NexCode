@@ -32,6 +32,8 @@ assert.equal(passes('HTML/CSS', '<script>const fake = "<main>Hello</main>";</scr
 
 assert.equal(passes('JavaScript', 'const total = 2 + 2;\nconsole.log(total);'), true, 'real JavaScript declaration + output should pass');
 assert.equal(passes('JavaScript', 'const first = 2;\nconst second = 3;\nconsole.log(first + second);'), true, 'console output may use declared values inside an expression');
+assert.equal(passes('JavaScript', 'const first = 2, second = 3;\nconsole.log(second);'), true, 'later values in a multi-declarator statement should be recognised');
+assert.equal(passes('JavaScript', 'let first = Math.max(1, 2), second = 3;\nconsole.log(second);'), true, 'commas inside initializer calls must not split declarators');
 assert.equal(passes('JavaScript', 'const $total = 4;\nconsole.log($total);'), true, 'valid dollar-prefixed identifiers should be recognised');
 assert.equal(passes('JavaScript', '// const total = 4; console.log(total);'), false, 'comment-only JavaScript must fail');
 assert.equal(passes('JavaScript', '/* let total = 4; console.log(total); */'), false, 'block-comment JavaScript must fail');
@@ -61,4 +63,4 @@ assert.equal(passes('SQL', "SELECT 'it''s safe' AS label FROM users;"), true, 'e
 
 assert.match(checkPractice('JavaScript', '   '), /Écris une réponse/i, 'blank practice should keep explicit feedback');
 
-console.log('Practice checks audit OK: fake code, unrelated JavaScript output, comment-only CSS, scripted markup and out-of-scope Python returns are rejected while real HTML/CSS, JS, Python and SQL structures remain accepted.');
+console.log('Practice checks audit OK: real multi-declarator JavaScript values are accepted while fake code, unrelated output, comment-only CSS, scripted markup and out-of-scope Python returns remain rejected.');
