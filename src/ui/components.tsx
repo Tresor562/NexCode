@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Animated, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { shadows, theme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
@@ -66,6 +66,7 @@ function TactileButton({
   style,
   accessibilityLabel,
   accessibilitySelected,
+  accessibilityBusy,
   haptic = 'light',
 }: {
   children: React.ReactNode;
@@ -74,6 +75,7 @@ function TactileButton({
   style: StyleProp<ViewStyle>;
   accessibilityLabel: string;
   accessibilitySelected?: boolean;
+  accessibilityBusy?: boolean;
   haptic?: HapticTone;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -138,7 +140,7 @@ function TactileButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected }}
+        accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected, busy: accessibilityBusy }}
         disabled={disabled}
         onPress={handlePress}
         onPressIn={() => animate(true)}
@@ -151,23 +153,67 @@ function TactileButton({
   );
 }
 
-export function PrimaryButton({ label, onPress, disabled = false, icon }: { label: string; onPress: () => void; disabled?: boolean; icon?: string }) {
+export function PrimaryButton({
+  label,
+  onPress,
+  disabled = false,
+  icon,
+  loading = false,
+  loadingLabel = 'Chargement',
+}: {
+  label: string;
+  onPress: () => void;
+  disabled?: boolean;
+  icon?: string;
+  loading?: boolean;
+  loadingLabel?: string;
+}) {
+  const inactive = disabled || loading;
   return (
-    <TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled} haptic="medium" style={styles.primaryButton}>
+    <TactileButton
+      accessibilityLabel={loading ? loadingLabel : label}
+      accessibilityBusy={loading}
+      onPress={onPress}
+      disabled={inactive}
+      haptic="medium"
+      style={styles.primaryButton}
+    >
       <View style={styles.buttonRow}>
-        {icon ? <Text style={styles.primaryButtonIcon}>{icon}</Text> : null}
-        <Text style={styles.primaryButtonText}>{label}</Text>
+        {loading ? <ActivityIndicator size="small" color={theme.colors.white} /> : icon ? <Text style={styles.primaryButtonIcon}>{icon}</Text> : null}
+        <Text style={styles.primaryButtonText}>{loading ? loadingLabel : label}</Text>
       </View>
     </TactileButton>
   );
 }
 
-export function SecondaryButton({ label, onPress, icon, disabled = false }: { label: string; onPress: () => void; icon?: string; disabled?: boolean }) {
+export function SecondaryButton({
+  label,
+  onPress,
+  icon,
+  disabled = false,
+  loading = false,
+  loadingLabel = 'Chargement',
+}: {
+  label: string;
+  onPress: () => void;
+  icon?: string;
+  disabled?: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
+}) {
+  const inactive = disabled || loading;
   return (
-    <TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled} haptic="light" style={styles.secondaryButton}>
+    <TactileButton
+      accessibilityLabel={loading ? loadingLabel : label}
+      accessibilityBusy={loading}
+      onPress={onPress}
+      disabled={inactive}
+      haptic="light"
+      style={styles.secondaryButton}
+    >
       <View style={styles.buttonRow}>
-        {icon ? <Text style={styles.secondaryButtonText}>{icon}</Text> : null}
-        <Text style={styles.secondaryButtonText}>{label}</Text>
+        {loading ? <ActivityIndicator size="small" color={theme.colors.text} /> : icon ? <Text style={styles.secondaryButtonText}>{icon}</Text> : null}
+        <Text style={styles.secondaryButtonText}>{loading ? loadingLabel : label}</Text>
       </View>
     </TactileButton>
   );
