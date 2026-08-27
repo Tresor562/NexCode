@@ -9,7 +9,10 @@ type MotionSnapshot = {
 type NativeSubscription = { remove: () => void };
 
 let snapshot: MotionSnapshot = {
-  reduceMotion: false,
+  // useSyncExternalStore reads once before subscribe() installs native listeners.
+  // Start fail-safe so the very first render can never animate before the OS
+  // reduced-motion preference has been hydrated.
+  reduceMotion: true,
   appActive: AppState.currentState === 'active',
 };
 let listenersActive = false;
