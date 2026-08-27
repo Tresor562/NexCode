@@ -192,14 +192,61 @@ function splitTopLevelJsDeclarators(source: string) {
   return parts;
 }
 
+function topLevelJsSeparatorIndex(source: string, separator: string) {
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '(') parenDepth += 1;
+    else if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
+    else if (char === '[') bracketDepth += 1;
+    else if (char === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+    else if (char === '{') braceDepth += 1;
+    else if (char === '}') braceDepth = Math.max(0, braceDepth - 1);
+    else if (char === separator && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) return index;
+  }
+
+  return -1;
+}
+
+function jsBindingNames(bindingSource: string): string[] {
+  let binding = bindingSource.trim();
+  if (!binding) return [];
+  if (binding.startsWith('...')) binding = binding.slice(3).trim();
+
+  const defaultIndex = topLevelJsSeparatorIndex(binding, '=');
+  if (defaultIndex >= 0) binding = binding.slice(0, defaultIndex).trim();
+
+  if (/^[A-Za-z_$][\w$]*$/.test(binding)) return [binding];
+
+  if (binding.startsWith('[') && binding.endsWith(']')) {
+    return splitTopLevelJsDeclarators(binding.slice(1, -1)).flatMap((part) => jsBindingNames(part));
+  }
+
+  if (binding.startsWith('{') && binding.endsWith('}')) {
+    return splitTopLevelJsDeclarators(binding.slice(1, -1)).flatMap((part) => {
+      const property = part.trim();
+      if (!property) return [];
+      if (property.startsWith('...')) return jsBindingNames(property.slice(3));
+      const aliasIndex = topLevelJsSeparatorIndex(property, ':');
+      return jsBindingNames(aliasIndex >= 0 ? property.slice(aliasIndex + 1) : property);
+    });
+  }
+
+  return [];
+}
+
 function jsDeclaredNames(source: string) {
   const names = new Set<string>();
 
   for (const declaration of source.matchAll(/\b(?:const|let|var)\s+([^;\n]+)/g)) {
     const declarators = splitTopLevelJsDeclarators(declaration[1] ?? '');
     for (const declarator of declarators) {
-      const name = declarator.match(/^\s*([A-Za-z_$][\w$]*)\s*(?:=|$)/)?.[1];
-      if (name) names.add(name);
+      const assignmentIndex = topLevelJsSeparatorIndex(declarator, '=');
+      const binding = assignmentIndex >= 0 ? declarator.slice(0, assignmentIndex) : declarator;
+      for (const name of jsBindingNames(binding)) names.add(name);
     }
   }
 
