@@ -34,6 +34,12 @@ assert.equal(passes('JavaScript', 'const total = 2 + 2;\nconsole.log(total);'), 
 assert.equal(passes('JavaScript', 'const first = 2;\nconst second = 3;\nconsole.log(first + second);'), true, 'console output may use declared values inside an expression');
 assert.equal(passes('JavaScript', 'const first = 2, second = 3;\nconsole.log(second);'), true, 'later values in a multi-declarator statement should be recognised');
 assert.equal(passes('JavaScript', 'let first = Math.max(1, 2), second = 3;\nconsole.log(second);'), true, 'commas inside initializer calls must not split declarators');
+assert.equal(passes('JavaScript', 'const { name } = user;\nconsole.log(name);'), true, 'object destructuring shorthand should declare usable values');
+assert.equal(passes('JavaScript', 'const { name: displayName } = user;\nconsole.log(displayName);'), true, 'object destructuring aliases should declare the aliased binding');
+assert.equal(passes('JavaScript', 'const { profile: { name } } = user;\nconsole.log(name);'), true, 'nested object destructuring should expose nested bindings');
+assert.equal(passes('JavaScript', 'const [first, second] = values;\nconsole.log(second);'), true, 'array destructuring should declare positional bindings');
+assert.equal(passes('JavaScript', 'const [first = 1, ...rest] = values;\nconsole.log(rest);'), true, 'array defaults and rest bindings should be recognised');
+assert.equal(passes('JavaScript', 'const { name: displayName } = user;\nconsole.log(name);'), false, 'object property keys must not be mistaken for declared aliases');
 assert.equal(passes('JavaScript', 'const $total = 4;\nconsole.log($total);'), true, 'valid dollar-prefixed identifiers should be recognised');
 assert.equal(passes('JavaScript', '// const total = 4; console.log(total);'), false, 'comment-only JavaScript must fail');
 assert.equal(passes('JavaScript', '/* let total = 4; console.log(total); */'), false, 'block-comment JavaScript must fail');
@@ -63,4 +69,4 @@ assert.equal(passes('SQL', "SELECT 'it''s safe' AS label FROM users;"), true, 'e
 
 assert.match(checkPractice('JavaScript', '   '), /Écris une réponse/i, 'blank practice should keep explicit feedback');
 
-console.log('Practice checks audit OK: real multi-declarator JavaScript values are accepted while fake code, unrelated output, comment-only CSS, scripted markup and out-of-scope Python returns remain rejected.');
+console.log('Practice checks audit OK: real multi-declarator and destructured JavaScript values are accepted while fake code, unrelated output, comment-only CSS, scripted markup and out-of-scope Python returns remain rejected.');
