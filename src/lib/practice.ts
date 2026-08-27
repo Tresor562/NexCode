@@ -167,10 +167,47 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function splitTopLevelJsDeclarators(source: string) {
+  const parts: string[] = [];
+  let start = 0;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let braceDepth = 0;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '(') parenDepth += 1;
+    else if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
+    else if (char === '[') bracketDepth += 1;
+    else if (char === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+    else if (char === '{') braceDepth += 1;
+    else if (char === '}') braceDepth = Math.max(0, braceDepth - 1);
+    else if (char === ',' && parenDepth === 0 && bracketDepth === 0 && braceDepth === 0) {
+      parts.push(source.slice(start, index));
+      start = index + 1;
+    }
+  }
+
+  parts.push(source.slice(start));
+  return parts;
+}
+
+function jsDeclaredNames(source: string) {
+  const names = new Set<string>();
+
+  for (const declaration of source.matchAll(/\b(?:const|let|var)\s+([^;\n]+)/g)) {
+    const declarators = splitTopLevelJsDeclarators(declaration[1] ?? '');
+    for (const declarator of declarators) {
+      const name = declarator.match(/^\s*([A-Za-z_$][\w$]*)\s*(?:=|$)/)?.[1];
+      if (name) names.add(name);
+    }
+  }
+
+  return [...names];
+}
+
 function jsOutputUsesDeclaredValue(source: string) {
-  const declaredNames = [...source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)]
-    .map((match) => match[1])
-    .filter((name): name is string => Boolean(name));
+  const declaredNames = jsDeclaredNames(source);
   if (!declaredNames.length) return false;
 
   const outputCalls = [...source.matchAll(/\bconsole\s*\.\s*log\s*\(([^)]*)\)/g)];
