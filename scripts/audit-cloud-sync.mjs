@@ -15,6 +15,14 @@ requirePattern(
   'Cloud sync must keep every queued snapshot scoped to a user id.',
 );
 requirePattern(
+  /function snapshotCloudState\(state: LocalState\): LocalState \{[\s\S]*JSON\.parse\(JSON\.stringify\(state\)\) as LocalState;/,
+  'Queued cloud progress must be cloned at scheduling time so later in-memory mutations cannot rewrite an existing snapshot.',
+);
+requirePattern(
+  /latestState = \{ userId: session\.user\.id, state: snapshotCloudState\(state\) \};/,
+  'Cloud scheduling must enqueue the immutable state snapshot rather than the caller-owned object reference.',
+);
+requirePattern(
   /if \(session\.user\.id !== snapshot\.userId\) \{[\s\S]*latestState = null;[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;/,
   'A debounce timer must not send a queued snapshot through another learner session.',
 );
@@ -35,4 +43,4 @@ requirePattern(
   'A successful push must immediately follow up with any newer queued snapshot.',
 );
 
-console.log('Cloud sync audit OK: account-scoped queueing, stale-failure handoff, bounded retries, and follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, account-scoped queueing, stale-failure handoff, bounded retries, and follow-up flushes are protected.');
