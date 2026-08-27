@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Animated, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { shadows, theme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
@@ -71,7 +71,7 @@ function TactileButton({
   children: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
-  style: ViewStyle | ViewStyle[];
+  style: StyleProp<ViewStyle>;
   accessibilityLabel: string;
   accessibilitySelected?: boolean;
   haptic?: HapticTone;
