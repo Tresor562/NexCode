@@ -65,6 +65,7 @@ function TactileButton({
   disabled,
   style,
   accessibilityLabel,
+  accessibilityHint,
   accessibilitySelected,
   accessibilityBusy,
   haptic = 'light',
@@ -74,6 +75,7 @@ function TactileButton({
   disabled?: boolean;
   style: StyleProp<ViewStyle>;
   accessibilityLabel: string;
+  accessibilityHint?: string;
   accessibilitySelected?: boolean;
   accessibilityBusy?: boolean;
   haptic?: HapticTone;
@@ -140,6 +142,7 @@ function TactileButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected, busy: accessibilityBusy }}
         disabled={disabled}
         onPress={handlePress}
@@ -160,6 +163,7 @@ export function PrimaryButton({
   icon,
   loading = false,
   loadingLabel = 'Chargement',
+  accessibilityHint,
 }: {
   label: string;
   onPress: () => void;
@@ -167,11 +171,13 @@ export function PrimaryButton({
   icon?: string;
   loading?: boolean;
   loadingLabel?: string;
+  accessibilityHint?: string;
 }) {
   const inactive = disabled || loading;
   return (
     <TactileButton
       accessibilityLabel={loading ? loadingLabel : label}
+      accessibilityHint={accessibilityHint}
       accessibilityBusy={loading}
       onPress={onPress}
       disabled={inactive}
@@ -193,6 +199,7 @@ export function SecondaryButton({
   disabled = false,
   loading = false,
   loadingLabel = 'Chargement',
+  accessibilityHint,
 }: {
   label: string;
   onPress: () => void;
@@ -200,11 +207,13 @@ export function SecondaryButton({
   disabled?: boolean;
   loading?: boolean;
   loadingLabel?: string;
+  accessibilityHint?: string;
 }) {
   const inactive = disabled || loading;
   return (
     <TactileButton
       accessibilityLabel={loading ? loadingLabel : label}
+      accessibilityHint={accessibilityHint}
       accessibilityBusy={loading}
       onPress={onPress}
       disabled={inactive}
@@ -219,17 +228,40 @@ export function SecondaryButton({
   );
 }
 
-export function IconButton({ icon, label, onPress, active = false, disabled = false }: { icon: string; label: string; onPress: () => void; active?: boolean; disabled?: boolean }) {
+export function IconButton({
+  icon,
+  label,
+  onPress,
+  active = false,
+  disabled = false,
+  loading = false,
+  accessibilityHint,
+}: {
+  icon: string;
+  label: string;
+  onPress: () => void;
+  active?: boolean;
+  disabled?: boolean;
+  loading?: boolean;
+  accessibilityHint?: string;
+}) {
+  const inactive = disabled || loading;
   return (
     <TactileButton
-      accessibilityLabel={label}
+      accessibilityLabel={loading ? `${label}, chargement` : label}
+      accessibilityHint={accessibilityHint}
       accessibilitySelected={active}
+      accessibilityBusy={loading}
       onPress={onPress}
-      disabled={disabled}
+      disabled={inactive}
       haptic="light"
       style={[styles.iconButton, active && styles.iconButtonActive]}
     >
-      <Text style={[styles.iconButtonText, active && styles.iconButtonTextActive]}>{icon}</Text>
+      {loading ? (
+        <ActivityIndicator size="small" color={active ? theme.colors.primaryText : theme.colors.textSecondary} />
+      ) : (
+        <Text style={[styles.iconButtonText, active && styles.iconButtonTextActive]}>{icon}</Text>
+      )}
     </TactileButton>
   );
 }
@@ -257,24 +289,31 @@ export function SectionHeader({
   action,
   onAction,
   actionDisabled = false,
+  actionLoading = false,
 }: {
   title: string;
   action?: string;
   onAction?: () => void;
   actionDisabled?: boolean;
+  actionLoading?: boolean;
 }) {
+  const inactive = actionDisabled || actionLoading;
   return (
     <View style={styles.sectionHeader}>
       <Text accessibilityRole="header" style={styles.sectionTitle}>{title}</Text>
       {action && onAction ? (
         <TactileButton
-          accessibilityLabel={action}
+          accessibilityLabel={actionLoading ? `${action}, chargement` : action}
+          accessibilityBusy={actionLoading}
           onPress={onAction}
-          disabled={actionDisabled}
+          disabled={inactive}
           haptic="light"
           style={styles.sectionActionButton}
         >
-          <Text style={styles.sectionAction}>{action}</Text>
+          <View style={styles.buttonRow}>
+            {actionLoading ? <ActivityIndicator size="small" color={theme.colors.primaryTextSoft} /> : null}
+            <Text style={styles.sectionAction}>{action}</Text>
+          </View>
         </TactileButton>
       ) : action ? (
         <Text style={styles.sectionAction}>{action}</Text>
