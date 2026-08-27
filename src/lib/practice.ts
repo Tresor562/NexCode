@@ -163,6 +163,23 @@ function htmlHasRealCss(source: string) {
   return inlineStyles.some((match) => hasCssDeclaration(match[2] ?? ''));
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function jsOutputUsesDeclaredValue(source: string) {
+  const declaredNames = [...source.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/g)]
+    .map((match) => match[1])
+    .filter((name): name is string => Boolean(name));
+  if (!declaredNames.length) return false;
+
+  const outputCalls = [...source.matchAll(/\bconsole\s*\.\s*log\s*\(([^)]*)\)/g)];
+  return outputCalls.some((call) => {
+    const args = call[1] ?? '';
+    return declaredNames.some((name) => new RegExp(`(^|[^\\w$])${escapeRegExp(name)}(?![\\w$])`).test(args));
+  });
+}
+
 export function checkPractice(language: PracticeLanguage, source: string): string {
   if (!source.trim()) return 'Écris une réponse avant de lancer la vérification.';
 
@@ -193,9 +210,7 @@ export function checkPractice(language: PracticeLanguage, source: string): strin
   }
 
   const visibleSource = stripJsComments(source);
-  const hasDeclaration = /\b(?:const|let|var)\s+[A-Za-z_$][\w$]*/.test(visibleSource);
-  const hasOutput = /\bconsole\s*\.\s*log\s*\(/.test(visibleSource);
-  return hasDeclaration && hasOutput
-    ? '✓ Exercice JavaScript validé localement.'
-    : 'À revoir : déclare une valeur puis affiche un résultat avec console.log.';
+  return jsOutputUsesDeclaredValue(visibleSource)
+    ? '✓ Exercice JavaScript validé localement : ta valeur déclarée est utilisée dans la sortie.'
+    : 'À revoir : déclare une valeur puis utilise-la dans console.log.';
 }
