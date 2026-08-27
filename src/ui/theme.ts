@@ -90,10 +90,13 @@ export const theme = {
     heightLg: 54,
   },
   motion: {
-    pressedScale: 0.975,
-    pressedDepth: 3,
-    springSpeed: 28,
-    springBounciness: 5,
+    // Shared buttons should feel responsive rather than rubbery: a shallow
+    // physical press, small scale change, and fast low-bounce recovery keeps
+    // repeated learning actions crisp without adding persistent motion.
+    pressedScale: 0.982,
+    pressedDepth: 2,
+    springSpeed: 32,
+    springBounciness: 3,
   },
 } as const;
 
