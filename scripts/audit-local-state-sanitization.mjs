@@ -36,8 +36,10 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { sanitizeLocalState } = module.exports;
+const { sanitizeLocalState, rewardProgress, localDateKey } = module.exports;
 assert.equal(typeof sanitizeLocalState, 'function', 'sanitizeLocalState must stay exported');
+assert.equal(typeof rewardProgress, 'function', 'rewardProgress must stay exported');
+assert.equal(typeof localDateKey, 'function', 'localDateKey must stay exported');
 
 const sanitized = sanitizeLocalState({
   projectProgress: {
@@ -128,4 +130,39 @@ assert.deepEqual(sanitized.portfolioProofs[0], {
 const polluted = Object.create({ projectProgress: { bypass: 100 } });
 assert.deepEqual(sanitizeLocalState(polluted).projectProgress, {}, 'prototype-inherited persisted state must fail closed');
 
-console.log('Local state sanitization audit OK: project progress, offline packs and portfolio proofs are bounded, canonical and fail-closed.');
+const rewardNow = new Date(2026, 7, 27, 12, 0, 0, 0);
+const rewardDay = localDateKey(rewardNow);
+const rewardBase = sanitizeLocalState({
+  xp: 100,
+  nexCoins: 50,
+  streak: 4,
+  bestStreak: 7,
+  lastActiveDate: rewardDay,
+  dailyGoal: 20,
+  dailyCompleted: 20,
+  totalLearningMinutes: 200,
+});
+
+const repairedReward = rewardProgress(rewardBase, { xp: 12, nexCoins: 3, minutes: 0, now: rewardNow });
+assert.equal(repairedReward.xp, 152, 'a reached daily goal without a reward marker must self-heal the +40 XP bonus');
+assert.equal(repairedReward.nexCoins, 73, 'a reached daily goal without a reward marker must self-heal the +20 NexCoins bonus');
+assert.equal(repairedReward.dailyGoalRewardDate, rewardDay, 'self-healed daily rewards must persist today as the claim date');
+
+const noDuplicateReward = rewardProgress(repairedReward, { xp: 12, nexCoins: 3, minutes: 0, now: rewardNow });
+assert.equal(noDuplicateReward.xp, 164, 'daily goal bonus must never be granted twice on the same local day');
+assert.equal(noDuplicateReward.nexCoins, 76, 'NexCoins daily bonus must never be granted twice on the same local day');
+assert.equal(noDuplicateReward.dailyGoalRewardDate, rewardDay);
+
+const crossedReward = rewardProgress(sanitizeLocalState({
+  xp: 10,
+  nexCoins: 5,
+  lastActiveDate: rewardDay,
+  dailyGoal: 20,
+  dailyCompleted: 15,
+}), { xp: 12, nexCoins: 3, minutes: 5, now: rewardNow });
+assert.equal(crossedReward.dailyCompleted, 20, 'normal goal crossing must still clamp progress to the daily goal');
+assert.equal(crossedReward.xp, 62, 'normal goal crossing must still grant the lesson XP plus the daily XP bonus');
+assert.equal(crossedReward.nexCoins, 28, 'normal goal crossing must still grant lesson NexCoins plus the daily NexCoins bonus');
+assert.equal(crossedReward.dailyGoalRewardDate, rewardDay);
+
+console.log('Local state sanitization audit OK: persisted learning state stays bounded and daily goal rewards are exactly-once and self-healing after sync.');
