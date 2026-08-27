@@ -107,8 +107,7 @@ export function rewardProgress(state: LocalState, reward: ProgressReward): Local
   const minutes = Math.max(0, reward.minutes ?? 0);
   const dailyCompleted = Math.min(active.dailyGoal, active.dailyCompleted + minutes);
   const today = localDateKey(now);
-  const reachedGoal = active.dailyCompleted < active.dailyGoal && dailyCompleted >= active.dailyGoal;
-  const shouldGrantGoalBonus = reachedGoal && active.dailyGoalRewardDate !== today;
+  const shouldGrantGoalBonus = dailyCompleted >= active.dailyGoal && active.dailyGoalRewardDate !== today;
 
   return {
     ...active,
