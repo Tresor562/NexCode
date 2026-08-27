@@ -9,6 +9,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
   const restOpacity = useRef(new Animated.Value(0)).current;
   const restX = useRef(new Animated.Value(18)).current;
   const robotScale = useRef(new Animated.Value(0.7)).current;
+  const robotBlink = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
   const completed = useRef(false);
   const onDoneRef = useRef(onDone);
@@ -29,6 +30,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       restOpacity.stopAnimation();
       restX.stopAnimation();
       robotScale.stopAnimation();
+      robotBlink.stopAnimation();
       glow.stopAnimation();
     };
 
@@ -60,6 +62,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       restOpacity.setValue(1);
       restX.setValue(0);
       robotScale.setValue(1);
+      robotBlink.setValue(1);
       glow.setValue(0.35);
       completionTimer.current = setTimeout(finish, 180);
       return () => {
@@ -72,7 +75,17 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
     restOpacity.setValue(0);
     restX.setValue(18);
     robotScale.setValue(0.7);
+    robotBlink.setValue(1);
     glow.setValue(0);
+
+    const blinkSequence = Animated.sequence([
+      Animated.delay(90),
+      Animated.timing(robotBlink, { toValue: 0.18, duration: 60, useNativeDriver: true }),
+      Animated.timing(robotBlink, { toValue: 1, duration: 80, useNativeDriver: true }),
+      Animated.delay(70),
+      Animated.timing(robotBlink, { toValue: 0.18, duration: 60, useNativeDriver: true }),
+      Animated.timing(robotBlink, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]);
 
     const sequence = Animated.sequence([
       Animated.delay(180),
@@ -87,6 +100,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
           Animated.timing(glow, { toValue: 1, duration: 220, useNativeDriver: true }),
           Animated.timing(glow, { toValue: 0.35, duration: 280, useNativeDriver: true }),
         ]),
+        blinkSequence,
       ]),
       Animated.delay(260),
     ]);
@@ -100,7 +114,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       clearCompletionTimer();
       stopAnimations();
     };
-  }, [appActive, glow, nX, reduceMotion, restOpacity, restX, robotScale]);
+  }, [appActive, glow, nX, reduceMotion, restOpacity, restX, robotBlink, robotScale]);
 
   return (
     <View style={styles.root} accessibilityViewIsModal>
@@ -116,7 +130,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
         <Animated.View style={[styles.rest, { opacity: restOpacity, transform: [{ translateX: restX }] }]}>
           <Text style={styles.letters}>exC</Text>
           <Animated.View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden style={[styles.robot, { transform: [{ scale: robotScale }] }]}>
-            <View style={styles.robotEyeRow}><View style={styles.eye} /><View style={styles.eye} /></View>
+            <Animated.View style={[styles.robotEyeRow, { opacity: robotBlink }]}><View style={styles.eye} /><View style={styles.eye} /></Animated.View>
             <View style={styles.robotMouth} />
           </Animated.View>
           <Text style={styles.letters}>de</Text>
