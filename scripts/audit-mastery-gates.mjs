@@ -25,9 +25,10 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { evaluateSkillGate } = module.exports;
+const { evaluateSkillGate, masterySnapshot } = module.exports;
 
 assert.equal(typeof evaluateSkillGate, 'function', 'evaluateSkillGate must stay exported');
+assert.equal(typeof masterySnapshot, 'function', 'masterySnapshot must stay exported');
 
 const now = new Date('2026-08-23T12:00:00.000Z');
 const evidence = [
@@ -47,7 +48,7 @@ const evidence = [
   },
 ];
 
-const mastery = (confidence) => ({
+const mastery = (confidence, overrides = {}) => ({
   dom: {
     skillId: 'dom',
     score: 90,
@@ -60,6 +61,7 @@ const mastery = (confidence) => ({
     nextReviewAt: '2026-09-01T10:00:00.000Z',
     errorTags: [],
     evidence,
+    ...overrides,
   },
 });
 
@@ -87,4 +89,28 @@ const mastery = (confidence) => ({
   assert.equal(result.passed, true, 'confidence equal to a lower lesson gate is sufficient when evidence is otherwise valid');
 }
 
-console.log('Mastery gate audit OK: score cannot bypass confidence and distinct evidence requirements.');
+{
+  const snapshot = masterySnapshot(
+    'dom',
+    mastery(90, { lastPracticedAt: '2026-09-23T12:00:00.000Z' }),
+    now,
+  );
+  assert.equal(snapshot.effectiveScore, 0, 'far-future practice timestamps must not manufacture perfect retention');
+  assert.equal(snapshot.needsReview, true, 'far-future practice timestamps should fail closed into review');
+}
+
+{
+  const snapshot = masterySnapshot(
+    'dom',
+    mastery(90, { lastPracticedAt: '2026-08-23T12:04:00.000Z' }),
+    now,
+  );
+  assert.equal(snapshot.effectiveScore, 90, 'small clock skew within five minutes should not punish legitimate practice');
+}
+
+{
+  const snapshot = masterySnapshot('dom', mastery(90), new Date(Number.NaN));
+  assert.equal(snapshot.effectiveScore, 0, 'an invalid runtime clock must fail closed instead of granting fresh retention');
+}
+
+console.log('Mastery gate audit OK: score cannot bypass confidence/evidence gates and corrupted future practice timestamps fail closed.');
