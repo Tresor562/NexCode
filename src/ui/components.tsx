@@ -65,13 +65,15 @@ function TactileButton({
   disabled,
   style,
   accessibilityLabel,
+  accessibilitySelected,
   haptic = 'light',
 }: {
   children: React.ReactNode;
   onPress: () => void;
   disabled?: boolean;
-  style: ViewStyle;
+  style: ViewStyle | ViewStyle[];
   accessibilityLabel: string;
+  accessibilitySelected?: boolean;
   haptic?: HapticTone;
 }) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -136,7 +138,7 @@ function TactileButton({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
-        accessibilityState={{ disabled: Boolean(disabled) }}
+        accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected }}
         disabled={disabled}
         onPress={handlePress}
         onPressIn={() => animate(true)}
@@ -172,29 +174,17 @@ export function SecondaryButton({ label, onPress, icon, disabled = false }: { la
 }
 
 export function IconButton({ icon, label, onPress, active = false, disabled = false }: { icon: string; label: string; onPress: () => void; active?: boolean; disabled?: boolean }) {
-  const { reduceMotion, appActive } = useMotionPreferences();
-  const handlePress = () => {
-    if (disabled) return;
-    if (appActive) fireImpactHaptic('light');
-    onPress();
-  };
   return (
-    <Pressable
-      accessibilityRole="button"
+    <TactileButton
       accessibilityLabel={label}
-      accessibilityState={{ selected: active, disabled }}
+      accessibilitySelected={active}
+      onPress={onPress}
       disabled={disabled}
-      onPress={handlePress}
-      hitSlop={4}
-      style={({ pressed }) => [
-        styles.iconButton,
-        active && styles.iconButtonActive,
-        disabled && styles.disabled,
-        pressed && !disabled && (reduceMotion || !appActive ? styles.iconPressedReducedMotion : styles.iconPressed),
-      ]}
+      haptic="light"
+      style={[styles.iconButton, active && styles.iconButtonActive]}
     >
       <Text style={[styles.iconButtonText, active && styles.iconButtonTextActive]}>{icon}</Text>
-    </Pressable>
+    </TactileButton>
   );
 }
 
@@ -297,8 +287,6 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderControl,
   },
   iconButtonActive: { backgroundColor: theme.colors.primaryGlass, borderColor: theme.colors.primaryBorderStrong },
-  iconPressed: { opacity: 0.72, transform: [{ scale: 0.96 }] },
-  iconPressedReducedMotion: { opacity: 0.72 },
   iconButtonText: { color: theme.colors.textSecondary, fontSize: 17, fontWeight: theme.weight.black },
   iconButtonTextActive: { color: theme.colors.primaryText },
   pill: {
