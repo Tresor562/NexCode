@@ -84,8 +84,12 @@ if (components.includes('iconPressed:') || components.includes('iconPressedReduc
 }
 
 const sectionHeaderBody = components.slice(components.indexOf('export function SectionHeader'), components.indexOf('export function EmptyState'));
-requireSnippet(sectionHeaderBody, 'actionLoading', 'Section header actions must expose their shared loading state.');
-requireSnippet(sectionHeaderBody, 'loading={actionLoading}', 'Section header loading must flow through the shared tactile action control.');
+requireSnippet(sectionHeaderBody, 'actionLoading = false', 'Section header actions must expose a shared loading state.');
+requireSnippet(sectionHeaderBody, 'const inactive = actionDisabled || actionLoading;', 'Section header loading must share the same inactive boundary as disabled actions.');
+requireSnippet(sectionHeaderBody, '<TactileButton', 'Interactive section header actions must reuse the shared tactile boundary.');
+requireSnippet(sectionHeaderBody, 'accessibilityBusy={actionLoading}', 'Section header loading must remain visible to assistive technologies.');
+requireSnippet(sectionHeaderBody, 'disabled={inactive}', 'Section header loading must disable interaction through the shared tactile boundary.');
+requireSnippet(sectionHeaderBody, 'actionLoading ? <ActivityIndicator', 'Section header loading must expose native progress feedback.');
 
 if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
