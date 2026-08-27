@@ -37,19 +37,26 @@ function clearHydrationRetry() {
   hydrationRetryTimer = null;
 }
 
+function canHydrateReduceMotion(generation: number, hydrationRevision: number) {
+  return (
+    listenersActive &&
+    snapshot.appActive &&
+    generation === listenerGeneration &&
+    hydrationRevision === reduceMotionRevision
+  );
+}
+
 function hydrateReduceMotion(generation: number, attempt = 0) {
   const hydrationRevision = reduceMotionRevision;
+  if (!canHydrateReduceMotion(generation, hydrationRevision)) return;
+
   AccessibilityInfo.isReduceMotionEnabled()
     .then((enabled) => {
       // Native events are more current than an async hydration read. The same
       // helper is used on initial subscribe and when the app returns to the
       // foreground so a setting changed while backgrounded cannot leave the
       // shared motion state stale.
-      if (
-        listenersActive &&
-        generation === listenerGeneration &&
-        hydrationRevision === reduceMotionRevision
-      ) {
+      if (canHydrateReduceMotion(generation, hydrationRevision)) {
         clearHydrationRetry();
         reduceMotionKnown = true;
         publish({ reduceMotion: enabled });
@@ -59,11 +66,7 @@ function hydrateReduceMotion(generation: number, attempt = 0) {
       // A native event that arrived after this hydration started is newer than
       // the failed async read. Do not let a late rejection overwrite that newer
       // preference with the fail-safe value.
-      if (
-        listenersActive &&
-        generation === listenerGeneration &&
-        hydrationRevision === reduceMotionRevision
-      ) {
+      if (canHydrateReduceMotion(generation, hydrationRevision)) {
         reduceMotionKnown = false;
         publish({ reduceMotion: true });
 
@@ -74,11 +77,7 @@ function hydrateReduceMotion(generation: number, attempt = 0) {
           clearHydrationRetry();
           hydrationRetryTimer = setTimeout(() => {
             hydrationRetryTimer = null;
-            if (
-              listenersActive &&
-              generation === listenerGeneration &&
-              hydrationRevision === reduceMotionRevision
-            ) {
+            if (canHydrateReduceMotion(generation, hydrationRevision)) {
               hydrateReduceMotion(generation, 1);
             }
           }, 1200);
@@ -106,16 +105,25 @@ function startNativeListeners() {
     AppState.addEventListener('change', (nextState) => {
       const appActive = nextState === 'active';
       publish({ appActive });
+
+      if (!appActive) {
+        // Do not spend native work while the application is suspended. Any
+        // pending retry is no longer useful and the preference is considered
+        // unknown until a fresh foreground hydration succeeds.
+        clearHydrationRetry();
+        reduceMotionKnown = false;
+        publish({ reduceMotion: true });
+        return;
+      }
+
       // Accessibility events are not guaranteed to be delivered while an app is
       // suspended. Re-read the system preference every time we return to the
       // foreground, while keeping the same generation/revision race guards used
       // for initial hydration.
-      if (appActive) {
-        clearHydrationRetry();
-        reduceMotionKnown = false;
-        publish({ reduceMotion: true });
-        hydrateReduceMotion(generation);
-      }
+      clearHydrationRetry();
+      reduceMotionKnown = false;
+      publish({ reduceMotion: true });
+      hydrateReduceMotion(generation);
     }),
     AccessibilityInfo.addEventListener('reduceMotionChanged', (enabled) => {
       // Native events are more current than asynchronous hydration reads. Advance
@@ -128,7 +136,7 @@ function startNativeListeners() {
     }),
   ];
 
-  hydrateReduceMotion(generation);
+  if (snapshot.appActive) hydrateReduceMotion(generation);
 }
 
 function stopNativeListeners() {
