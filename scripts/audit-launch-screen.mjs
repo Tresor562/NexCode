@@ -10,9 +10,16 @@ assert.match(source, /completionTimer\.current = setTimeout\(finish, 180\)/, 'Re
 assert.match(source, /completed\.current/, 'Launch completion must be guarded against duplicate callbacks');
 assert.match(source, /onDoneRef\.current\(\)/, 'Launch completion must use the latest callback without restarting the sequence');
 
-for (const value of ['nX', 'restOpacity', 'restX', 'robotScale', 'glow']) {
+for (const value of ['nX', 'restOpacity', 'restX', 'robotScale', 'robotBlink', 'glow']) {
   assert.match(source, new RegExp(`${value}\\.stopAnimation\\(\\)`), `Launch cleanup must stop ${value}`);
 }
+
+assert.match(source, /robotBlink\.setValue\(1\)/, 'Mentor eyes must reset to a stable visible state before each launch path');
+assert.match(source, /const blinkSequence = Animated\.sequence\(\[/, 'Launch mentor blink must be an explicit bounded sequence');
+assert.match(source, /Animated\.delay\(90\)/, 'Mentor blink must begin only after the mentor reveal starts');
+assert.equal((source.match(/Animated\.timing\(robotBlink/g) ?? []).length, 4, 'Launch mentor blink must stay bounded to two close-open cycles');
+assert.doesNotMatch(source, /Animated\.loop\([^)]*robotBlink/s, 'Launch mentor blink must never become an unbounded loop');
+assert.match(source, /opacity:\s*robotBlink/, 'Mentor blink value must drive only the decorative eye row');
 
 assert.match(source, /useWindowDimensions\(\)/, 'Launch wordmark must react to the current viewport width');
 assert.match(
@@ -31,4 +38,4 @@ assert.match(source, /accessibilityRole="header"/, 'Launch wordmark must expose 
 assert.match(source, /importantForAccessibility="no-hide-descendants"/, 'Decorative robot internals must stay hidden from screen readers');
 assert.match(source, /pointerEvents="none"/, 'Decorative launch glow must never intercept interaction');
 
-console.log('Launch screen audit OK: shared motion lifecycle, responsive wordmark, reduced-motion completion, design tokens and accessibility are protected.');
+console.log('Launch screen audit OK: shared motion lifecycle, responsive wordmark, bounded mentor blink, reduced-motion completion, design tokens and accessibility are protected.');
