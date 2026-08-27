@@ -49,14 +49,24 @@ requireSnippet(components, 'depth.setValue(0);', 'Disabled tactile controls must
 requireSnippet(components, 'void Haptics.impactAsync(style).catch(() => undefined);', 'Shared haptic feedback must fail softly when the native haptics API is unavailable.');
 requireSnippet(components, 'if (disabled) return;\n    if (appActive) fireImpactHaptic(haptic);', 'Disabled tactile controls must never emit haptics and shared haptics must stay foreground-only.');
 requireSnippet(components, 'haptic="medium"', 'Primary actions must keep a distinct medium haptic emphasis.');
-requireSnippet(components, 'haptic="light"', 'Secondary actions must keep light haptic emphasis.');
+requireSnippet(components, 'haptic="light"', 'Secondary and icon actions must keep light haptic emphasis.');
 requireSnippet(components, 'SecondaryButton({ label, onPress, icon, disabled = false }', 'Secondary actions must expose the same disable-safe contract as primary actions.');
 requireSnippet(components, '<TactileButton accessibilityLabel={label} onPress={onPress} disabled={disabled}', 'Secondary disabled state must flow through the shared tactile control.');
 requireSnippet(components, 'IconButton({ icon, label, onPress, active = false, disabled = false }', 'Icon controls must expose a disable-safe contract.');
-requireSnippet(components, 'accessibilityState={{ selected: active, disabled }}', 'Disabled icon controls must expose their state to assistive technologies.');
-requireSnippet(components, 'disabled={disabled}\n      onPress={handlePress}', 'Disabled icon controls must be disabled at the native Pressable boundary.');
-requireSnippet(components, 'if (disabled) return;\n    if (appActive) fireImpactHaptic(\'light\');', 'Disabled icon controls must never emit haptics or invoke actions.');
-requireSnippet(components, 'pressed && !disabled &&', 'Disabled icon controls must never show pressed motion feedback.');
+requireSnippet(components, 'accessibilitySelected={active}', 'Selected icon state must flow through the shared tactile accessibility contract.');
+requireSnippet(components, 'accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected }}', 'The shared tactile boundary must expose disabled and selected state to assistive technologies.');
+requireSnippet(components, 'style={[styles.iconButton, active && styles.iconButtonActive]}', 'Icon active visuals must stay within the shared tactile boundary.');
+
+const iconButtonBody = components.slice(components.indexOf('export function IconButton'), components.indexOf('export function Pill'));
+requireSnippet(iconButtonBody, '<TactileButton', 'Icon controls must reuse the shared tactile motion boundary instead of a separate Pressable implementation.');
+requireSnippet(iconButtonBody, 'disabled={disabled}', 'Disabled icon controls must flow through the shared tactile boundary.');
+requireSnippet(iconButtonBody, 'haptic="light"', 'Icon controls must keep light foreground-only haptic feedback through the shared tactile boundary.');
+if (iconButtonBody.includes('useMotionPreferences()') || iconButtonBody.includes('<Pressable')) {
+  throw new Error('IconButton must not duplicate motion lifecycle or Pressable behavior outside TactileButton.');
+}
+if (components.includes('iconPressed:') || components.includes('iconPressedReducedMotion:')) {
+  throw new Error('Legacy icon-only pressed styles must stay removed now that IconButton uses shared tactile motion.');
+}
 
 if (/#[0-9A-Fa-f]{3,8}|rgba?\(/.test(components)) {
   throw new Error('Shared component semantic colors must come from theme tokens, not local color literals.');
@@ -104,4 +114,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, disable-safe primary/secondary/icon controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, unified disable-safe primary/secondary/icon controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
