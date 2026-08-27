@@ -15,6 +15,14 @@ const BASE_RETRY_DELAY_MS = 1_500;
 const MAX_RETRY_DELAY_MS = 30_000;
 const FOLLOW_UP_DELAY_MS = 250;
 
+function snapshotCloudState(state: LocalState): LocalState {
+  // LocalState is intentionally JSON-serializable because the same shape is
+  // persisted to disk and Supabase. Clone it when queueing so later in-memory
+  // mutations cannot silently rewrite a snapshot that is already waiting for
+  // upload or currently being retried.
+  return JSON.parse(JSON.stringify(state)) as LocalState;
+}
+
 function clearPendingPush(): void {
   if (!pendingPush) return;
   clearTimeout(pendingPush);
@@ -91,7 +99,7 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
   if (!isCloudConfigured()) return;
   const session = loadCloudSession();
   if (!session) return;
-  latestState = { userId: session.user.id, state };
+  latestState = { userId: session.user.id, state: snapshotCloudState(state) };
 
   // Debounce rapid local mutations, but never start a second request while one
   // is in flight. The completed request immediately flushes any newer snapshot.
