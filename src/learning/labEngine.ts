@@ -1,5 +1,6 @@
 import { LabMission, Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
+import { isSensitiveWorkspaceFilename, restoreWorkspaceDraft } from '../lib/workspaceSafety';
 
 export type LabWorkspace = { mission: LabMission; draft: LabDraft };
 export type LabValidation = {
@@ -64,43 +65,15 @@ export function missionForLesson(lesson: Lesson): LabMission {
   };
 }
 
-function isSensitiveLabFilename(filename: string): boolean {
-  const normalized = filename.trim().replace(/\\/g, '/').toLowerCase();
-  const basename = normalized.split('/').pop() ?? normalized;
-  if (basename === '.env.example') return false;
-  if (basename === '.env' || basename.startsWith('.env.')) return true;
-  if (['.npmrc', '.pypirc', '.netrc', 'credentials.json', 'service-account.json', 'id_rsa', 'id_ed25519'].includes(basename)) return true;
-  return /\.(pem|key|p12|pfx|jks|keystore)$/.test(basename);
-}
-
 function restoreStoredLabDraft(mission: LabMission, stored?: LabDraft): LabDraft | undefined {
   if (!stored) return undefined;
-  if (stored.missionId && stored.missionId !== mission.id) return undefined;
-
-  const files = Object.fromEntries(
-    Object.entries(stored.files ?? {}).filter(([filename, content]) => (
-      Boolean(filename.trim()) && typeof content === 'string' && !isSensitiveLabFilename(filename)
-    )),
-  );
-  const filenames = Object.keys(files);
-  if (!filenames.length) return undefined;
-
-  const activeFile = filenames.includes(stored.activeFile) ? stored.activeFile : filenames[0]!;
-  const changedOnRestore = filenames.length !== Object.keys(stored.files ?? {}).length
-    || activeFile !== stored.activeFile
-    || stored.language !== mission.language
-    || stored.missionId !== mission.id;
-
-  return {
-    ...stored,
-    missionId: mission.id,
-    language: mission.language,
-    files,
-    activeFile,
-    lastValidatedAt: changedOnRestore ? undefined : stored.lastValidatedAt,
-    passedCriteria: changedOnRestore ? [] : stored.passedCriteria,
-    updatedAt: changedOnRestore ? new Date().toISOString() : stored.updatedAt,
-  };
+  const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
+  return restoreWorkspaceDraft({
+    stored,
+    expectedMissionId: mission.id,
+    expectedLanguage: mission.language,
+    fallbackFiles: starterFiles,
+  }).draft;
 }
 
 export function openLabWorkspace(lesson: Lesson, stored?: LabDraft): LabWorkspace {
@@ -143,7 +116,7 @@ export function updateLabFile(draft: LabDraft, filename: string, content: string
 
 export function addLabFile(draft: LabDraft, filename: string) {
   const safe = filename.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-  if (!safe || isSensitiveLabFilename(safe) || draft.files[safe] !== undefined) return draft;
+  if (!safe || isSensitiveWorkspaceFilename(safe) || draft.files[safe] !== undefined) return draft;
   return invalidateLabValidation({ ...draft, files: { ...draft.files, [safe]: '' }, activeFile: safe, updatedAt: new Date().toISOString() });
 }
 
@@ -157,7 +130,7 @@ export function removeLabFile(draft: LabDraft, filename: string) {
 }
 
 function containsLikelySecret(files: Record<string, string>) {
-  if (Object.keys(files).some(isSensitiveLabFilename)) return true;
+  if (Object.keys(files).some(isSensitiveWorkspaceFilename)) return true;
   const text = Object.values(files).join('\n');
   if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(text)) return true;
   return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test|changeme)[A-Za-z0-9_-]{12,}/i.test(text);
