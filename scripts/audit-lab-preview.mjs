@@ -26,9 +26,44 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { webPreviewDocument } = module.exports;
+const { startLabSession, webPreviewDocument } = module.exports;
 
+assert.equal(typeof startLabSession, 'function', 'startLabSession must stay exported');
 assert.equal(typeof webPreviewDocument, 'function', 'webPreviewDocument must stay exported');
+
+const baseLesson = (activityKind) => ({
+  id: `audit-${activityKind ?? 'learn'}`,
+  module: 'Audit',
+  title: 'Lab routing audit',
+  durationMin: 5,
+  concept: '',
+  example: '',
+  question: '',
+  choices: [],
+  correctIndex: 0,
+  explanation: '',
+  activityKind,
+});
+
+{
+  const now = new Date('2026-08-28T08:00:00.000Z');
+  const cases = [
+    ['learn', 'lesson'],
+    ['lab', 'lesson'],
+    ['practice', 'practice'],
+    ['review', 'practice'],
+    ['checkpoint', 'checkpoint'],
+    ['boss', 'checkpoint'],
+    ['project', 'project'],
+  ];
+
+  for (const [activityKind, expectedSource] of cases) {
+    const session = startLabSession('course-audit', baseLesson(activityKind), undefined, now);
+    assert.equal(session.returnTarget.source, expectedSource, `${activityKind} Lab sessions must preserve their learning return context`);
+    assert.equal(session.returnTarget.courseId, 'course-audit', 'Lab return target must preserve the course');
+    assert.equal(session.returnTarget.lessonId, `audit-${activityKind}`, 'Lab return target must preserve the lesson');
+  }
+}
 
 const draft = (files) => ({
   missionId: 'preview-audit',
@@ -100,4 +135,4 @@ function assertPreviewPolicy(output) {
   assert.match(output, /<body>\s*<main><\/main>/i, 'empty HTML must fall back to a stable preview scaffold');
 }
 
-console.log('Lab preview audit OK: mobile viewport, offline CSP sandbox, document structure, inline closing tags and empty fallback are protected.');
+console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, document structure, inline closing tags and empty fallback are protected.');
