@@ -90,8 +90,8 @@ function assertPreviewPolicy(output) {
   }));
   assertPreviewPolicy(output);
   assert.ok(output.indexOf('Content-Security-Policy') < output.indexOf('https://example.com/external.js'), 'CSP must be injected before user head scripts can execute');
-  assert.ok(output.indexOf('<style>') < output.indexOf('</head>'), 'styles must be injected inside head when a head exists');
-  assert.ok(output.indexOf('<script>') < output.indexOf('</body>'), 'Lab script must be injected inside body when a body exists');
+  assert.ok(output.indexOf('<style') < output.indexOf('</head>'), 'styles must be injected inside head when a head exists');
+  assert.ok(output.indexOf('<script data-nexcode-source="script.js">') < output.indexOf('</body>'), 'Lab script must be injected inside body when a body exists');
   assert.ok(output.indexOf('</head>') < output.indexOf('<body>'), 'full-document structure must be preserved');
 }
 
@@ -115,7 +115,7 @@ function assertPreviewPolicy(output) {
   assertPreviewPolicy(output);
   assert.ok(output.startsWith('<!doctype html>'), 'HTML fragments must be wrapped in a stable full document');
   assert.match(output, /<body>\s*<main>Fragment<\/main>/i, 'fragment markup must stay inside body');
-  assert.match(output, /<head>[\s\S]*<style>/i, 'fragment styles must be injected in generated head');
+  assert.match(output, /<head>[\s\S]*<style/i, 'fragment styles must be injected in generated head');
 }
 
 {
@@ -126,7 +126,43 @@ function assertPreviewPolicy(output) {
   }));
   assert.ok(output.includes('<\\/style><aside>escape</aside>'), 'embedded closing style tags must be neutralized');
   assert.ok(output.includes('<\\/script><p>escape</p>'), 'embedded closing script tags must be neutralized');
-  assert.equal((output.match(/<script>/g) ?? []).length, 1, 'user code must not create extra executable script blocks through a closing tag');
+  assert.equal((output.match(/<script data-nexcode-source=/g) ?? []).length, 1, 'user code must not create extra executable script blocks through a closing tag');
+}
+
+{
+  const output = webPreviewDocument(draft({
+    'index.html': '<html><head><link rel="stylesheet" href="./styles/base.css?v=3"><link rel="stylesheet" href="styles/theme.css"></head><body><main>Multi</main><script src="./scripts/state.js"></script><script src="scripts/app.js#boot"></script></body></html>',
+    'styles/base.css': 'main { display: grid; }',
+    'styles/theme.css': 'main { gap: 12px; }',
+    'scripts/state.js': 'window.stateReady = true;',
+    'scripts/app.js': 'document.body.dataset.booted = "yes";',
+  }));
+  assertPreviewPolicy(output);
+  assert.match(output, /<style data-nexcode-source="styles\/base\.css">main \{ display: grid; \}<\/style>/, 'referenced nested CSS must be inlined from the workspace');
+  assert.match(output, /<style data-nexcode-source="styles\/theme\.css">main \{ gap: 12px; \}<\/style>/, 'multiple local stylesheets must stay active');
+  assert.match(output, /<script data-nexcode-source="scripts\/state\.js">window\.stateReady = true;<\/script>/, 'referenced nested JavaScript must be inlined from the workspace');
+  assert.match(output, /<script data-nexcode-source="scripts\/app\.js">document\.body\.dataset\.booted = "yes";<\/script>/, 'multiple local scripts must stay active');
+  assert.doesNotMatch(output, /<link[^>]+styles\/base\.css/i, 'inlined local stylesheets must not leave dead CSP-blocked link tags');
+  assert.doesNotMatch(output, /<script[^>]+src="\.\/scripts\/state\.js"/i, 'inlined local scripts must not leave dead CSP-blocked src tags');
+}
+
+{
+  const output = webPreviewDocument(draft({
+    'index.html': '<html><head><link rel="stylesheet" href="https://cdn.example.com/theme.css"></head><body><script src="https://cdn.example.com/app.js"></script></body></html>',
+    'https://cdn.example.com/theme.css': 'body { color: red; }',
+    'https://cdn.example.com/app.js': 'alert(1)',
+  }));
+  assert.match(output, /href="https:\/\/cdn\.example\.com\/theme\.css"/, 'external stylesheets must never be treated as workspace files');
+  assert.match(output, /src="https:\/\/cdn\.example\.com\/app\.js"/, 'external scripts must never be treated as workspace files');
+}
+
+{
+  const output = webPreviewDocument(draft({
+    'index.html': '<html><body><script src="../secret.js"></script></body></html>',
+    'secret.js': 'document.body.dataset.leaked = "yes";',
+  }));
+  assert.match(output, /src="\.\.\/secret\.js"/, 'preview asset resolution must not traverse above the workspace root');
+  assert.doesNotMatch(output, /data-nexcode-source="secret\.js"/, 'traversal references must never be inlined');
 }
 
 {
@@ -135,4 +171,4 @@ function assertPreviewPolicy(output) {
   assert.match(output, /<body>\s*<main><\/main>/i, 'empty HTML must fall back to a stable preview scaffold');
 }
 
-console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, document structure, inline closing tags and empty fallback are protected.');
+console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, multi-file local assets, document structure, inline closing tags and empty fallback are protected.');
