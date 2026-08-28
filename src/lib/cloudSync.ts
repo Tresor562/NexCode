@@ -1,5 +1,5 @@
 import type { LocalState } from './localState';
-import { isCloudConfigured, loadCloudSession, pushCloudState } from './cloudAccount';
+import { isCloudConfigured, loadCloudSession, pullCloudState, pushCloudState } from './cloudAccount';
 
 type PendingCloudState = {
   userId: string;
@@ -59,7 +59,19 @@ async function flushLatestState(): Promise<void> {
   pushInFlight = true;
 
   try {
-    await pushCloudState(session, snapshot.state);
+    // Reconcile the queued local snapshot with the latest remote state before
+    // writing. Without this read-merge-write boundary, device B could upload an
+    // older local snapshot after device A and silently remove completed lessons,
+    // mastery evidence, XP or streak progress already present in Supabase.
+    const reconciled = await pullCloudState(session, snapshot.state);
+    const currentBeforePush = loadCloudSession();
+    if (!currentBeforePush || currentBeforePush.user.id !== snapshot.userId) {
+      // The account changed while the remote reconciliation was in flight. Never
+      // let the old learner's merged state cross the new learner's session.
+      retryDelayMs = BASE_RETRY_DELAY_MS;
+      return;
+    }
+    await pushCloudState(reconciled.session, reconciled.state);
     retryDelayMs = BASE_RETRY_DELAY_MS;
   } catch {
     // Keep the newest local snapshot queued while offline. If another mutation
@@ -89,9 +101,10 @@ async function flushLatestState(): Promise<void> {
 
     queueFlush(delay);
     return;
+  } finally {
+    pushInFlight = false;
   }
 
-  pushInFlight = false;
   if (latestState) queueFlush(FOLLOW_UP_DELAY_MS);
 }
 
