@@ -26,8 +26,9 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { projectReadinessAgainstGraph } = module.exports;
+const { projectReadinessAgainstGraph, resolveProjectSkills } = module.exports;
 assert.equal(typeof projectReadinessAgainstGraph, 'function', 'projectReadinessAgainstGraph must stay exported');
+assert.equal(typeof resolveProjectSkills, 'function', 'resolveProjectSkills must stay exported');
 
 const project = {
   id: 'web-card',
@@ -109,4 +110,16 @@ const state = (score, confidence) => ({
   assert.equal(result.score, 50, 'unmapped prerequisite labels must lower the readiness percentage instead of showing a misleading 100%');
 }
 
-console.log('Project readiness audit OK: mastery values and readiness gates are bounded, and unresolved skills lower readiness honestly.');
+{
+  const duplicateProject = {
+    ...project,
+    skills: [' HTML structure ', 'html-structure', 'HTML   structure', '', '   '],
+  };
+  const resolved = resolveProjectSkills(duplicateProject, graph);
+  assert.deepEqual(resolved.map((item) => item.requested), ['HTML structure'], 'equivalent project prerequisites must collapse to one canonical identity');
+  const result = projectReadinessAgainstGraph(duplicateProject, graph, state(100, 100), 55);
+  assert.equal(result.score, 100, 'duplicated prerequisite labels must not distort readiness weighting');
+  assert.deepEqual(result.skillIds, ['html-structure']);
+}
+
+console.log('Project readiness audit OK: mastery values and readiness gates are bounded, unresolved skills lower readiness honestly, and duplicate prerequisite labels cannot distort project readiness.');
