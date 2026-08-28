@@ -16,6 +16,11 @@ export type AssessmentPlan = {
   recommendedMinutes: number;
 };
 
+const BASE_CHAPTER_ASSESSMENT_ITEMS = 3;
+const BASE_EVIDENCE_CHAPTER_ASSESSMENT_ITEMS = 5;
+const MAX_CHAPTER_ASSESSMENT_ITEMS = 8;
+const MAX_COURSE_EXAM_ITEMS = 20;
+
 function evenlySampleLessons(lessons: Lesson[], maxItems: number) {
   if (lessons.length <= maxItems) return lessons;
   if (maxItems <= 1) return lessons.slice(0, Math.max(0, maxItems));
@@ -77,6 +82,15 @@ function coverageSampleLessons(
   return lessons.filter((lesson) => selected.has(lesson.id));
 }
 
+function chapterAssessmentItemBudget(chapter: Chapter, lessonCount: number, hasExplicitEvidence: boolean): number {
+  if (lessonCount <= 0) return 0;
+  const baseline = hasExplicitEvidence
+    ? BASE_EVIDENCE_CHAPTER_ASSESSMENT_ITEMS
+    : BASE_CHAPTER_ASSESSMENT_ITEMS;
+  const skillCoverageBudget = Math.min(chapter.skillIds.length, MAX_CHAPTER_ASSESSMENT_ITEMS);
+  return Math.min(lessonCount, MAX_CHAPTER_ASSESSMENT_ITEMS, Math.max(baseline, skillCoverageBudget));
+}
+
 export function chapterAssessment(course: Course, chapter: Chapter): AssessmentPlan {
   const chapterLessons = chapter.lessonIds
     .map((id) => course.starterLessons.find((lesson) => lesson.id === id))
@@ -86,7 +100,7 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
   const selectedLessons = coverageSampleLessons(
     chapterLessons,
     chapter.skillIds,
-    Math.min(explicit.length ? 5 : 3, chapterLessons.length),
+    chapterAssessmentItemBudget(chapter, chapterLessons.length, explicit.length > 0),
     explicitIds,
   );
   const lessonIds = selectedLessons.map((lesson) => lesson.id);
@@ -107,7 +121,7 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
 export function courseExam(course: Course): AssessmentPlan {
   const evidenceLessons = course.starterLessons.filter((lesson) => ['checkpoint', 'boss', 'project', 'lab'].includes(lesson.activityKind ?? 'learn'));
   const evidenceIds = new Set(evidenceLessons.map((lesson) => lesson.id));
-  const selectedLessons = coverageSampleLessons(course.starterLessons, course.skillIds, 20, evidenceIds);
+  const selectedLessons = coverageSampleLessons(course.starterLessons, course.skillIds, MAX_COURSE_EXAM_ITEMS, evidenceIds);
   return {
     id: `${course.id}.course-exam`,
     kind: 'course-exam',
