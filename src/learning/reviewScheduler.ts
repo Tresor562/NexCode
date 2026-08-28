@@ -79,21 +79,39 @@ export function interleavedPracticeSession(
   const target = minutes <= 5 ? 2 : minutes <= 10 ? 4 : minutes <= 20 ? 7 : 12;
   const recommendations = recommendPractice(courses, graph, mastery, completedLessonIds, now, Math.max(target * 3, 12));
   const selected = [] as typeof recommendations;
+  const selectedLessonIds = new Set<string>();
   const usedCourses = new Map<string, number>();
   const usedSkills = new Map<string, number>();
+
+  function add(item: (typeof recommendations)[number]) {
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    selected.push(item);
+    selectedLessonIds.add(item.lesson.id);
+    usedCourses.set(item.courseId, (usedCourses.get(item.courseId) ?? 0) + 1);
+    itemSkillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
+  }
+
   for (const item of recommendations) {
+    if (selectedLessonIds.has(item.lesson.id)) continue;
     const courseCount = usedCourses.get(item.courseId) ?? 0;
     const itemSkillIds = canonicalSkillIds(item.skillIds);
     const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
     if (courseCount >= 2 || skillRepeat >= 2) continue;
-    selected.push(item);
-    usedCourses.set(item.courseId, courseCount + 1);
-    itemSkillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
+    add(item);
     if (selected.length >= target) break;
   }
+
+  // If course diversity alone prevents us from filling the requested session,
+  // relax only the per-course cap. Never relax the skill repetition cap: doing
+  // so turns an "interleaved" session back into blocked practice of one concept.
   for (const item of recommendations) {
     if (selected.length >= target) break;
-    if (!selected.some((entry) => entry.lesson.id === item.lesson.id)) selected.push(item);
+    if (selectedLessonIds.has(item.lesson.id)) continue;
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
+    if (skillRepeat >= 2) continue;
+    add(item);
   }
+
   return selected;
 }
