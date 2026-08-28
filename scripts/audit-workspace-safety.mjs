@@ -27,6 +27,11 @@ assert.equal(isSensitiveWorkspaceFilename('nested/.env.production'), true, 'Nest
 assert.equal(isSensitiveWorkspaceFilename('.env.example'), false, 'Safe environment examples must stay allowed');
 assert.equal(canonicalWorkspacePath('src\\cafe\u0301.js'), 'src/café.js', 'Workspace paths must canonicalize slashes and Unicode before identity checks');
 assert.equal(workspaceCollisionKey('src/App.js'), workspaceCollisionKey('src/app.js'), 'Workspace identity must remain case-insensitive for cross-filesystem safety');
+assert.equal(canonicalWorkspacePath('src/CON.txt'), null, 'Windows device names must be rejected before a workspace can be synced or exported');
+assert.equal(canonicalWorkspacePath('src/aux'), null, 'Reserved device basenames must be rejected even without an extension');
+assert.equal(canonicalWorkspacePath('src/report. '), null, 'Trailing dots or spaces must not create cross-filesystem aliases');
+assert.equal(canonicalWorkspacePath('src/file:name.js'), null, 'Windows-invalid filename characters must be rejected for portable projects');
+assert.equal(canonicalWorkspacePath('src/component?.js'), null, 'Wildcard-like filename characters must not survive canonicalization');
 assert.match(labEngineSource, /import\s+\{[^}]*restoreWorkspaceDraft[^}]*\}\s+from\s+['"]\.\.\/lib\/workspaceSafety['"]/, 'Lab engine must restore through the shared workspace safety boundary');
 assert.match(labEngineSource, /restoreWorkspaceDraft\s*\(\s*\{[\s\S]*stored,[\s\S]*expectedMissionId:\s*mission\.id,[\s\S]*expectedLanguage:\s*mission\.language,[\s\S]*fallbackFiles:\s*starterFiles/, 'Lab restoration must bind shared safety to the current mission, language and trusted starter files');
 assert.match(labEngineSource, /Object\.keys\(files\)\.some\(isSensitiveWorkspaceFilename\)/, 'Lab secret checks must share the canonical sensitive-filename policy');
@@ -132,6 +137,25 @@ const options = {
       ...base,
       files: {
         'index.html': '<main>Safe</main>',
+        'CON.txt': 'reserved',
+        'src/trailing.': 'alias',
+      },
+      activeFile: 'CON.txt',
+    },
+  });
+  assert.equal(result.repaired, true, 'Non-portable filenames must be removed from restored workspaces');
+  assert.deepEqual(result.draft.files, { 'index.html': '<main>Safe</main>' }, 'Portable files must survive while device names and trailing-dot aliases are removed');
+  assert.equal(result.draft.activeFile, 'index.html', 'Active file must fall back to a surviving portable file');
+  assert.deepEqual(result.draft.passedCriteria, [], 'Portable-path repair must invalidate stale validation evidence');
+}
+
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      files: {
+        'index.html': '<main>Safe</main>',
         'binary.txt': 'abc\0def',
         'config/.env.local': 'SECRET=1',
       },
@@ -196,4 +220,4 @@ const options = {
   assert.deepEqual(result.draft.passedCriteria, []);
 }
 
-console.log('Workspace safety audit OK: shared Lab restoration/import identity, slash/case/Unicode collision handling, sensitive/binary filtering, and validation-proof invalidation are protected.');
+console.log('Workspace safety audit OK: shared Lab restoration/import identity, slash/case/Unicode/portable-path collision handling, sensitive/binary filtering, and validation-proof invalidation are protected.');
