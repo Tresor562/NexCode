@@ -1,5 +1,5 @@
 import { Course, Lesson } from '../data/curriculumCore';
-import { LocalState } from '../lib/localState';
+import { LocalState, rewardProgress } from '../lib/localState';
 import { buildSkillGraph, recordSkillAttempt } from './skillGraph';
 import { recommendPractice } from './practiceEngine';
 
@@ -11,10 +11,44 @@ export type AttemptResult = {
   feedback: string;
 };
 
+export type LearningCompletionReward = {
+  xp: number;
+  nexCoins: number;
+  minutes: number;
+};
+
+const completionRewards: Record<string, Omit<LearningCompletionReward, 'minutes'>> = {
+  learn: { xp: 12, nexCoins: 2 },
+  practice: { xp: 14, nexCoins: 3 },
+  review: { xp: 10, nexCoins: 2 },
+  lab: { xp: 25, nexCoins: 5 },
+  checkpoint: { xp: 30, nexCoins: 6 },
+  boss: { xp: 45, nexCoins: 9 },
+  project: { xp: 40, nexCoins: 8 },
+};
+
 function inferErrorTag(lesson: Lesson, selectedIndex: number | null) {
   const skill = lesson.skillIds?.[0] ?? lesson.id;
   if (selectedIndex === null) return `${skill}.no-answer`;
   return `${skill}.choice-${selectedIndex}`;
+}
+
+export function learningCompletionReward(lesson: Lesson): LearningCompletionReward {
+  const reward = completionRewards[lesson.activityKind ?? 'learn'] ?? completionRewards.learn!;
+  return {
+    ...reward,
+    minutes: Math.max(1, Math.min(15, Math.round(lesson.durationMin || 1))),
+  };
+}
+
+export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
+  if (state.completedLessons.includes(lesson.id)) return state;
+  const reward = learningCompletionReward(lesson);
+  const rewarded = rewardProgress(state, { ...reward, now });
+  return {
+    ...rewarded,
+    completedLessons: [...rewarded.completedLessons, lesson.id],
+  };
 }
 
 export function recordLessonAnswer(
@@ -53,25 +87,8 @@ export function recordLessonAnswer(
   };
 }
 
-export function completeLearningActivity(state: LocalState, lesson: Lesson): LocalState {
-  const alreadyCompleted = state.completedLessons.includes(lesson.id);
-  if (alreadyCompleted) return state;
-  const xpByKind: Record<string, number> = {
-    learn: 10,
-    practice: 12,
-    lab: 20,
-    review: 14,
-    checkpoint: 25,
-    boss: 35,
-    project: 30,
-  };
-  const minutes = Math.min(lesson.durationMin, 15);
-  return {
-    ...state,
-    xp: state.xp + (xpByKind[lesson.activityKind ?? 'learn'] ?? 10),
-    dailyCompleted: Math.min(state.dailyGoal, state.dailyCompleted + minutes),
-    completedLessons: [...state.completedLessons, lesson.id],
-  };
+export function completeLearningActivity(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
+  return rewardLearningCompletion(state, lesson, now);
 }
 
 export function adaptiveQueue(courses: Course[], state: LocalState, now = new Date(), limit = 8) {
