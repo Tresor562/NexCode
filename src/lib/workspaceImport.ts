@@ -1,4 +1,5 @@
 import { Directory, File } from 'expo-file-system';
+import { canonicalWorkspacePath, workspaceCollisionKey } from './workspaceSafety';
 
 const TEXT_EXTENSIONS = new Set([
   'html','htm','css','scss','sass','less','js','jsx','mjs','cjs','ts','tsx','json','py','sql','md','txt','xml','yaml','yml','toml','ini','sh','bash','ps1','java','kt','kts','c','h','cpp','hpp','cs','go','rs','php','rb','dart','swift','vue','svelte','graphql','gql','csv','gitignore','dockerfile',
@@ -48,16 +49,27 @@ function canReadAsText(file: File) {
   return size <= MAX_TEXT_BYTES && isSafeSegment(file.name) && !isSensitiveName(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
 }
 
+function occupiedWorkspaceKeys(existing: Record<string, string>) {
+  const occupied = new Set<string>();
+  for (const rawPath of Object.keys(existing)) {
+    const canonical = canonicalWorkspacePath(rawPath);
+    if (canonical) occupied.add(workspaceCollisionKey(canonical));
+  }
+  return occupied;
+}
+
 function uniquePath(path: string, occupied: Set<string>) {
-  if (!occupied.has(path)) return { path, renamed: false };
-  const slash = path.lastIndexOf('/');
-  const folder = slash >= 0 ? path.slice(0, slash + 1) : '';
-  const name = slash >= 0 ? path.slice(slash + 1) : path;
+  const canonical = canonicalWorkspacePath(path);
+  if (!canonical) return null;
+  if (!occupied.has(workspaceCollisionKey(canonical))) return { path: canonical, renamed: canonical !== path };
+  const slash = canonical.lastIndexOf('/');
+  const folder = slash >= 0 ? canonical.slice(0, slash + 1) : '';
+  const name = slash >= 0 ? canonical.slice(slash + 1) : canonical;
   const dot = name.lastIndexOf('.');
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const ext = dot > 0 ? name.slice(dot) : '';
   let counter = 2;
-  while (occupied.has(`${folder}${stem} (${counter})${ext}`)) counter += 1;
+  while (occupied.has(workspaceCollisionKey(`${folder}${stem} (${counter})${ext}`))) counter += 1;
   return { path: `${folder}${stem} (${counter})${ext}`, renamed: true };
 }
 
@@ -78,7 +90,7 @@ function workspaceUsage(existing: Record<string, string>) {
 export async function importFilesFromPhone(existing: Record<string, string>): Promise<WorkspaceImportResult> {
   const picked = await File.pickFileAsync({ multipleFiles: true });
   if (picked.canceled) return { files: existing, imported: 0, skipped: 0, renamed: 0 };
-  const occupied = new Set(Object.keys(existing));
+  const occupied = occupiedWorkspaceKeys(existing);
   const next = { ...existing };
   const usage = workspaceUsage(existing);
   let imported = 0;
@@ -97,8 +109,9 @@ export async function importFilesFromPhone(existing: Record<string, string>): Pr
       const text = await readTextFile(file);
       if (text === null || workspaceChars + text.length > MAX_TOTAL_TEXT_CHARS) { skipped += 1; continue; }
       const resolved = uniquePath(file.name, occupied);
+      if (!resolved) { skipped += 1; continue; }
       next[resolved.path] = text;
-      occupied.add(resolved.path);
+      occupied.add(workspaceCollisionKey(resolved.path));
       workspaceChars += text.length;
       workspaceFiles += 1;
       imported += 1;
@@ -118,7 +131,7 @@ export async function importFolderFromPhone(existing: Record<string, string>): P
   } catch {
     return { files: existing, imported: 0, skipped: 0, renamed: 0 };
   }
-  const occupied = new Set(Object.keys(existing));
+  const occupied = occupiedWorkspaceKeys(existing);
   const next = { ...existing };
   const usage = workspaceUsage(existing);
   let imported = 0;
@@ -142,8 +155,9 @@ export async function importFolderFromPhone(existing: Record<string, string>): P
         const text = await readTextFile(entry);
         if (text === null || workspaceChars + text.length > MAX_TOTAL_TEXT_CHARS) { skipped += 1; continue; }
         const resolved = uniquePath(`${prefix}${entry.name}`, occupied);
+        if (!resolved) { skipped += 1; continue; }
         next[resolved.path] = text;
-        occupied.add(resolved.path);
+        occupied.add(workspaceCollisionKey(resolved.path));
         workspaceChars += text.length;
         workspaceFiles += 1;
         imported += 1;
