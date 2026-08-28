@@ -66,10 +66,9 @@ async function flushLatestState(): Promise<void> {
     const reconciled = await pullCloudState(session, snapshot.state);
     const currentBeforePush = loadCloudSession();
     if (!currentBeforePush || currentBeforePush.user.id !== snapshot.userId) {
-      // The account changed while the remote reconciliation was in flight. Never
-      // let the old learner's merged state cross the new learner's session.
-      retryDelayMs = BASE_RETRY_DELAY_MS;
-      return;
+      // Route this through the normal failure handoff so a snapshot queued for a
+      // newly signed-in learner while the pull was running is scheduled at once.
+      throw new Error('Cloud account changed during reconciliation.');
     }
     await pushCloudState(reconciled.session, reconciled.state);
     retryDelayMs = BASE_RETRY_DELAY_MS;
