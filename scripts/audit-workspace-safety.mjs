@@ -5,6 +5,7 @@ import ts from 'typescript';
 const sourceUrl = new URL('../src/lib/workspaceSafety.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
 const labEngineSource = fs.readFileSync(new URL('../src/learning/labEngine.ts', import.meta.url), 'utf8');
+const workspaceImportSource = fs.readFileSync(new URL('../src/lib/workspaceImport.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -17,15 +18,23 @@ const compiled = ts.transpileModule(source, {
 const exports = {};
 const module = { exports };
 new Function('exports', 'module', 'require', compiled)(exports, module, () => ({}));
-const { restoreWorkspaceDraft, isSensitiveWorkspaceFilename } = module.exports;
+const { restoreWorkspaceDraft, isSensitiveWorkspaceFilename, canonicalWorkspacePath, workspaceCollisionKey } = module.exports;
 
 assert.equal(typeof restoreWorkspaceDraft, 'function', 'Workspace restoration must stay executable');
+assert.equal(typeof canonicalWorkspacePath, 'function', 'Canonical workspace path identity must stay reusable outside restoration');
+assert.equal(typeof workspaceCollisionKey, 'function', 'Collision identity must stay reusable outside restoration');
 assert.equal(isSensitiveWorkspaceFilename('nested/.env.production'), true, 'Nested environment files must stay blocked');
 assert.equal(isSensitiveWorkspaceFilename('.env.example'), false, 'Safe environment examples must stay allowed');
+assert.equal(canonicalWorkspacePath('src\\cafe\u0301.js'), 'src/café.js', 'Workspace paths must canonicalize slashes and Unicode before identity checks');
+assert.equal(workspaceCollisionKey('src/App.js'), workspaceCollisionKey('src/app.js'), 'Workspace identity must remain case-insensitive for cross-filesystem safety');
 assert.match(labEngineSource, /import\s+\{[^}]*restoreWorkspaceDraft[^}]*\}\s+from\s+['"]\.\.\/lib\/workspaceSafety['"]/, 'Lab engine must restore through the shared workspace safety boundary');
 assert.match(labEngineSource, /restoreWorkspaceDraft\s*\(\s*\{[\s\S]*stored,[\s\S]*expectedMissionId:\s*mission\.id,[\s\S]*expectedLanguage:\s*mission\.language,[\s\S]*fallbackFiles:\s*starterFiles/, 'Lab restoration must bind shared safety to the current mission, language and trusted starter files');
 assert.match(labEngineSource, /Object\.keys\(files\)\.some\(isSensitiveWorkspaceFilename\)/, 'Lab secret checks must share the canonical sensitive-filename policy');
 assert.doesNotMatch(labEngineSource, /function\s+isSensitiveLabFilename\s*\(/, 'Lab engine must not drift back to a duplicate sensitive-filename policy');
+assert.match(workspaceImportSource, /import\s+\{[^}]*canonicalWorkspacePath[^}]*workspaceCollisionKey[^}]*\}\s+from\s+['"]\.\/workspaceSafety['"]/, 'Phone imports must share the same canonical path identity as restored workspaces');
+assert.match(workspaceImportSource, /function occupiedWorkspaceKeys\([\s\S]*canonicalWorkspacePath\(rawPath\)[\s\S]*workspaceCollisionKey\(canonical\)/, 'Existing Lab files must be indexed by canonical collision identity before imports');
+assert.match(workspaceImportSource, /while \(occupied\.has\(workspaceCollisionKey\(`\$\{folder\}\$\{stem\} \(\$\{counter\}\)\$\{ext\}`\)\)\)/, 'Import renaming must test generated paths through the cross-filesystem collision key');
+assert.match(workspaceImportSource, /occupied\.add\(workspaceCollisionKey\(resolved\.path\)\)/g, 'Every imported file must reserve its canonical collision identity immediately');
 
 const base = {
   missionId: 'project:demo',
@@ -187,4 +196,4 @@ const options = {
   assert.deepEqual(result.draft.passedCriteria, []);
 }
 
-console.log('Workspace safety audit OK: shared Lab restoration, slash/case/Unicode identity, collision handling, sensitive/binary filtering, and validation-proof invalidation are protected.');
+console.log('Workspace safety audit OK: shared Lab restoration/import identity, slash/case/Unicode collision handling, sensitive/binary filtering, and validation-proof invalidation are protected.');
