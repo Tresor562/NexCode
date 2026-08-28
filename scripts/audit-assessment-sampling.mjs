@@ -120,10 +120,37 @@ assert.equal(oversizedPlan.recommendedMinutes, 24, 'maximum chapter assessment p
 const duplicateSkillChapter = {
   ...broadChapter,
   id: 'duplicate-skill-chapter',
-  skillIds: ['skill-1', 'skill-1', 'skill-2'],
+  skillIds: [' skill-1 ', 'skill-1', '', 'skill-2', 'skill-2'],
 };
 const duplicateSkillPlan = chapterAssessment(broadCourse, duplicateSkillChapter);
 assert.equal(duplicateSkillPlan.lessonIds.length, 5, 'duplicate skill ids must not inflate the adaptive chapter assessment budget');
+assert.deepEqual(duplicateSkillPlan.skillIds, ['skill-1', 'skill-2'], 'assessment plans must expose canonical unique skill ids instead of duplicate or whitespace variants');
+
+const duplicateLessonSkills = [
+  makeLesson('duplicate-html', 'checkpoint', [' html ', 'html', 'html']),
+  makeLesson('duplicate-css', 'learn', ['css', 'css']),
+  makeLesson('duplicate-js', 'learn', ['js']),
+  makeLesson('duplicate-review', 'learn', ['html']),
+  makeLesson('duplicate-extra', 'learn', ['css']),
+];
+const duplicateCoverageChapter = {
+  id: 'duplicate-coverage-chapter',
+  title: 'duplicate-coverage-chapter',
+  lessonIds: duplicateLessonSkills.map((lesson) => lesson.id),
+  skillIds: ['html', 'css', 'js'],
+  estimatedMinutes: 100,
+};
+const duplicateCoverageCourse = {
+  id: 'duplicate-coverage-course',
+  estimatedHours: 4,
+  skillIds: [' html ', 'html', 'css', 'js', 'js'],
+  chapters: [duplicateCoverageChapter],
+  starterLessons: duplicateLessonSkills,
+};
+const duplicateCoveragePlan = chapterAssessment(duplicateCoverageCourse, duplicateCoverageChapter);
+assert.ok(duplicateCoveragePlan.lessonIds.includes('duplicate-js'), 'duplicate lesson skill ids must not make one activity appear to cover multiple outstanding skills');
+const canonicalExam = courseExam(duplicateCoverageCourse);
+assert.deepEqual(canonicalExam.skillIds, ['html', 'css', 'js'], 'course exams must canonicalize the skill contract before sampling or mastery gating');
 
 const orderedCourse = {
   id: 'ordered-course',
@@ -166,4 +193,4 @@ assert.deepEqual(
   'selected exam activities must remain in original course order',
 );
 
-console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-covering, adaptively bounded, paced from sampled work and course-ordered.');
+console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-canonical, skill-covering, adaptively bounded, paced from sampled work and course-ordered.');
