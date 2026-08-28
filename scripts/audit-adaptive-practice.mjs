@@ -99,6 +99,16 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
 
 {
   const session = planPracticeSession([
+    activity({ courseId: 'web', lessonId: 'review-dom', mode: 'review', minutes: 9, skills: ['dom'], priority: 140 }),
+    activity({ courseId: 'web', lessonId: 'learn-dom-variant', mode: 'learn', minutes: 3, skills: ['dom'], priority: 95 }),
+  ], 5);
+  assert.equal(session.activities.length, 0, 'ordinary learning that shares a recovery skill must not substitute for the targeted review');
+  assert.equal(session.blockedByRecovery, true, 'the planner must stay explicitly blocked when the required review cannot fit safely');
+  assert.equal(session.deferredRecoveryCount, 1, 'the unresolved targeted recovery must remain visible');
+}
+
+{
+  const session = planPracticeSession([
     activity({ courseId: 'web', lessonId: 'repair-dom', mode: 'repair', minutes: 6, skills: ['dom'], priority: 150 }),
     activity({ courseId: 'css', lessonId: 'review-grid', mode: 'review', minutes: 20, skills: ['grid'], priority: 130 }),
     activity({ courseId: 'js', lessonId: 'learn-array', mode: 'learn', minutes: 4, skills: ['array'], priority: 60 }),
@@ -149,4 +159,4 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
   assert.equal(session.deferredRecoveryCount, 0);
 }
 
-console.log('Adaptive practice audit OK: mastery prerequisite gates, recovery priority, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing and skill diversification are protected.');
+console.log('Adaptive practice audit OK: mastery prerequisite gates, mandatory targeted recovery, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing and skill diversification are protected.');
