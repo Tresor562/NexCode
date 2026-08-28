@@ -18,6 +18,13 @@ export type LabSession = {
   lastRunFeedback?: string;
 };
 
+function labReturnSource(lesson: Lesson): LabReturnTarget['source'] {
+  if (lesson.activityKind === 'project') return 'project';
+  if (lesson.activityKind === 'checkpoint' || lesson.activityKind === 'boss') return 'checkpoint';
+  if (lesson.activityKind === 'practice' || lesson.activityKind === 'review') return 'practice';
+  return 'lesson';
+}
+
 export function startLabSession(courseId: string, lesson: Lesson, stored?: LabDraft, now = new Date()): LabSession {
   return {
     id: `${courseId}:${lesson.id}:${now.getTime()}`,
@@ -25,7 +32,7 @@ export function startLabSession(courseId: string, lesson: Lesson, stored?: LabDr
     returnTarget: {
       courseId,
       lessonId: lesson.id,
-      source: lesson.activityKind === 'checkpoint' || lesson.activityKind === 'boss' ? 'checkpoint' : 'lesson',
+      source: labReturnSource(lesson),
     },
     openedAt: now.toISOString(),
     runCount: 0,
