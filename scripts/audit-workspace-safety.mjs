@@ -4,6 +4,7 @@ import ts from 'typescript';
 
 const sourceUrl = new URL('../src/lib/workspaceSafety.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
+const labEngineSource = fs.readFileSync(new URL('../src/learning/labEngine.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -21,6 +22,10 @@ const { restoreWorkspaceDraft, isSensitiveWorkspaceFilename } = module.exports;
 assert.equal(typeof restoreWorkspaceDraft, 'function', 'Workspace restoration must stay executable');
 assert.equal(isSensitiveWorkspaceFilename('nested/.env.production'), true, 'Nested environment files must stay blocked');
 assert.equal(isSensitiveWorkspaceFilename('.env.example'), false, 'Safe environment examples must stay allowed');
+assert.match(labEngineSource, /import\s+\{[^}]*restoreWorkspaceDraft[^}]*\}\s+from\s+['"]\.\.\/lib\/workspaceSafety['"]/, 'Lab engine must restore through the shared workspace safety boundary');
+assert.match(labEngineSource, /restoreWorkspaceDraft\s*\(\s*\{[\s\S]*stored,[\s\S]*expectedMissionId:\s*mission\.id,[\s\S]*expectedLanguage:\s*mission\.language,[\s\S]*fallbackFiles:\s*starterFiles/, 'Lab restoration must bind shared safety to the current mission, language and trusted starter files');
+assert.match(labEngineSource, /Object\.keys\(files\)\.some\(isSensitiveWorkspaceFilename\)/, 'Lab secret checks must share the canonical sensitive-filename policy');
+assert.doesNotMatch(labEngineSource, /function\s+isSensitiveLabFilename\s*\(/, 'Lab engine must not drift back to a duplicate sensitive-filename policy');
 
 const base = {
   missionId: 'project:demo',
@@ -142,4 +147,4 @@ const options = {
   assert.deepEqual(result.draft.files, options.fallbackFiles, 'An unusable workspace must fail closed to the trusted starter files');
 }
 
-console.log('Workspace safety audit OK: slash, case and Unicode path identity, collision handling, sensitive/binary filtering and validation invalidation are protected.');
+console.log('Workspace safety audit OK: shared Lab restoration, slash/case/Unicode identity, collision handling, sensitive/binary filtering and validation invalidation are protected.');
