@@ -147,4 +147,44 @@ const options = {
   assert.deepEqual(result.draft.files, options.fallbackFiles, 'An unusable workspace must fail closed to the trusted starter files');
 }
 
-console.log('Workspace safety audit OK: shared Lab restoration, slash/case/Unicode identity, collision handling, sensitive/binary filtering and validation invalidation are protected.');
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      lastValidatedAt: undefined,
+      passedCriteria: ['preview'],
+    },
+  });
+  assert.equal(result.repaired, true, 'Passed criteria without a validation timestamp must not survive restoration');
+  assert.equal(result.draft.lastValidatedAt, undefined);
+  assert.deepEqual(result.draft.passedCriteria, [], 'Unverifiable restored criteria must be cleared instead of shown as earned');
+}
+
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      lastValidatedAt: 'not-a-date',
+      passedCriteria: ['preview'],
+    },
+  });
+  assert.equal(result.repaired, true, 'Malformed validation timestamps must invalidate restored proof metadata');
+  assert.deepEqual(result.draft.passedCriteria, []);
+}
+
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      passedCriteria: ['preview', '', 42],
+    },
+  });
+  assert.equal(result.repaired, true, 'Malformed criteria arrays from persisted or synced state must fail closed');
+  assert.equal(result.draft.lastValidatedAt, undefined);
+  assert.deepEqual(result.draft.passedCriteria, []);
+}
+
+console.log('Workspace safety audit OK: shared Lab restoration, slash/case/Unicode identity, collision handling, sensitive/binary filtering, and validation-proof invalidation are protected.');
