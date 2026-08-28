@@ -17,7 +17,7 @@ const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
 
-function canonicalWorkspacePath(path: string): string | null {
+export function canonicalWorkspacePath(path: string): string | null {
   const normalized = path.trim().replace(/\\/g, '/').normalize('NFC');
   if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return null;
   const segments = normalized.split('/');
@@ -25,7 +25,7 @@ function canonicalWorkspacePath(path: string): string | null {
   return normalized;
 }
 
-function workspaceCollisionKey(path: string): string {
+export function workspaceCollisionKey(path: string): string {
   return path.normalize('NFC').toLocaleLowerCase('en-US');
 }
 
