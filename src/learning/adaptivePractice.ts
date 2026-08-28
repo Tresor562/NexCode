@@ -159,9 +159,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     const unresolvedRecoverySkills = [...recoverySkills].filter((skill) => !recoveredSkills.has(skill));
     const unresolvedUnscopedRecovery = [...unscopedRecoveryKeys].some((key) => !recoveredUnscopedKeys.has(key));
     const unresolvedRecovery = unresolvedRecoverySkills.length > 0 || unresolvedUnscopedRecovery;
-    const supportsUnresolvedRecovery = !unresolvedUnscopedRecovery
-      && candidate.skillIds.some((skill) => unresolvedRecoverySkills.includes(skill));
-    if (unresolvedRecovery && !recoveryMode && !supportsUnresolvedRecovery) continue;
+    if (unresolvedRecovery && !recoveryMode) continue;
     if (candidate.mode === 'learn' && newActivities >= maxNewActivities) continue;
 
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
@@ -174,7 +172,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (candidate.mode === 'learn') newActivities += 1;
     candidate.skillIds.forEach((skill) => {
       usedSkills.add(skill);
-      if (recoveryMode || supportsUnresolvedRecovery) recoveredSkills.add(skill);
+      if (recoveryMode) recoveredSkills.add(skill);
     });
     if (recoveryMode && candidate.skillIds.length === 0) recoveredUnscopedKeys.add(candidateRecoveryKey);
     usedCourses.add(candidate.courseId);
