@@ -49,10 +49,32 @@ function normalize(value: ExerciseAnswer) {
   return Array.isArray(value) ? value.join('\n').trim() : String(value).trim();
 }
 
-function minimumOpenEndedLength(exercise: RichExercise) {
-  if (exercise.kind === 'explain') return 16;
-  if (exercise.kind === 'write-code' || exercise.kind === 'debug' || exercise.kind === 'refactor') return 3;
-  return 1;
+function stripCodeComments(source: string) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|\s)\/\/.*$/gm, '$1')
+    .replace(/(^|\s)#.*$/gm, '$1');
+}
+
+function meaningfulWordCount(source: string) {
+  return source
+    .normalize('NFKC')
+    .split(/\s+/)
+    .map((token) => token.replace(/[^\p{L}\p{N}_'-]/gu, ''))
+    .filter((token) => token.length >= 2).length;
+}
+
+function hasSubstantiveOpenEndedAnswer(exercise: RichExercise, answerText: string) {
+  if (exercise.kind === 'explain') {
+    return answerText.length >= 16 && meaningfulWordCount(answerText) >= 3;
+  }
+
+  if (exercise.kind === 'write-code' || exercise.kind === 'debug' || exercise.kind === 'refactor') {
+    const executableSignal = stripCodeComments(answerText).trim();
+    return executableSignal.length >= 3 && /[\p{L}\p{N}_]/u.test(executableSignal);
+  }
+
+  return answerText.length >= 1;
 }
 
 function testSource(source: string, test: ExerciseTest) {
@@ -98,14 +120,15 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
   const hasTestGate = results.length > 0;
   const testPassed = !hasTestGate || results.every((item) => item.passed);
   const hasAutomaticGate = hasDirectGate || hasTestGate;
-  const minimumAnswerLength = minimumOpenEndedLength(exercise);
-  const hasSubstantiveAnswer = answerText.length >= minimumAnswerLength;
+  const hasSubstantiveAnswer = hasSubstantiveOpenEndedAnswer(exercise, answerText);
   const passed = hasAutomaticGate ? directPassed && testPassed : hasSubstantiveAnswer;
 
   if (!hasAutomaticGate && !hasSubstantiveAnswer) {
     feedback.push(exercise.kind === 'explain'
-      ? 'Développe ton explication en une phrase suffisamment précise avant de valider. Un mot isolé ne démontre pas encore ton raisonnement.'
-      : 'Écris d’abord une réponse exploitable avant de valider. Une tentative trop courte ne compte pas comme un exercice réussi.');
+      ? 'Développe ton explication avec plusieurs mots utiles et une idée complète avant de valider. La longueur seule ne démontre pas encore ton raisonnement.'
+      : exercise.kind === 'write-code' || exercise.kind === 'debug' || exercise.kind === 'refactor'
+        ? 'Écris une vraie tentative de code avant de valider. Des commentaires, espaces ou symboles seuls ne comptent pas comme une solution.'
+        : 'Écris d’abord une réponse exploitable avant de valider. Une tentative trop courte ne compte pas comme un exercice réussi.');
     misconceptionTags.push('input-required');
   }
 
