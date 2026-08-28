@@ -38,6 +38,8 @@ for (const token of requiredTokens) {
 requireSnippet(components, "import * as Haptics from 'expo-haptics';", 'Shared tactile controls must keep native haptic feedback wired through expo-haptics.');
 requireSnippet(components, "import { shadows, theme } from './theme';", 'Shared components must use the central theme.');
 requireSnippet(components, "import { useMotionPreferences } from './motionPreferences';", 'Shared controls must retain the shared motion lifecycle.');
+requireSnippet(components, 'const SHARED_TOUCH_HIT_SLOP = 8;', 'Shared tactile controls must keep an expanded invisible mobile hit target.');
+requireSnippet(components, 'hitSlop={SHARED_TOUCH_HIT_SLOP}', 'Every shared tactile action must consume the centralized hit-slop boundary.');
 requireSnippet(components, 'minHeight: theme.control.heightLg', 'Primary controls must keep tokenized touch target sizing.');
 requireSnippet(components, 'width: theme.control.heightSm', 'Icon controls must keep tokenized 44pt sizing.');
 requireSnippet(components, 'backgroundColor: theme.colors.primary', 'Primary button must keep the semantic primary token.');
@@ -137,4 +139,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, unified loading/disable-safe primary/secondary/icon/section controls, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, unified loading/disable-safe primary/secondary/icon/section controls, expanded shared hit targets, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
