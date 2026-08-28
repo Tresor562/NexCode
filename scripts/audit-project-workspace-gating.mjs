@@ -36,6 +36,21 @@ assert(
   'workspace gating preserves the existing step progression callback',
 );
 
+assert(
+  source.includes('if (!hasWorkspace || progress < 100 || !review.passed || existingProof) return;'),
+  'portfolio proof creation rechecks every evidence prerequisite at the mutation boundary',
+);
+
+assert(
+  source.includes('disabled={!hasWorkspace || !review.passed || progress < 100 || Boolean(existingProof)}'),
+  'portfolio publishing stays blocked when its backing workspace is missing',
+);
+
+assert(
+  source.includes('Le portfolio exige aussi un workspace sauvegardé'),
+  'the portfolio review tells the learner how to repair missing workspace evidence',
+);
+
 if (process.exitCode) {
   throw new Error('Project workspace gating audit failed.');
 }
