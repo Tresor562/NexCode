@@ -68,6 +68,7 @@ assert.deepEqual(
   'chapter assessments must preserve chapter order while filling skills not covered by explicit evidence activities',
 );
 assert.ok(mixedPlan.lessonIds.includes('css-practice'), 'normal lessons must fill uncovered chapter skills instead of being dropped when explicit evidence exists');
+assert.equal(mixedPlan.recommendedMinutes, 12, 'chapter pacing must reflect the four sampled activities instead of a fraction of total chapter duration');
 
 const broadSkills = Array.from({ length: 7 }, (_, index) => `skill-${index + 1}`);
 const broadLessons = broadSkills.map((skillId, index) =>
@@ -90,6 +91,7 @@ const broadCourse = {
 const broadPlan = chapterAssessment(broadCourse, broadChapter);
 assert.equal(broadPlan.lessonIds.length, 7, 'chapter assessments must grow beyond the five-item baseline when more slots are needed to represent required skills');
 assert.deepEqual(broadPlan.lessonIds, broadLessons.map((lesson) => lesson.id), 'a seven-skill chapter with one lesson per skill must keep complete skill coverage');
+assert.equal(broadPlan.recommendedMinutes, 21, 'seven sampled chapter activities should recommend a focused 21-minute checkpoint');
 
 const oversizedSkills = Array.from({ length: 12 }, (_, index) => `oversized-skill-${index + 1}`);
 const oversizedLessons = oversizedSkills.map((skillId, index) => makeLesson(`oversized-${index + 1}`, 'learn', [skillId]));
@@ -107,11 +109,21 @@ const oversizedCourse = {
   chapters: [oversizedChapter],
   starterLessons: oversizedLessons,
 };
+const oversizedPlan = chapterAssessment(oversizedCourse, oversizedChapter);
 assert.equal(
-  chapterAssessment(oversizedCourse, oversizedChapter).lessonIds.length,
+  oversizedPlan.lessonIds.length,
   8,
   'chapter assessments must remain premium and focused instead of expanding beyond eight activities',
 );
+assert.equal(oversizedPlan.recommendedMinutes, 24, 'maximum chapter assessment pacing must stay capped at 24 minutes for eight sampled activities');
+
+const duplicateSkillChapter = {
+  ...broadChapter,
+  id: 'duplicate-skill-chapter',
+  skillIds: ['skill-1', 'skill-1', 'skill-2'],
+};
+const duplicateSkillPlan = chapterAssessment(broadCourse, duplicateSkillChapter);
+assert.equal(duplicateSkillPlan.lessonIds.length, 5, 'duplicate skill ids must not inflate the adaptive chapter assessment budget');
 
 const orderedCourse = {
   id: 'ordered-course',
@@ -125,12 +137,13 @@ const orderedCourse = {
     makeLesson('js-lab', 'lab', ['js']),
   ],
 };
-
+const orderedExam = courseExam(orderedCourse);
 assert.deepEqual(
-  courseExam(orderedCourse).lessonIds,
+  orderedExam.lessonIds,
   ['html-intro', 'html-checkpoint', 'css-intro', 'js-lab'],
   'course exams must preserve the pedagogical order of the course even when evidence activities are preferred',
 );
+assert.equal(orderedExam.recommendedMinutes, 20, 'short final exams must keep a practical minimum session rather than scale from course hours');
 
 const crowdedLessons = Array.from({ length: 22 }, (_, index) =>
   makeLesson(`lesson-${index + 1}`, index === 18 ? 'checkpoint' : 'learn', index === 18 ? ['critical-skill'] : ['shared-skill']),
@@ -144,6 +157,7 @@ const crowdedCourse = {
 };
 const crowdedExam = courseExam(crowdedCourse);
 assert.equal(crowdedExam.lessonIds.length, 20, 'course exams must remain bounded to 20 activities');
+assert.equal(crowdedExam.recommendedMinutes, 60, 'twenty sampled final activities must remain capped at a focused one-hour exam');
 assert.ok(crowdedExam.lessonIds.includes('lesson-19'), 'strong evidence must win an equal-coverage tie for a required skill');
 const positions = crowdedExam.lessonIds.map((id) => crowdedLessons.findIndex((lesson) => lesson.id === id));
 assert.deepEqual(
@@ -152,4 +166,4 @@ assert.deepEqual(
   'selected exam activities must remain in original course order',
 );
 
-console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-covering, adaptively bounded and course-ordered.');
+console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-covering, adaptively bounded, paced from sampled work and course-ordered.');
