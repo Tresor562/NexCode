@@ -13,15 +13,27 @@ const SENSITIVE_BASENAMES = new Set([
   'service_account.json',
 ]);
 
+const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
+const WINDOWS_INVALID_SEGMENT_CHARS = /[<>:"|?*]/;
 const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
+
+function portableWorkspaceSegment(segment: string): boolean {
+  return Boolean(segment)
+    && segment !== '.'
+    && segment !== '..'
+    && !/[\u0000-\u001f\u007f]/.test(segment)
+    && !WINDOWS_INVALID_SEGMENT_CHARS.test(segment)
+    && !/[. ]$/.test(segment)
+    && !WINDOWS_RESERVED_BASENAME.test(segment);
+}
 
 export function canonicalWorkspacePath(path: string): string | null {
   const normalized = path.trim().replace(/\\/g, '/').normalize('NFC');
   if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return null;
   const segments = normalized.split('/');
-  if (segments.some((segment) => !segment || segment === '.' || segment === '..' || /[\u0000-\u001f\u007f]/.test(segment))) return null;
+  if (segments.some((segment) => !portableWorkspaceSegment(segment))) return null;
   return normalized;
 }
 
