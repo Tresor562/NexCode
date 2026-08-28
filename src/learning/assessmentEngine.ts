@@ -20,6 +20,11 @@ const BASE_CHAPTER_ASSESSMENT_ITEMS = 3;
 const BASE_EVIDENCE_CHAPTER_ASSESSMENT_ITEMS = 5;
 const MAX_CHAPTER_ASSESSMENT_ITEMS = 8;
 const MAX_COURSE_EXAM_ITEMS = 20;
+const ASSESSMENT_MINUTES_PER_ITEM = 3;
+const MIN_CHAPTER_ASSESSMENT_MINUTES = 8;
+const MAX_CHAPTER_ASSESSMENT_MINUTES = 24;
+const MIN_COURSE_EXAM_MINUTES = 20;
+const MAX_COURSE_EXAM_MINUTES = 60;
 
 function evenlySampleLessons(lessons: Lesson[], maxItems: number) {
   if (lessons.length <= maxItems) return lessons;
@@ -87,8 +92,14 @@ function chapterAssessmentItemBudget(chapter: Chapter, lessonCount: number, hasE
   const baseline = hasExplicitEvidence
     ? BASE_EVIDENCE_CHAPTER_ASSESSMENT_ITEMS
     : BASE_CHAPTER_ASSESSMENT_ITEMS;
-  const skillCoverageBudget = Math.min(chapter.skillIds.length, MAX_CHAPTER_ASSESSMENT_ITEMS);
+  const uniqueSkillCount = new Set(chapter.skillIds.filter(Boolean)).size;
+  const skillCoverageBudget = Math.min(uniqueSkillCount, MAX_CHAPTER_ASSESSMENT_ITEMS);
   return Math.min(lessonCount, MAX_CHAPTER_ASSESSMENT_ITEMS, Math.max(baseline, skillCoverageBudget));
+}
+
+function assessmentMinutes(itemCount: number, minimum: number, maximum: number): number {
+  if (itemCount <= 0) return minimum;
+  return Math.min(maximum, Math.max(minimum, itemCount * ASSESSMENT_MINUTES_PER_ITEM));
 }
 
 export function chapterAssessment(course: Course, chapter: Chapter): AssessmentPlan {
@@ -114,7 +125,11 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
     skillIds: chapter.skillIds,
     requiredScore: hasBoss ? 80 : 70,
     requiresIndependentEvidence: true,
-    recommendedMinutes: Math.max(10, Math.round(chapter.estimatedMinutes * 0.2)),
+    recommendedMinutes: assessmentMinutes(
+      selectedLessons.length,
+      MIN_CHAPTER_ASSESSMENT_MINUTES,
+      MAX_CHAPTER_ASSESSMENT_MINUTES,
+    ),
   };
 }
 
@@ -130,7 +145,11 @@ export function courseExam(course: Course): AssessmentPlan {
     skillIds: course.skillIds,
     requiredScore: 80,
     requiresIndependentEvidence: true,
-    recommendedMinutes: Math.min(120, Math.max(30, Math.round(course.estimatedHours * 5))),
+    recommendedMinutes: assessmentMinutes(
+      selectedLessons.length,
+      MIN_COURSE_EXAM_MINUTES,
+      MAX_COURSE_EXAM_MINUTES,
+    ),
   };
 }
 
