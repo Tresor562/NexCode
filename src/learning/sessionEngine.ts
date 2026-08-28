@@ -1,4 +1,4 @@
-import { Course, Lesson } from '../data/curriculumCore';
+import { ActivityKind, Course, Lesson } from '../data/curriculumCore';
 import { LocalState, rewardProgress } from '../lib/localState';
 import { buildSkillGraph, recordSkillAttempt } from './skillGraph';
 import { recommendPractice } from './practiceEngine';
@@ -17,7 +17,7 @@ export type LearningCompletionReward = {
   minutes: number;
 };
 
-const completionRewards: Record<string, Omit<LearningCompletionReward, 'minutes'>> = {
+const completionRewards: Readonly<Record<ActivityKind, Readonly<Omit<LearningCompletionReward, 'minutes'>>>> = {
   learn: { xp: 12, nexCoins: 2 },
   practice: { xp: 14, nexCoins: 3 },
   review: { xp: 10, nexCoins: 2 },
@@ -33,11 +33,16 @@ function inferErrorTag(lesson: Lesson, selectedIndex: number | null) {
   return `${skill}.choice-${selectedIndex}`;
 }
 
+function safeLearningMinutes(durationMin: number): number {
+  if (!Number.isFinite(durationMin)) return 1;
+  return Math.max(1, Math.min(15, Math.round(durationMin)));
+}
+
 export function learningCompletionReward(lesson: Lesson): LearningCompletionReward {
-  const reward = completionRewards[lesson.activityKind ?? 'learn'] ?? completionRewards.learn!;
+  const reward = completionRewards[lesson.activityKind ?? 'learn'];
   return {
     ...reward,
-    minutes: Math.max(1, Math.min(15, Math.round(lesson.durationMin || 1))),
+    minutes: safeLearningMinutes(lesson.durationMin),
   };
 }
 
