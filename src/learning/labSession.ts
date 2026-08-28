@@ -67,6 +67,71 @@ function escapeInlineClosingTag(source: string, tagName: 'script' | 'style') {
   return source.replace(new RegExp(`</${tagName}`, 'gi'), `<\\/${tagName}`);
 }
 
+function escapeHtmlAttribute(source: string) {
+  return source.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function previewAttribute(tag: string, name: string) {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+  return match?.[1] ?? match?.[2] ?? match?.[3];
+}
+
+function normalizePreviewAssetPath(rawReference: string) {
+  const trimmed = rawReference.trim();
+  if (!trimmed || /^(?:[a-z][a-z\d+.-]*:|\/\/|\/|#)/i.test(trimmed)) return undefined;
+
+  const withoutQuery = trimmed.split(/[?#]/, 1)[0] ?? '';
+  let decoded = withoutQuery;
+  try {
+    decoded = decodeURIComponent(withoutQuery);
+  } catch {
+    return undefined;
+  }
+
+  const segments = decoded.replace(/\\/g, '/').split('/');
+  const normalized: string[] = [];
+  for (const segment of segments) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!normalized.length) return undefined;
+      normalized.pop();
+      continue;
+    }
+    normalized.push(segment);
+  }
+  return normalized.join('/');
+}
+
+function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
+  const inlinedStyles = new Set<string>();
+  const inlinedScripts = new Set<string>();
+
+  let output = document.replace(/<link\b[^>]*>/gi, (tag) => {
+    const rel = previewAttribute(tag, 'rel')?.toLowerCase().split(/\s+/) ?? [];
+    const href = previewAttribute(tag, 'href');
+    if (!href || !rel.includes('stylesheet')) return tag;
+    const path = normalizePreviewAssetPath(href);
+    if (!path || !path.toLowerCase().endsWith('.css')) return tag;
+    const source = draft.files[path];
+    if (source === undefined) return tag;
+    inlinedStyles.add(path);
+    return `<style data-nexcode-source="${escapeHtmlAttribute(path)}">${escapeInlineClosingTag(source, 'style')}</style>`;
+  });
+
+  output = output.replace(/<script\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>\s*<\/script>/gi, (tag) => {
+    const src = previewAttribute(tag, 'src');
+    if (!src) return tag;
+    const path = normalizePreviewAssetPath(src);
+    if (!path || !path.toLowerCase().endsWith('.js')) return tag;
+    const source = draft.files[path];
+    if (source === undefined) return tag;
+    inlinedScripts.add(path);
+    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}">${escapeInlineClosingTag(source, 'script')}<\/script>`;
+  });
+
+  return { document: output, inlinedStyles, inlinedScripts };
+}
+
 function injectAfterOpeningTag(document: string, tagName: 'html' | 'head', fragment: string) {
   const pattern = new RegExp(`<${tagName}\\b[^>]*>`, 'i');
   const match = document.match(pattern);
@@ -100,26 +165,28 @@ function previewHeadMarkup(styleTag: string) {
     '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">',
     `<meta http-equiv="Content-Security-Policy" content="${previewContentSecurityPolicy}">`,
     styleTag,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 export function webPreviewDocument(draft: LabDraft) {
-  const rawHtml = draft.files['index.html']?.trim() || '<main></main>';
-  const css = draft.files['styles.css'] ?? '';
-  const js = draft.files['script.js'] ?? '';
-  const styleTag = `<style>${escapeInlineClosingTag(css, 'style')}</style>`;
-  const scriptTag = `<script>${escapeInlineClosingTag(js, 'script')}<\/script>`;
+  const sourceHtml = draft.files['index.html']?.trim() || '<main></main>';
+  const inlined = inlineLocalPreviewAssets(sourceHtml, draft);
+  const fallbackCss = inlined.inlinedStyles.has('styles.css') ? '' : (draft.files['styles.css'] ?? '');
+  const fallbackJs = inlined.inlinedScripts.has('script.js') ? '' : (draft.files['script.js'] ?? '');
+  const styleTag = fallbackCss ? `<style data-nexcode-source="styles.css">${escapeInlineClosingTag(fallbackCss, 'style')}</style>` : '';
+  const scriptTag = fallbackJs ? `<script data-nexcode-source="script.js">${escapeInlineClosingTag(fallbackJs, 'script')}<\/script>` : '';
   const headMarkup = previewHeadMarkup(styleTag);
 
   let document: string;
-  if (/<html\b/i.test(rawHtml)) {
-    document = /<head\b/i.test(rawHtml)
-      ? injectAfterOpeningTag(rawHtml, 'head', headMarkup)
-      : injectAfterOpeningTag(rawHtml, 'html', `<head>\n${headMarkup}\n</head>`);
+  if (/<html\b/i.test(inlined.document)) {
+    document = /<head\b/i.test(inlined.document)
+      ? injectAfterOpeningTag(inlined.document, 'head', headMarkup)
+      : injectAfterOpeningTag(inlined.document, 'html', `<head>\n${headMarkup}\n</head>`);
   } else {
-    document = `<!doctype html>\n<html>\n<head>\n${headMarkup}\n</head>\n<body>\n${rawHtml}\n</body>\n</html>`;
+    document = `<!doctype html>\n<html>\n<head>\n${headMarkup}\n</head>\n<body>\n${inlined.document}\n</body>\n</html>`;
   }
 
+  if (!scriptTag) return document;
   return document.toLowerCase().includes('</body>')
     ? injectBeforeClosingTag(document, '</body>', scriptTag)
     : injectBeforeClosingTag(document, '</html>', scriptTag);
