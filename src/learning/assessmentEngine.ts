@@ -82,9 +82,13 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
     .map((id) => course.starterLessons.find((lesson) => lesson.id === id))
     .filter((lesson): lesson is Lesson => Boolean(lesson));
   const explicit = chapterLessons.filter((lesson) => ['checkpoint', 'boss', 'project'].includes(lesson.activityKind ?? 'learn'));
-  const selectedLessons = explicit.length
-    ? coverageSampleLessons(explicit, chapter.skillIds, Math.min(5, explicit.length))
-    : coverageSampleLessons(chapterLessons, chapter.skillIds, Math.min(3, chapterLessons.length));
+  const explicitIds = new Set(explicit.map((lesson) => lesson.id));
+  const selectedLessons = coverageSampleLessons(
+    chapterLessons,
+    chapter.skillIds,
+    Math.min(explicit.length ? 5 : 3, chapterLessons.length),
+    explicitIds,
+  );
   const lessonIds = selectedLessons.map((lesson) => lesson.id);
   const hasBoss = selectedLessons.some((lesson) => lesson.activityKind === 'boss');
   return {
