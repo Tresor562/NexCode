@@ -99,6 +99,7 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
   const [achieved, setAchieved] = useState<string[]>([]);
   const review = reviewProject(project, achieved);
   const existingProof = state.portfolioProofs.find((item) => item.projectId === project.id);
+  const hasWorkspace = Boolean(state.projectDrafts[project.id]);
   const completedSteps = project.steps.length > 0
     ? Math.min(project.steps.length, Math.max(0, Math.round((progress / 100) * project.steps.length)))
     : 0;
@@ -133,7 +134,7 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
       </View>}
     </Card>
     <SectionHeader title="Plan de construction" action={`${completedSteps}/${project.steps.length}`} />
-    <Card>{project.steps.map((step, index) => { const done=index<completedSteps||progress>=100; const current=!done&&index===completedSteps; return <View key={step} style={styles.step}><View style={[styles.stepMark,done&&styles.stepDone,current&&styles.stepCurrent]}><Text style={styles.stepMarkText}>{done?'✓':index+1}</Text></View><View style={styles.flex}><Text style={styles.stepTitle}>{step}</Text><Text style={styles.meta}>{done?'Terminée':current?'Étape actuelle':'À venir'}</Text></View></View>})}<PrimaryButton label={progress>=100?'Construction terminée ✓':'Étape terminée'} disabled={progress>=100} onPress={() => onProgress(project, nextProgress)} /></Card>
+    <Card>{project.steps.map((step, index) => { const done=index<completedSteps||progress>=100; const current=!done&&index===completedSteps; return <View key={step} style={styles.step}><View style={[styles.stepMark,done&&styles.stepDone,current&&styles.stepCurrent]}><Text style={styles.stepMarkText}>{done?'✓':index+1}</Text></View><View style={styles.flex}><Text style={styles.stepTitle}>{step}</Text><Text style={styles.meta}>{done?'Terminée':current?'Étape actuelle':'À venir'}</Text></View></View>})}{!hasWorkspace && progress < 100 ? <Text style={styles.workspaceGate}>Ouvre le Project IDE et sauvegarde ton code avant de valider une étape. La progression et les récompenses doivent correspondre à du travail réel.</Text> : null}<PrimaryButton label={progress>=100?'Construction terminée ✓':hasWorkspace?'Étape terminée':'Coder avant de valider'} disabled={progress>=100 || !hasWorkspace} onPress={() => onProgress(project, nextProgress)} /></Card>
     <SectionHeader title="Revue avant portfolio" action={`${review.score}/100`} />
     <Card>{rubric.map((criterion) => {const checked=achieved.includes(criterion.id);return <Pressable key={criterion.id} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`${criterion.title}, ${criterion.weight} points`} onPress={() => toggleRubric(criterion.id)} style={[styles.rubric,checked&&styles.rubricChecked]}><Text style={[styles.check,checked&&styles.checkOn]}>{checked?'✓':'○'}</Text><View style={styles.flex}><Text style={styles.rubricTitle}>{criterion.title} • {criterion.weight} pts</Text><Text style={styles.meta}>{criterion.description}</Text></View></Pressable>})}<Text style={styles.body}>{review.passed ? 'Revue réussie. Ce projet peut devenir une preuve de portfolio.' : 'Atteins au moins 70/100 et termine le projet pour l’ajouter au portfolio.'}</Text><PrimaryButton label={existingProof?'Preuve déjà enregistrée ✓':'Ajouter au portfolio'} disabled={!review.passed || progress < 100 || Boolean(existingProof)} onPress={saveProof} /></Card>
   </View>;
@@ -174,6 +175,7 @@ const styles = StyleSheet.create({
   stepCurrent: { borderColor: theme.colors.primary },
   stepMarkText: { color: theme.colors.text, fontSize: 11, fontWeight: theme.weight.black },
   stepTitle: { color: theme.colors.text, fontSize: 13, fontWeight: theme.weight.bold },
+  workspaceGate: { color: theme.colors.warning, fontSize: theme.type.label, lineHeight: 19, marginBottom: theme.space.sm },
   rubric: { minHeight: theme.control.heightSm, flexDirection: 'row', gap: 9, paddingVertical: theme.space.sm, borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   rubricChecked: { backgroundColor: theme.colors.successGlass },
   check: { color: theme.colors.textMuted, fontSize: theme.type.title },
