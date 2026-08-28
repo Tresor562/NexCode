@@ -41,10 +41,12 @@ export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = n
   for (const course of courses) {
     for (const lesson of course.starterLessons) {
       const skillIds = canonicalSkillIds(lesson.skillIds);
-      const states = skillIds.map((id) => mastery[id]).filter(Boolean);
+      const states = skillIds
+        .map((id) => mastery[id])
+        .filter((state): state is NonNullable<typeof state> => Boolean(state));
       if (!states.length) continue;
-      const nextDays = Math.min(...states.map((state) => daysUntil(state?.nextReviewAt, now)));
-      const weakest = Math.max(0, Math.min(100, Math.min(...states.map((state) => Number.isFinite(state?.score) ? state.score : 0))));
+      const nextDays = Math.min(...states.map((state) => daysUntil(state.nextReviewAt, now)));
+      const weakest = Math.max(0, Math.min(100, Math.min(...states.map((state) => Number.isFinite(state.score) ? state.score : 0))));
       const recurringErrors = states.reduce((total, state) => total + new Set(state?.errorTags ?? []).size, 0);
       const window = windowFor(nextDays);
       const urgency = boundedUrgency((window === 'overdue' ? 100 : window === 'today' ? 80 : window === 'soon' ? 45 : 10) + recurringErrors * 6 + Math.max(0, 55 - weakest));
