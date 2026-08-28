@@ -8,6 +8,8 @@ type CardTone = 'default' | 'primary' | 'success';
 type PillTone = 'neutral' | 'success' | 'primary' | 'warning';
 type HapticTone = 'light' | 'medium';
 
+const SHARED_TOUCH_HIT_SLOP = 8;
+
 function fireImpactHaptic(tone: HapticTone) {
   const style = tone === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light;
   void Haptics.impactAsync(style).catch(() => undefined);
@@ -145,6 +147,7 @@ function TactileButton({
         accessibilityHint={accessibilityHint}
         accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected, busy: accessibilityBusy }}
         disabled={disabled}
+        hitSlop={SHARED_TOUCH_HIT_SLOP}
         onPress={handlePress}
         onPressIn={() => animate(true)}
         onPressOut={() => animate(false)}
