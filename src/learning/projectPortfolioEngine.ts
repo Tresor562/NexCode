@@ -21,6 +21,19 @@ function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function canonicalProjectSkills(skills: string[]): string[] {
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const raw of skills) {
+    const requested = raw.trim();
+    const identity = normalize(requested);
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    canonical.push(requested);
+  }
+  return canonical;
+}
+
 function boundedPercent(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 }
@@ -30,7 +43,7 @@ function readinessGate(value: unknown) {
 }
 
 export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[]): ResolvedProjectSkill[] {
-  return project.skills.map((requested) => {
+  return canonicalProjectSkills(project.skills).map((requested) => {
     const terms = normalize(requested).split(/\s+/).filter((term) => term.length >= 3);
     const scored = graph.map((node) => {
       const haystack = normalize(`${node.id} ${node.title}`);
