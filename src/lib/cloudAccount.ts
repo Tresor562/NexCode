@@ -212,6 +212,51 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+function mergeMaxNumberRecord(remote: unknown, local: Record<string, number>, ceiling = Number.MAX_SAFE_INTEGER): Record<string, number> {
+  const merged: Record<string, number> = { ...local };
+  if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
+  for (const [key, raw] of Object.entries(remote as Record<string, unknown>)) {
+    if (!key.trim() || typeof raw !== 'number' || !Number.isFinite(raw)) continue;
+    const value = Math.max(0, Math.min(ceiling, raw));
+    merged[key] = Math.max(merged[key] ?? 0, value);
+  }
+  return merged;
+}
+
+function mergeErrorTagRecord(remote: unknown, local: LocalState['lessonErrorTags']): LocalState['lessonErrorTags'] {
+  const merged: LocalState['lessonErrorTags'] = { ...local };
+  if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
+  for (const [key, raw] of Object.entries(remote as Record<string, unknown>)) {
+    if (!key.trim() || !Array.isArray(raw)) continue;
+    const remoteTags = raw.filter((value): value is string => typeof value === 'string').map((value) => value.trim()).filter(Boolean);
+    merged[key] = unique([...(merged[key] ?? []), ...remoteTags]).slice(-12);
+  }
+  return merged;
+}
+
+function mergePortfolioProofs(remote: unknown, local: LocalState['portfolioProofs']): LocalState['portfolioProofs'] {
+  const byProject = new Map(local.map((proof) => [proof.projectId, proof]));
+  if (!Array.isArray(remote)) return [...byProject.values()];
+  for (const raw of remote) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const proof = raw as Partial<LocalState['portfolioProofs'][number]>;
+    if (typeof proof.projectId !== 'string' || !proof.projectId.trim()) continue;
+    const current = byProject.get(proof.projectId);
+    if (!current) {
+      byProject.set(proof.projectId, proof as LocalState['portfolioProofs'][number]);
+      continue;
+    }
+    const remoteScore = typeof proof.score === 'number' && Number.isFinite(proof.score) ? proof.score : 0;
+    const currentScore = typeof current.score === 'number' && Number.isFinite(current.score) ? current.score : 0;
+    const remoteAt = typeof proof.completedAt === 'string' ? Date.parse(proof.completedAt) : Number.NaN;
+    const currentAt = Date.parse(current.completedAt);
+    if (remoteScore > currentScore || (remoteScore === currentScore && Number.isFinite(remoteAt) && (!Number.isFinite(currentAt) || remoteAt > currentAt))) {
+      byProject.set(proof.projectId, proof as LocalState['portfolioProofs'][number]);
+    }
+  }
+  return [...byProject.values()];
+}
+
 function dateKey(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const trimmed = value.trim();
@@ -277,10 +322,10 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
     recentCourseId: typeof progress?.recent_course_id === 'string' ? progress.recent_course_id : local.recentCourseId,
     completedLessons: unique([...local.completedLessons, ...remoteLessons]),
     mastery: progress?.mastery && typeof progress.mastery === 'object' ? { ...progress.mastery as LocalState['mastery'], ...local.mastery } : local.mastery,
-    lessonAttempts: progress?.lesson_attempts && typeof progress.lesson_attempts === 'object' ? { ...progress.lesson_attempts as LocalState['lessonAttempts'], ...local.lessonAttempts } : local.lessonAttempts,
-    lessonErrorTags: progress?.lesson_error_tags && typeof progress.lesson_error_tags === 'object' ? { ...progress.lesson_error_tags as LocalState['lessonErrorTags'], ...local.lessonErrorTags } : local.lessonErrorTags,
-    projectProgress: progress?.project_progress && typeof progress.project_progress === 'object' ? { ...progress.project_progress as LocalState['projectProgress'], ...local.projectProgress } : local.projectProgress,
-    portfolioProofs: Array.isArray(progress?.portfolio_proofs) && progress.portfolio_proofs.length > local.portfolioProofs.length ? progress.portfolio_proofs as LocalState['portfolioProofs'] : local.portfolioProofs,
+    lessonAttempts: mergeMaxNumberRecord(progress?.lesson_attempts, local.lessonAttempts),
+    lessonErrorTags: mergeErrorTagRecord(progress?.lesson_error_tags, local.lessonErrorTags),
+    projectProgress: mergeMaxNumberRecord(progress?.project_progress, local.projectProgress, 100),
+    portfolioProofs: mergePortfolioProofs(progress?.portfolio_proofs, local.portfolioProofs),
     onboardingComplete: local.onboardingComplete || Boolean(profile?.display_name),
   };
 
