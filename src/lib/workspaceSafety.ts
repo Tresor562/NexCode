@@ -46,6 +46,14 @@ function validTextContent(value: string): boolean {
   return !value.includes('\0');
 }
 
+function validValidationMetadata(stored: LabDraft): boolean {
+  const hasValidationTimestamp = stored.lastValidatedAt !== undefined;
+  const hasCriteria = stored.passedCriteria !== undefined;
+  if (!hasValidationTimestamp && !hasCriteria) return true;
+  if (!validIsoDate(stored.lastValidatedAt) || !Array.isArray(stored.passedCriteria)) return false;
+  return stored.passedCriteria.every((criterion) => typeof criterion === 'string' && criterion.trim().length > 0);
+}
+
 export function restoreWorkspaceDraft({
   stored,
   expectedMissionId,
@@ -115,6 +123,7 @@ export function restoreWorkspaceDraft({
   if (activeFile !== stored.activeFile) repaired = true;
   if (stored.language !== expectedLanguage || stored.missionId !== expectedMissionId) repaired = true;
   if (!validIsoDate(stored.updatedAt)) repaired = true;
+  if (!validValidationMetadata(stored)) repaired = true;
 
   return {
     repaired,
