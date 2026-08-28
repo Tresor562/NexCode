@@ -11,7 +11,12 @@ assert.match(source, /if \(!Number\.isFinite\(timestamp\)\) return 0;/, 'invalid
 assert.match(source, /Math\.max\(0, Math\.min\(100, Math\.min/, 'mastery scores must be bounded before urgency math');
 assert.match(source, /new Set\(state\?\.errorTags \?\? \[\]\)\.size/, 'duplicate misconception tags must not inflate review urgency');
 assert.match(source, /Math\.max\(0, Math\.min\(160, Math\.round\(value\)\)\)/, 'review urgency must remain finite and bounded');
+assert.match(source, /const selectedLessonIds = new Set<string>\(\)/, 'interleaved sessions must track lesson identity explicitly');
+assert.match(source, /if \(selectedLessonIds\.has\(item\.lesson\.id\)\) continue;/, 'the same lesson must never appear twice in one practice session');
 assert.match(source, /const itemSkillIds = canonicalSkillIds\(item\.skillIds\);/, 'interleaving must apply the same canonical skill identity');
 assert.match(source, /itemSkillIds\.forEach/, 'interleaving repetition counters must use canonical skills');
+assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2\) continue;/, 'the strict pass must protect both course and skill diversity');
+assert.match(source, /Never relax the skill repetition cap/, 'fallback filling must document the pedagogical invariant');
+assert.match(source, /if \(skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'fallback filling must keep the skill repetition cap instead of silently reverting to blocked practice');
 
-console.log('Review scheduler audit OK: canonical skill identity, safe dates, bounded scores/urgency and deduplicated misconception evidence are enforced.');
+console.log('Review scheduler audit OK: canonical identity, safe urgency math, unique lessons and skill-diverse interleaving are enforced.');
