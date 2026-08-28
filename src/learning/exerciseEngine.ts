@@ -49,6 +49,12 @@ function normalize(value: ExerciseAnswer) {
   return Array.isArray(value) ? value.join('\n').trim() : String(value).trim();
 }
 
+function minimumOpenEndedLength(exercise: RichExercise) {
+  if (exercise.kind === 'explain') return 16;
+  if (exercise.kind === 'write-code' || exercise.kind === 'debug' || exercise.kind === 'refactor') return 3;
+  return 1;
+}
+
 function testSource(source: string, test: ExerciseTest) {
   const expected = test.expected;
   if (test.kind === 'contains') return source.includes(String(expected));
@@ -92,11 +98,14 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
   const hasTestGate = results.length > 0;
   const testPassed = !hasTestGate || results.every((item) => item.passed);
   const hasAutomaticGate = hasDirectGate || hasTestGate;
-  const hasSubstantiveAnswer = answerText.length > 0;
+  const minimumAnswerLength = minimumOpenEndedLength(exercise);
+  const hasSubstantiveAnswer = answerText.length >= minimumAnswerLength;
   const passed = hasAutomaticGate ? directPassed && testPassed : hasSubstantiveAnswer;
 
   if (!hasAutomaticGate && !hasSubstantiveAnswer) {
-    feedback.push('Écris d’abord une réponse exploitable avant de valider. Une tentative vide ne compte pas comme un exercice réussi.');
+    feedback.push(exercise.kind === 'explain'
+      ? 'Développe ton explication en une phrase suffisamment précise avant de valider. Un mot isolé ne démontre pas encore ton raisonnement.'
+      : 'Écris d’abord une réponse exploitable avant de valider. Une tentative trop courte ne compte pas comme un exercice réussi.');
     misconceptionTags.push('input-required');
   }
 
