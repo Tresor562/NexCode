@@ -30,7 +30,8 @@ const requireStub = (id) => {
   return {};
 };
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { courseExam } = module.exports;
+const { chapterAssessment, courseExam } = module.exports;
+assert.equal(typeof chapterAssessment, 'function', 'chapterAssessment must stay exported');
 assert.equal(typeof courseExam, 'function', 'courseExam must stay exported');
 
 const makeLesson = (id, activityKind, skillIds) => ({
@@ -39,6 +40,34 @@ const makeLesson = (id, activityKind, skillIds) => ({
   activityKind,
   skillIds,
 });
+
+const chapterLessons = [
+  makeLesson('html-checkpoint', 'checkpoint', ['html']),
+  makeLesson('css-practice', 'learn', ['css']),
+  makeLesson('js-project', 'project', ['js']),
+  makeLesson('review', 'learn', ['html']),
+];
+const mixedChapter = {
+  id: 'mixed-chapter',
+  title: 'mixed-chapter',
+  lessonIds: chapterLessons.map((lesson) => lesson.id),
+  skillIds: ['html', 'css', 'js'],
+  estimatedMinutes: 90,
+};
+const mixedCourse = {
+  id: 'mixed-course',
+  estimatedHours: 4,
+  skillIds: mixedChapter.skillIds,
+  chapters: [mixedChapter],
+  starterLessons: chapterLessons,
+};
+const mixedPlan = chapterAssessment(mixedCourse, mixedChapter);
+assert.deepEqual(
+  mixedPlan.lessonIds,
+  ['html-checkpoint', 'css-practice', 'js-project', 'review'],
+  'chapter assessments must preserve chapter order while filling skills not covered by explicit evidence activities',
+);
+assert.ok(mixedPlan.lessonIds.includes('css-practice'), 'normal lessons must fill uncovered chapter skills instead of being dropped when explicit evidence exists');
 
 const orderedCourse = {
   id: 'ordered-course',
@@ -79,4 +108,4 @@ assert.deepEqual(
   'selected exam activities must remain in original course order',
 );
 
-console.log('Assessment sampling audit OK: final exams stay bounded, evidence-aware, skill-covering and course-ordered.');
+console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-covering, bounded and course-ordered.');
