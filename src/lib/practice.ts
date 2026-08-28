@@ -238,11 +238,60 @@ function jsBindingNames(bindingSource: string): string[] {
   return [];
 }
 
+function jsDeclarationBodies(source: string) {
+  const bodies: string[] = [];
+  const declarationPattern = /\b(?:const|let|var)\b/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = declarationPattern.exec(source))) {
+    const start = match.index + match[0].length;
+    let parenDepth = 0;
+    let bracketDepth = 0;
+    let braceDepth = 0;
+    let end = source.length;
+
+    for (let index = start; index < source.length; index += 1) {
+      const char = source[index];
+      if (char === '(') parenDepth += 1;
+      else if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
+      else if (char === '[') bracketDepth += 1;
+      else if (char === ']') bracketDepth = Math.max(0, bracketDepth - 1);
+      else if (char === '{') braceDepth += 1;
+      else if (char === '}') braceDepth = Math.max(0, braceDepth - 1);
+
+      const atTopLevel = parenDepth === 0 && bracketDepth === 0 && braceDepth === 0;
+      if (char === ';' && atTopLevel) {
+        end = index;
+        declarationPattern.lastIndex = index + 1;
+        break;
+      }
+
+      if (char === '\n' && atTopLevel) {
+        const bodySoFar = source.slice(start, index).trimEnd();
+        const previousChar = bodySoFar.at(-1) ?? '';
+        const nextChar = source.slice(index + 1).match(/^\s*([^\s])/s)?.[1] ?? '';
+        const continues = /[=,+\-*/%?:.&|^!<>]$/.test(previousChar) || /^[,+\-*/%?:.&|^!<>]/.test(nextChar);
+        if (bodySoFar && !continues) {
+          end = index;
+          declarationPattern.lastIndex = index + 1;
+          break;
+        }
+      }
+    }
+
+    const body = source.slice(start, end).trim();
+    if (body) bodies.push(body);
+    if (end === source.length) break;
+  }
+
+  return bodies;
+}
+
 function jsDeclaredNames(source: string) {
   const names = new Set<string>();
 
-  for (const declaration of source.matchAll(/\b(?:const|let|var)\s+([^;\n]+)/g)) {
-    const declarators = splitTopLevelJsDeclarators(declaration[1] ?? '');
+  for (const declaration of jsDeclarationBodies(source)) {
+    const declarators = splitTopLevelJsDeclarators(declaration);
     for (const declarator of declarators) {
       const assignmentIndex = topLevelJsSeparatorIndex(declarator, '=');
       const binding = assignmentIndex >= 0 ? declarator.slice(0, assignmentIndex) : declarator;
