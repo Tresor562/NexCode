@@ -69,6 +69,50 @@ assert.deepEqual(
 );
 assert.ok(mixedPlan.lessonIds.includes('css-practice'), 'normal lessons must fill uncovered chapter skills instead of being dropped when explicit evidence exists');
 
+const broadSkills = Array.from({ length: 7 }, (_, index) => `skill-${index + 1}`);
+const broadLessons = broadSkills.map((skillId, index) =>
+  makeLesson(`broad-${index + 1}`, index === 0 ? 'checkpoint' : 'learn', [skillId]),
+);
+const broadChapter = {
+  id: 'broad-chapter',
+  title: 'broad-chapter',
+  lessonIds: broadLessons.map((lesson) => lesson.id),
+  skillIds: broadSkills,
+  estimatedMinutes: 140,
+};
+const broadCourse = {
+  id: 'broad-course',
+  estimatedHours: 6,
+  skillIds: broadSkills,
+  chapters: [broadChapter],
+  starterLessons: broadLessons,
+};
+const broadPlan = chapterAssessment(broadCourse, broadChapter);
+assert.equal(broadPlan.lessonIds.length, 7, 'chapter assessments must grow beyond the five-item baseline when more slots are needed to represent required skills');
+assert.deepEqual(broadPlan.lessonIds, broadLessons.map((lesson) => lesson.id), 'a seven-skill chapter with one lesson per skill must keep complete skill coverage');
+
+const oversizedSkills = Array.from({ length: 12 }, (_, index) => `oversized-skill-${index + 1}`);
+const oversizedLessons = oversizedSkills.map((skillId, index) => makeLesson(`oversized-${index + 1}`, 'learn', [skillId]));
+const oversizedChapter = {
+  id: 'oversized-chapter',
+  title: 'oversized-chapter',
+  lessonIds: oversizedLessons.map((lesson) => lesson.id),
+  skillIds: oversizedSkills,
+  estimatedMinutes: 240,
+};
+const oversizedCourse = {
+  id: 'oversized-course',
+  estimatedHours: 8,
+  skillIds: oversizedSkills,
+  chapters: [oversizedChapter],
+  starterLessons: oversizedLessons,
+};
+assert.equal(
+  chapterAssessment(oversizedCourse, oversizedChapter).lessonIds.length,
+  8,
+  'chapter assessments must remain premium and focused instead of expanding beyond eight activities',
+);
+
 const orderedCourse = {
   id: 'ordered-course',
   estimatedHours: 4,
@@ -108,4 +152,4 @@ assert.deepEqual(
   'selected exam activities must remain in original course order',
 );
 
-console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-covering, bounded and course-ordered.');
+console.log('Assessment sampling audit OK: chapter and final assessments stay evidence-aware, skill-covering, adaptively bounded and course-ordered.');
