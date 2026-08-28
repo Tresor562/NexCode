@@ -23,6 +23,14 @@ requirePattern(
   'Cloud scheduling must enqueue the immutable state snapshot rather than the caller-owned object reference.',
 );
 requirePattern(
+  /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*await pushCloudState\(reconciled\.session, reconciled\.state\);/,
+  'Cloud pushes must reconcile the queued snapshot with the latest Supabase state before writing, so another device\'s newer progress is not blindly overwritten.',
+);
+requirePattern(
+  /const currentBeforePush = loadCloudSession\(\);[\s\S]*if \(!currentBeforePush \|\| currentBeforePush\.user\.id !== snapshot\.userId\) \{[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;[\s\S]*return;/,
+  'Account identity must be rechecked after remote reconciliation because the learner can switch accounts while the pull is in flight.',
+);
+requirePattern(
   /if \(session\.user\.id !== snapshot\.userId\) \{[\s\S]*latestState = null;[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;/,
   'A debounce timer must not send a queued snapshot through another learner session.',
 );
@@ -39,8 +47,12 @@ requirePattern(
   'Transient cloud failures must retain bounded exponential backoff.',
 );
 requirePattern(
+  /finally \{[\s\S]*pushInFlight = false;[\s\S]*\}/,
+  'Cloud sync must always release its in-flight lock, including account changes during reconciliation.',
+);
+requirePattern(
   /if \(latestState\) queueFlush\(FOLLOW_UP_DELAY_MS\);/,
   'A successful push must immediately follow up with any newer queued snapshot.',
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, account-scoped queueing, stale-failure handoff, bounded retries, and follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, remote reconciliation, account-scoped queueing, stale-failure handoff, bounded retries, and follow-up flushes are protected.');
