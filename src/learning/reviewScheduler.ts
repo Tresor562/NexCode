@@ -13,9 +13,15 @@ export type ReviewItem = {
   reason: string;
 };
 
+function canonicalSkillIds(skillIds: string[] | undefined) {
+  return [...new Set((skillIds ?? []).map((id) => id.trim()).filter(Boolean))];
+}
+
 function daysUntil(iso: string | undefined, now: Date) {
   if (!iso) return 0;
-  return (new Date(iso).getTime() - now.getTime()) / 86_400_000;
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) return 0;
+  return (timestamp - now.getTime()) / 86_400_000;
 }
 
 function windowFor(days: number): ReviewWindow {
@@ -25,18 +31,23 @@ function windowFor(days: number): ReviewWindow {
   return 'later';
 }
 
+function boundedUrgency(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(160, Math.round(value)));
+}
+
 export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = new Date()): ReviewItem[] {
   const items: ReviewItem[] = [];
   for (const course of courses) {
     for (const lesson of course.starterLessons) {
-      const skillIds = lesson.skillIds ?? [];
+      const skillIds = canonicalSkillIds(lesson.skillIds);
       const states = skillIds.map((id) => mastery[id]).filter(Boolean);
       if (!states.length) continue;
       const nextDays = Math.min(...states.map((state) => daysUntil(state?.nextReviewAt, now)));
-      const weakest = Math.min(...states.map((state) => state?.score ?? 0));
-      const recurringErrors = states.reduce((total, state) => total + (state?.errorTags.length ?? 0), 0);
+      const weakest = Math.max(0, Math.min(100, Math.min(...states.map((state) => Number.isFinite(state?.score) ? state.score : 0))));
+      const recurringErrors = states.reduce((total, state) => total + new Set(state?.errorTags ?? []).size, 0);
       const window = windowFor(nextDays);
-      const urgency = Math.round((window === 'overdue' ? 100 : window === 'today' ? 80 : window === 'soon' ? 45 : 10) + recurringErrors * 6 + Math.max(0, 55 - weakest));
+      const urgency = boundedUrgency((window === 'overdue' ? 100 : window === 'today' ? 80 : window === 'soon' ? 45 : 10) + recurringErrors * 6 + Math.max(0, 55 - weakest));
       if (window === 'later' && weakest >= 70 && recurringErrors === 0) continue;
       items.push({
         lesson,
@@ -70,11 +81,12 @@ export function interleavedPracticeSession(
   const usedSkills = new Map<string, number>();
   for (const item of recommendations) {
     const courseCount = usedCourses.get(item.courseId) ?? 0;
-    const skillRepeat = Math.max(0, ...item.skillIds.map((id) => usedSkills.get(id) ?? 0));
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
     if (courseCount >= 2 || skillRepeat >= 2) continue;
     selected.push(item);
     usedCourses.set(item.courseId, courseCount + 1);
-    item.skillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
+    itemSkillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
     if (selected.length >= target) break;
   }
   for (const item of recommendations) {
