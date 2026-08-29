@@ -25,6 +25,7 @@ const MIN_CHAPTER_ASSESSMENT_MINUTES = 8;
 const MAX_CHAPTER_ASSESSMENT_MINUTES = 24;
 const MIN_COURSE_EXAM_MINUTES = 20;
 const MAX_COURSE_EXAM_MINUTES = 60;
+const EVIDENCE_ACTIVITY_KINDS = new Set(['checkpoint', 'boss', 'project', 'lab']);
 
 function uniqueSkillIds(skillIds: string[]): string[] {
   return [...new Set(skillIds.map((skillId) => skillId.trim()).filter(Boolean))];
@@ -46,12 +47,20 @@ function coverageSampleLessons(
   targetSkillIds: string[],
   maxItems: number,
   preferredLessonIds = new Set<string>(),
+  requiredLessonIds = new Set<string>(),
 ) {
   if (maxItems <= 0 || lessons.length === 0) return [];
   if (lessons.length <= maxItems) return lessons;
 
   const selected = new Set<string>();
   const uncovered = new Set(uniqueSkillIds(targetSkillIds));
+
+  for (const lesson of lessons) {
+    if (selected.size >= maxItems) break;
+    if (!requiredLessonIds.has(lesson.id)) continue;
+    selected.add(lesson.id);
+    for (const skillId of uniqueSkillIds(lesson.skillIds ?? [])) uncovered.delete(skillId);
+  }
 
   while (selected.size < maxItems && uncovered.size > 0) {
     let best: Lesson | undefined;
@@ -91,6 +100,61 @@ function coverageSampleLessons(
   return lessons.filter((lesson) => selected.has(lesson.id));
 }
 
+function courseChapterRepresentativeIds(course: Course, maxItems: number) {
+  if (maxItems <= 0 || course.chapters.length === 0) return new Set<string>();
+
+  const lessonById = new Map(course.starterLessons.map((lesson) => [lesson.id, lesson]));
+  const populatedChapters = course.chapters
+    .map((chapter) => ({
+      chapter,
+      lessons: chapter.lessonIds
+        .map((lessonId) => lessonById.get(lessonId))
+        .filter((lesson): lesson is Lesson => Boolean(lesson)),
+    }))
+    .filter(({ lessons }) => lessons.length > 0);
+
+  if (populatedChapters.length === 0) return new Set<string>();
+
+  const selectedChapters = populatedChapters.length <= maxItems
+    ? populatedChapters
+    : evenlySampleLessons(
+        populatedChapters.map(({ chapter, lessons }) => ({
+          id: chapter.id,
+          title: chapter.title,
+          skillIds: chapter.skillIds,
+          activityKind: 'learn',
+          exercises: [],
+          durationMinutes: 0,
+          concept: chapter.title,
+          summary: chapter.title,
+          objectives: [],
+          hints: [],
+          ...({ __chapterLessons: lessons } as unknown as Lesson),
+        })),
+        maxItems,
+      ).map((sampled) => populatedChapters.find(({ chapter }) => chapter.id === sampled.id)!)
+      .filter(Boolean);
+
+  const required = new Set<string>();
+  for (const { lessons } of selectedChapters) {
+    let representative = lessons[0]!;
+    let bestSkillCoverage = -1;
+    let bestEvidence = false;
+
+    for (const lesson of lessons) {
+      const skillCoverage = uniqueSkillIds(lesson.skillIds ?? []).length;
+      const evidence = EVIDENCE_ACTIVITY_KINDS.has(lesson.activityKind ?? 'learn');
+      if (skillCoverage > bestSkillCoverage || (skillCoverage === bestSkillCoverage && evidence && !bestEvidence)) {
+        representative = lesson;
+        bestSkillCoverage = skillCoverage;
+        bestEvidence = evidence;
+      }
+    }
+    required.add(representative.id);
+  }
+  return required;
+}
+
 function chapterAssessmentItemBudget(chapter: Chapter, lessonCount: number, hasExplicitEvidence: boolean): number {
   if (lessonCount <= 0) return 0;
   const baseline = hasExplicitEvidence
@@ -111,7 +175,7 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
     .map((id) => course.starterLessons.find((lesson) => lesson.id === id))
     .filter((lesson): lesson is Lesson => Boolean(lesson));
   const skillIds = uniqueSkillIds(chapter.skillIds);
-  const explicit = chapterLessons.filter((lesson) => ['checkpoint', 'boss', 'project'].includes(lesson.activityKind ?? 'learn'));
+  const explicit = chapterLessons.filter((lesson) => EVIDENCE_ACTIVITY_KINDS.has(lesson.activityKind ?? 'learn'));
   const explicitIds = new Set(explicit.map((lesson) => lesson.id));
   const selectedLessons = coverageSampleLessons(
     chapterLessons,
@@ -140,9 +204,16 @@ export function chapterAssessment(course: Course, chapter: Chapter): AssessmentP
 
 export function courseExam(course: Course): AssessmentPlan {
   const skillIds = uniqueSkillIds(course.skillIds);
-  const evidenceLessons = course.starterLessons.filter((lesson) => ['checkpoint', 'boss', 'project', 'lab'].includes(lesson.activityKind ?? 'learn'));
+  const evidenceLessons = course.starterLessons.filter((lesson) => EVIDENCE_ACTIVITY_KINDS.has(lesson.activityKind ?? 'learn'));
   const evidenceIds = new Set(evidenceLessons.map((lesson) => lesson.id));
-  const selectedLessons = coverageSampleLessons(course.starterLessons, skillIds, MAX_COURSE_EXAM_ITEMS, evidenceIds);
+  const chapterRepresentativeIds = courseChapterRepresentativeIds(course, MAX_COURSE_EXAM_ITEMS);
+  const selectedLessons = coverageSampleLessons(
+    course.starterLessons,
+    skillIds,
+    MAX_COURSE_EXAM_ITEMS,
+    evidenceIds,
+    chapterRepresentativeIds,
+  );
   return {
     id: `${course.id}.course-exam`,
     kind: 'course-exam',
