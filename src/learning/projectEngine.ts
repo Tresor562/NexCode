@@ -29,10 +29,17 @@ function boundedPercent(value: unknown, fallback = 0): number {
   return Math.max(0, Math.min(100, value));
 }
 
+function projectReadinessGate(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
+    return DEFAULT_PROJECT_READINESS_GATE;
+  }
+  return value;
+}
+
 export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = DEFAULT_PROJECT_READINESS_GATE): ProjectReadiness {
   // A malformed runtime gate must never make a project easier to unlock.
   // Fall back to the product default rather than coercing invalid input to 0.
-  const safeGate = boundedPercent(gate, DEFAULT_PROJECT_READINESS_GATE);
+  const safeGate = projectReadinessGate(gate);
   const missingSkills = project.skills.filter((skillId) => !mastery[skillId]);
   const weakSkills = project.skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
   const masteredScore = project.skills.length
