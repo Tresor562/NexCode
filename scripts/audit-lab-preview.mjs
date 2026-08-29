@@ -148,6 +148,18 @@ function assertPreviewPolicy(output) {
 
 {
   const output = webPreviewDocument(draft({
+    'index.html': '<html><head><link rel="stylesheet" media="(min-width: 720px)" href="styles/wide.css"></head><body><script type="module" src="scripts/app.js"></script><script type="application/json" src="scripts/config.js"></script></body></html>',
+    'styles/wide.css': 'main { max-width: 70rem; }',
+    'scripts/app.js': 'document.body.dataset.module = "yes";',
+    'scripts/config.js': '{"theme":"dark"}',
+  }));
+  assert.match(output, /<style data-nexcode-source="styles\/wide\.css" media="\(min-width: 720px\)">/, 'local stylesheet media conditions must survive inlining');
+  assert.match(output, /<script data-nexcode-source="scripts\/app\.js" type="module">/, 'local module scripts must preserve module execution semantics');
+  assert.match(output, /<script data-nexcode-source="scripts\/config\.js" type="application\/json">/, 'non-executable script MIME types must not become executable when inlined');
+}
+
+{
+  const output = webPreviewDocument(draft({
     'index.html': '<html><head><link rel="stylesheet" href="https://cdn.example.com/theme.css"></head><body><script src="https://cdn.example.com/app.js"></script></body></html>',
     'https://cdn.example.com/theme.css': 'body { color: red; }',
     'https://cdn.example.com/app.js': 'alert(1)',
@@ -171,4 +183,4 @@ function assertPreviewPolicy(output) {
   assert.match(output, /<body>\s*<main><\/main>/i, 'empty HTML must fall back to a stable preview scaffold');
 }
 
-console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, multi-file local assets, document structure, inline closing tags and empty fallback are protected.');
+console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
