@@ -17,18 +17,21 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
   sound: 90,
 };
 
-export function createLearningFeedbackGate(now: () => number = Date.now) {
-  const lastTriggeredAt = new Map<LearningFeedbackKind, number>();
+// Feedback gates are created by many independent controls. Keep the cooldown state
+// at module scope so quickly moving between controls cannot produce a burst of
+// duplicate vibrations or sounds just because each control owns a different gate.
+const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 
+export function createLearningFeedbackGate(now: () => number = Date.now) {
   function canTrigger(kind: LearningFeedbackKind, appActive: boolean) {
     if (!appActive) return false;
     const current = now();
-    const previous = lastTriggeredAt.get(kind);
+    const previous = sharedLastTriggeredAt.get(kind);
     if (previous !== undefined) {
       const elapsed = current - previous;
       if (elapsed >= 0 && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
     }
-    lastTriggeredAt.set(kind, current);
+    sharedLastTriggeredAt.set(kind, current);
     return true;
   }
 
