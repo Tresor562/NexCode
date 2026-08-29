@@ -22,6 +22,11 @@ const requireStub = (id) => {
       validateLabDraft: () => ({ passed: false, feedback: '' }),
     };
   }
+  if (id.endsWith('/workspaceSafety') || id === '../lib/workspaceSafety') {
+    return {
+      workspaceCollisionKey: (path) => path.normalize('NFC').toLocaleLowerCase('en-US'),
+    };
+  }
   return {};
 };
 
@@ -148,6 +153,18 @@ function assertPreviewPolicy(output) {
 
 {
   const output = webPreviewDocument(draft({
+    'index.html': '<html><head><link rel="stylesheet" href="styles/CAFÉ.css"></head><body><script src="SCRIPTS/App.JS"></script></body></html>',
+    'Styles/Cafe\u0301.css': 'body { letter-spacing: .02em; }',
+    'scripts/app.js': 'document.body.dataset.portable = "yes";',
+  }));
+  assert.match(output, /data-nexcode-source="Styles\/Café\.css"/, 'preview must resolve Unicode-equivalent workspace stylesheet paths');
+  assert.match(output, /letter-spacing: \.02em/, 'resolved Unicode-equivalent stylesheets must keep their content');
+  assert.match(output, /data-nexcode-source="scripts\/app\.js"/, 'preview must resolve case-equivalent JavaScript paths like the portable workspace');
+  assert.match(output, /dataset\.portable = "yes"/, 'resolved case-equivalent scripts must keep their content');
+}
+
+{
+  const output = webPreviewDocument(draft({
     'index.html': '<html><head><link rel="stylesheet" media="(min-width: 720px)" href="styles/wide.css"></head><body><script type="module" src="scripts/app.js"></script><script type="application/json" src="scripts/config.js"></script></body></html>',
     'styles/wide.css': 'main { max-width: 70rem; }',
     'scripts/app.js': 'document.body.dataset.module = "yes";',
@@ -183,4 +200,4 @@ function assertPreviewPolicy(output) {
   assert.match(output, /<body>\s*<main><\/main>/i, 'empty HTML must fall back to a stable preview scaffold');
 }
 
-console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
+console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, portable multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
