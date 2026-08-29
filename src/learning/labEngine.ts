@@ -116,6 +116,11 @@ function resolveEditableLabFilename(draft: LabDraft, filename: string) {
   return Object.keys(draft.files).find((existing) => workspaceCollisionKey(existing) === collisionKey);
 }
 
+function resolveWorkspaceFilename(files: Record<string, string>, filename: string) {
+  const key = workspaceCollisionKey(filename);
+  return Object.keys(files).find((existing) => workspaceCollisionKey(existing) === key);
+}
+
 export function updateLabFile(draft: LabDraft, filename: string, content: string): LabDraft {
   const existingFilename = resolveEditableLabFilename(draft, filename);
   if (!existingFilename) return draft;
@@ -211,8 +216,10 @@ function languageStructureCheck(language: LabMission['language'], files: Record<
   const joined = Object.values(files).join('\n');
   const lower = joined.toLowerCase();
   if (language === 'HTML/CSS') {
-    const html = files['index.html'] ?? joined;
-    const css = files['styles.css'] ?? joined;
+    const htmlPath = resolveWorkspaceFilename(files, 'index.html');
+    const cssPath = resolveWorkspaceFilename(files, 'styles.css');
+    const html = htmlPath ? files[htmlPath] ?? '' : joined;
+    const css = cssPath ? files[cssPath] ?? '' : joined;
     return /<([a-z][\w-]*)(\s[^>]*)?>[\s\S]*<\/\1>/i.test(html) && /[.#]?[a-z][\w-]*\s*\{[^}]+\}/i.test(css);
   }
   if (language === 'JavaScript') {
@@ -240,8 +247,14 @@ function languageStructureCheck(language: LabMission['language'], files: Record<
 
 function completenessCheck(language: LabMission['language'], files: Record<string, string>) {
   const nonEmptyFiles = Object.entries(files).filter(([, value]) => value.trim().length > 0);
-  if (language === 'HTML/CSS') return nonEmptyFiles.some(([name]) => name.endsWith('.html')) && nonEmptyFiles.some(([name]) => name.endsWith('.css'));
-  if (language === 'Node/API' || language === 'Bots') return nonEmptyFiles.some(([name]) => /\.(js|ts)$/.test(name));
+  if (language === 'HTML/CSS') {
+    const hasHtml = nonEmptyFiles.some(([name]) => name.toLocaleLowerCase('en-US').normalize('NFC').endsWith('.html'));
+    const hasCss = nonEmptyFiles.some(([name]) => name.toLocaleLowerCase('en-US').normalize('NFC').endsWith('.css'));
+    return hasHtml && hasCss;
+  }
+  if (language === 'Node/API' || language === 'Bots') {
+    return nonEmptyFiles.some(([name]) => /\.(js|ts)$/i.test(name.normalize('NFC')));
+  }
   return nonEmptyFiles.length >= 1 && nonEmptyFiles.some(([, value]) => value.trim().length >= 20);
 }
 
