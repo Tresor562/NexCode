@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 
 const sourceUrl = new URL('../src/learning/sessionEngine.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
+const localStateUrl = new URL('../src/lib/localState.ts', import.meta.url);
+const localStateSource = fs.readFileSync(localStateUrl, 'utf8');
 
 assert.match(source, /Readonly<Record<ActivityKind, Readonly<Omit<LearningCompletionReward, 'minutes'>>>>/, 'reward definitions must be exhaustively typed by ActivityKind');
 assert.match(source, /learn: \{ xp: 12, nexCoins: 2 \}/, 'learn reward must remain intentionally modest');
@@ -22,4 +24,12 @@ assert.match(source, /if \(state\.completedLessons\.includes\(lesson\.id\)\) ret
 assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'learning completion must pass through the shared streak/daily-goal reward engine');
 assert.match(source, /completedLessons: \[\.\.\.rewarded\.completedLessons, lesson\.id\]/, 'rewarded lessons must be persisted as completed atomically with the reward state');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices and idempotent completion are enforced.');
+assert.match(localStateSource, /requestedNow instanceof Date && Number\.isFinite\(requestedNow\.getTime\(\)\)/, 'invalid reward timestamps must fall back before streak dates are computed');
+assert.match(localStateSource, /const minutes = finiteNumber\(reward\.minutes, 0, 0, 240\);/, 'reward minutes must reject NaN or Infinity and remain bounded per activity');
+assert.match(localStateSource, /const xp = finiteInteger\(reward\.xp, 0, 0, 1_000_000\);/, 'XP rewards must be finite non-negative integers with a corruption ceiling');
+assert.match(localStateSource, /const nexCoins = finiteInteger\(reward\.nexCoins, 0, 0, 1_000_000\);/, 'NexCoin rewards must be finite non-negative integers with a corruption ceiling');
+assert.match(localStateSource, /xp: active\.xp \+ xp \+ \(shouldGrantGoalBonus \? 40 : 0\)/, 'progression totals must use normalized XP rather than raw reward input');
+assert.match(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins \+ \(shouldGrantGoalBonus \? 20 : 0\)/, 'wallet totals must use normalized NexCoins rather than raw reward input');
+assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
+
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, finite economy inputs and idempotent completion are enforced.');
