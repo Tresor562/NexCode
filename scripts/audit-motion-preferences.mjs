@@ -30,6 +30,7 @@ const checks = [
   ['hydration retry cleared on teardown', source.includes('reduceMotionKnown = false;\n  clearHydrationRetry();\n  nativeSubscriptions.forEach')],
   ['native event marks preference known', source.includes('reduceMotionKnown = true;\n      publish({ reduceMotion: enabled });')],
   ['listener teardown invalidates cached preference', source.includes('reduceMotionKnown = false;\n  clearHydrationRetry();\n  nativeSubscriptions.forEach')],
+  ['listener-free remount stays fail-safe', source.includes("publish({ reduceMotion: true, appActive: AppState.currentState === 'active' });")],
   ['native subscriptions removed when unused', source.includes('subscription.remove()')],
 ];
 
