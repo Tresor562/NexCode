@@ -76,6 +76,11 @@ function previewAttribute(tag: string, name: string) {
   return match?.[1] ?? match?.[2] ?? match?.[3];
 }
 
+function optionalPreviewAttribute(tag: string, name: 'media' | 'type') {
+  const value = previewAttribute(tag, name)?.trim();
+  return value ? ` ${name}="${escapeHtmlAttribute(value)}"` : '';
+}
+
 function normalizePreviewAssetPath(rawReference: string) {
   const trimmed = rawReference.trim();
   if (!trimmed || /^(?:[a-z][a-z\d+.-]*:|\/\/|\/|#)/i.test(trimmed)) return undefined;
@@ -115,7 +120,8 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
     const source = draft.files[path];
     if (source === undefined) return tag;
     inlinedStyles.add(path);
-    return `<style data-nexcode-source="${escapeHtmlAttribute(path)}">${escapeInlineClosingTag(source, 'style')}</style>`;
+    const mediaAttribute = optionalPreviewAttribute(tag, 'media');
+    return `<style data-nexcode-source="${escapeHtmlAttribute(path)}"${mediaAttribute}>${escapeInlineClosingTag(source, 'style')}</style>`;
   });
 
   output = output.replace(/<script\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>\s*<\/script>/gi, (tag) => {
@@ -126,7 +132,8 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
     const source = draft.files[path];
     if (source === undefined) return tag;
     inlinedScripts.add(path);
-    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}">${escapeInlineClosingTag(source, 'script')}<\/script>`;
+    const typeAttribute = optionalPreviewAttribute(tag, 'type');
+    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}"${typeAttribute}>${escapeInlineClosingTag(source, 'script')}<\/script>`;
   });
 
   return { document: output, inlinedStyles, inlinedScripts };
