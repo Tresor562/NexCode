@@ -108,12 +108,23 @@ export function invalidateLabValidation(draft: LabDraft): LabDraft {
   };
 }
 
+function resolveEditableLabFilename(draft: LabDraft, filename: string) {
+  const safe = canonicalWorkspacePath(filename);
+  if (!safe || isSensitiveWorkspaceFilename(safe)) return undefined;
+
+  const collisionKey = workspaceCollisionKey(safe);
+  return Object.keys(draft.files).find((existing) => workspaceCollisionKey(existing) === collisionKey);
+}
+
 export function updateLabFile(draft: LabDraft, filename: string, content: string): LabDraft {
-  const changed = draft.files[filename] !== content;
+  const existingFilename = resolveEditableLabFilename(draft, filename);
+  if (!existingFilename) return draft;
+
+  const changed = draft.files[existingFilename] !== content;
   const next = {
     ...draft,
-    files: { ...draft.files, [filename]: content },
-    activeFile: filename,
+    files: { ...draft.files, [existingFilename]: content },
+    activeFile: existingFilename,
     updatedAt: new Date().toISOString(),
   };
   return changed ? invalidateLabValidation(next) : next;
