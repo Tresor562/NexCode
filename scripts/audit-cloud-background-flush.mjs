@@ -12,8 +12,24 @@ assert(
   'cloud sync must expose an immediate flush boundary for lifecycle transitions',
 );
 assert(
-  /clearPendingPush\(\);[\s\S]*await\s+flushLatestState\(\)/.test(cloudSync),
-  'immediate cloud flush must cancel the debounce timer before flushing the latest snapshot',
+  /let\s+activeFlush:\s*Promise<boolean>\s*\|\s*null/.test(cloudSync),
+  'cloud sync must retain the active flush promise so lifecycle transitions can await in-flight work',
+);
+assert(
+  /if\s*\(activeFlush\)\s*return\s+activeFlush/.test(cloudSync),
+  'concurrent flush callers must join the existing Supabase reconciliation instead of returning early',
+);
+assert(
+  /clearPendingPush\(\);[\s\S]*const\s+completed\s*=\s*await\s+flushLatestState\(\);[\s\S]*clearPendingPush\(\)/.test(cloudSync),
+  'immediate cloud flush must cancel timers around the awaited in-flight reconciliation',
+);
+assert(
+  /if\s*\(completed\s*&&\s*latestState\)\s*\{[\s\S]{0,120}await\s+flushLatestState\(\)/.test(cloudSync),
+  'background flush must immediately drain a newer snapshot queued while the first request was running',
+);
+assert(
+  /if\s*\(completed\s*&&\s*latestState\)/.test(cloudSync),
+  'background draining must stop after a failed/offline flush so exponential retry remains effective',
 );
 assert(
   /AppState\.addEventListener\(['"]change['"]/.test(rootApp),
