@@ -31,14 +31,14 @@ function uniqueSkillIds(skillIds: string[]): string[] {
   return [...new Set(skillIds.map((skillId) => skillId.trim()).filter(Boolean))];
 }
 
-function evenlySampleLessons(lessons: Lesson[], maxItems: number) {
-  if (lessons.length <= maxItems) return lessons;
-  if (maxItems <= 1) return lessons.slice(0, Math.max(0, maxItems));
+function evenlySample<T>(items: T[], maxItems: number): T[] {
+  if (items.length <= maxItems) return items;
+  if (maxItems <= 1) return items.slice(0, Math.max(0, maxItems));
 
-  const lastIndex = lessons.length - 1;
+  const lastIndex = items.length - 1;
   return Array.from({ length: maxItems }, (_, index) => {
     const sourceIndex = Math.round((index * lastIndex) / (maxItems - 1));
-    return lessons[sourceIndex]!;
+    return items[sourceIndex]!;
   });
 }
 
@@ -69,7 +69,10 @@ function coverageSampleLessons(
 
     for (const lesson of lessons) {
       if (selected.has(lesson.id)) continue;
-      const coverage = uniqueSkillIds(lesson.skillIds ?? []).reduce((count, skillId) => count + (uncovered.has(skillId) ? 1 : 0), 0);
+      const coverage = uniqueSkillIds(lesson.skillIds ?? []).reduce(
+        (count, skillId) => count + (uncovered.has(skillId) ? 1 : 0),
+        0,
+      );
       const preferred = preferredLessonIds.has(lesson.id);
       if (coverage > bestCoverage || (coverage === bestCoverage && coverage > 0 && preferred && !bestPreferred)) {
         best = lesson;
@@ -87,13 +90,13 @@ function coverageSampleLessons(
   if (remainingSlots > 0) {
     const remaining = lessons.filter((lesson) => !selected.has(lesson.id));
     const preferredRemaining = remaining.filter((lesson) => preferredLessonIds.has(lesson.id));
-    const preferredSample = evenlySampleLessons(preferredRemaining, Math.min(remainingSlots, preferredRemaining.length));
+    const preferredSample = evenlySample(preferredRemaining, Math.min(remainingSlots, preferredRemaining.length));
     for (const lesson of preferredSample) selected.add(lesson.id);
 
     const fallbackSlots = maxItems - selected.size;
     if (fallbackSlots > 0) {
       const fallbackRemaining = lessons.filter((lesson) => !selected.has(lesson.id));
-      for (const lesson of evenlySampleLessons(fallbackRemaining, fallbackSlots)) selected.add(lesson.id);
+      for (const lesson of evenlySample(fallbackRemaining, fallbackSlots)) selected.add(lesson.id);
     }
   }
 
@@ -113,29 +116,9 @@ function courseChapterRepresentativeIds(course: Course, maxItems: number) {
     }))
     .filter(({ lessons }) => lessons.length > 0);
 
-  if (populatedChapters.length === 0) return new Set<string>();
-
-  const selectedChapters = populatedChapters.length <= maxItems
-    ? populatedChapters
-    : evenlySampleLessons(
-        populatedChapters.map(({ chapter, lessons }) => ({
-          id: chapter.id,
-          title: chapter.title,
-          skillIds: chapter.skillIds,
-          activityKind: 'learn',
-          exercises: [],
-          durationMinutes: 0,
-          concept: chapter.title,
-          summary: chapter.title,
-          objectives: [],
-          hints: [],
-          ...({ __chapterLessons: lessons } as unknown as Lesson),
-        })),
-        maxItems,
-      ).map((sampled) => populatedChapters.find(({ chapter }) => chapter.id === sampled.id)!)
-      .filter(Boolean);
-
+  const selectedChapters = evenlySample(populatedChapters, Math.min(maxItems, populatedChapters.length));
   const required = new Set<string>();
+
   for (const { lessons } of selectedChapters) {
     let representative = lessons[0]!;
     let bestSkillCoverage = -1;
@@ -152,6 +135,7 @@ function courseChapterRepresentativeIds(course: Course, maxItems: number) {
     }
     required.add(representative.id);
   }
+
   return required;
 }
 
