@@ -186,12 +186,19 @@ function previewHeadMarkup(styleTag: string) {
 }
 
 export function webPreviewDocument(draft: LabDraft) {
-  const sourceHtml = draft.files['index.html']?.trim() || '<main></main>';
+  const entryPath = resolvePreviewWorkspaceFile(draft, 'index.html');
+  const sourceHtml = (entryPath ? draft.files[entryPath] : undefined)?.trim() || '<main></main>';
   const inlined = inlineLocalPreviewAssets(sourceHtml, draft);
-  const fallbackCss = inlined.inlinedStyles.has('styles.css') ? '' : (draft.files['styles.css'] ?? '');
-  const fallbackJs = inlined.inlinedScripts.has('script.js') ? '' : (draft.files['script.js'] ?? '');
-  const styleTag = fallbackCss ? `<style data-nexcode-source="styles.css">${escapeInlineClosingTag(fallbackCss, 'style')}</style>` : '';
-  const scriptTag = fallbackJs ? `<script data-nexcode-source="script.js">${escapeInlineClosingTag(fallbackJs, 'script')}<\/script>` : '';
+  const fallbackCssPath = resolvePreviewWorkspaceFile(draft, 'styles.css');
+  const fallbackJsPath = resolvePreviewWorkspaceFile(draft, 'script.js');
+  const fallbackCss = fallbackCssPath && !inlined.inlinedStyles.has(fallbackCssPath) ? (draft.files[fallbackCssPath] ?? '') : '';
+  const fallbackJs = fallbackJsPath && !inlined.inlinedScripts.has(fallbackJsPath) ? (draft.files[fallbackJsPath] ?? '') : '';
+  const styleTag = fallbackCssPath && fallbackCss
+    ? `<style data-nexcode-source="${escapeHtmlAttribute(fallbackCssPath)}">${escapeInlineClosingTag(fallbackCss, 'style')}</style>`
+    : '';
+  const scriptTag = fallbackJsPath && fallbackJs
+    ? `<script data-nexcode-source="${escapeHtmlAttribute(fallbackJsPath)}">${escapeInlineClosingTag(fallbackJs, 'script')}<\/script>`
+    : '';
   const headMarkup = previewHeadMarkup(styleTag);
 
   let document: string;
