@@ -1,6 +1,11 @@
 import { LabMission, Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
-import { isSensitiveWorkspaceFilename, restoreWorkspaceDraft } from '../lib/workspaceSafety';
+import {
+  canonicalWorkspacePath,
+  isSensitiveWorkspaceFilename,
+  restoreWorkspaceDraft,
+  workspaceCollisionKey,
+} from '../lib/workspaceSafety';
 
 export type LabWorkspace = { mission: LabMission; draft: LabDraft };
 export type LabValidation = {
@@ -115,9 +120,19 @@ export function updateLabFile(draft: LabDraft, filename: string, content: string
 }
 
 export function addLabFile(draft: LabDraft, filename: string) {
-  const safe = filename.trim().replace(/[^a-zA-Z0-9._-]/g, '-');
-  if (!safe || isSensitiveWorkspaceFilename(safe) || draft.files[safe] !== undefined) return draft;
-  return invalidateLabValidation({ ...draft, files: { ...draft.files, [safe]: '' }, activeFile: safe, updatedAt: new Date().toISOString() });
+  const safe = canonicalWorkspacePath(filename);
+  if (!safe || isSensitiveWorkspaceFilename(safe)) return draft;
+
+  const collisionKey = workspaceCollisionKey(safe);
+  const collides = Object.keys(draft.files).some((existing) => workspaceCollisionKey(existing) === collisionKey);
+  if (collides) return draft;
+
+  return invalidateLabValidation({
+    ...draft,
+    files: { ...draft.files, [safe]: '' },
+    activeFile: safe,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 export function removeLabFile(draft: LabDraft, filename: string) {
