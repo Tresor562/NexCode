@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 
-export type LearningFeedbackKind = 'selection' | 'success' | 'error' | 'impact';
+export type LearningFeedbackKind = 'selection' | 'success' | 'error' | 'impact' | 'sound';
 export type LearningImpactTone = 'light' | 'medium';
 export type LearningNotificationTone = 'success' | 'error';
 
@@ -14,6 +14,7 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
   success: 180,
   error: 180,
   impact: 120,
+  sound: 90,
 };
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
@@ -23,7 +24,10 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     if (!appActive) return false;
     const current = now();
     const previous = lastTriggeredAt.get(kind);
-    if (previous !== undefined && current - previous < FEEDBACK_COOLDOWN_MS[kind]) return false;
+    if (previous !== undefined) {
+      const elapsed = current - previous;
+      if (elapsed >= 0 && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
+    }
     lastTriggeredAt.set(kind, current);
     return true;
   }
@@ -44,7 +48,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       Haptics.impactAsync(style).catch(() => undefined);
     },
     sound(appActive: boolean, player: ReplayableAudioPlayer) {
-      if (!appActive) return;
+      if (!canTrigger('sound', appActive)) return;
       player.seekTo(0).then(() => player.play()).catch(() => undefined);
     },
   };
