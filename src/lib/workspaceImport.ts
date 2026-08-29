@@ -1,14 +1,11 @@
 import { Directory, File } from 'expo-file-system';
-import { canonicalWorkspacePath, workspaceCollisionKey } from './workspaceSafety';
+import { canonicalWorkspacePath, isSensitiveWorkspaceFilename, workspaceCollisionKey } from './workspaceSafety';
 
 const TEXT_EXTENSIONS = new Set([
   'html','htm','css','scss','sass','less','js','jsx','mjs','cjs','ts','tsx','json','py','sql','md','txt','xml','yaml','yml','toml','ini','sh','bash','ps1','java','kt','kts','c','h','cpp','hpp','cs','go','rs','php','rb','dart','swift','vue','svelte','graphql','gql','csv','gitignore','dockerfile',
 ]);
 const IGNORED_DIRECTORIES = new Set([
   '.git','.hg','.svn','node_modules','vendor','dist','build','.next','.expo','.turbo','.cache','coverage','pods','deriveddata',
-]);
-const SENSITIVE_BASENAMES = new Set([
-  '.env','.npmrc','.pypirc','.netrc','id_rsa','id_ed25519','credentials','credentials.json','service-account.json','service_account.json',
 ]);
 const MAX_TEXT_BYTES = 1_500_000;
 const MAX_TEXT_CHARS = 1_500_000;
@@ -30,14 +27,6 @@ function extension(name: string) {
   return index >= 0 ? lower.slice(index + 1) : lower;
 }
 
-function isSensitiveName(name: string) {
-  const lower = name.trim().toLowerCase();
-  if (SENSITIVE_BASENAMES.has(lower)) return true;
-  if (lower.startsWith('.env.')) return true;
-  if (/\.(?:pem|key|p12|pfx|jks|keystore)$/i.test(lower)) return true;
-  return false;
-}
-
 function isSafeSegment(name: string) {
   if (!name || name === '.' || name === '..') return false;
   if (name.includes('/') || name.includes('\\')) return false;
@@ -46,7 +35,7 @@ function isSafeSegment(name: string) {
 
 function canReadAsText(file: File) {
   const size = typeof file.size === 'number' ? file.size : 0;
-  return size <= MAX_TEXT_BYTES && isSafeSegment(file.name) && !isSensitiveName(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
+  return size <= MAX_TEXT_BYTES && isSafeSegment(file.name) && !isSensitiveWorkspaceFilename(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
 }
 
 function occupiedWorkspaceKeys(existing: Record<string, string>) {
