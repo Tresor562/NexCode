@@ -20,7 +20,14 @@ export type LearningSearchResult = {
 };
 
 function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function tokenizeSearch(value: string) {
+  return normalize(value)
+    .split(/[^\p{L}\p{N}+#._-]+/u)
+    .map((token) => token.trim())
+    .filter(Boolean);
 }
 
 function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
@@ -31,6 +38,31 @@ function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   return Number.isFinite(nowMs) ? nextReviewMs <= nowMs : true;
 }
 
+function weightedSearchScore(
+  terms: string[],
+  phrase: string,
+  fields: Array<{ value: string; weight: number }>,
+) {
+  if (!terms.length) return 1;
+  const normalizedFields = fields.map(({ value, weight }) => ({ value: normalize(value), weight }));
+  const combined = normalizedFields.map((field) => field.value).join(' ');
+  if (!terms.every((term) => combined.includes(term))) return 0;
+
+  let score = 0;
+  for (const term of terms) {
+    let bestWeight = 0;
+    for (const field of normalizedFields) {
+      if (field.value.includes(term)) bestWeight = Math.max(bestWeight, field.weight);
+    }
+    score += bestWeight;
+  }
+
+  if (phrase && normalizedFields[0]?.value.includes(phrase)) score += 80;
+  else if (phrase && combined.includes(phrase)) score += 35;
+
+  return score;
+}
+
 export function searchLearningActivities(
   courses: Course[],
   filter: LearningFilter,
@@ -38,7 +70,10 @@ export function searchLearningActivities(
   mastery: MasteryMap,
   now = new Date(),
 ): LearningSearchResult[] {
-  const query = normalize(filter.query?.trim() ?? '');
+  const query = filter.query?.trim() ?? '';
+  const phrase = normalize(query);
+  const terms = tokenizeSearch(query);
+  const completed = new Set(completedLessonIds);
   const results: LearningSearchResult[] = [];
   for (const course of courses) {
     if (filter.courseIds?.length && !filter.courseIds.includes(course.id)) continue;
@@ -47,20 +82,24 @@ export function searchLearningActivities(
         for (const lessonId of unit.lessonIds) {
           const lesson = course.starterLessons.find((item) => item.id === lessonId);
           if (!lesson) continue;
-          if (filter.onlyIncomplete && completedLessonIds.includes(lesson.id)) continue;
+          if (filter.onlyIncomplete && completed.has(lesson.id)) continue;
           if (filter.kinds?.length && !filter.kinds.includes(lesson.activityKind ?? 'learn')) continue;
           if (filter.difficulty?.length && !filter.difficulty.includes(lesson.difficulty ?? 1)) continue;
           if (filter.onlyDueReview) {
             const due = (lesson.skillIds ?? []).some((skillId) => reviewIsDue(mastery[skillId]?.nextReviewAt, now));
             if (!due) continue;
           }
-          const haystack = normalize(`${course.title} ${course.language} ${chapter.title} ${unit.title} ${lesson.title} ${lesson.concept} ${(lesson.skillIds ?? []).join(' ')}`);
-          if (query && !haystack.includes(query)) continue;
-          const score = query
-            ? (normalize(lesson.title).includes(query) ? 50 : 0)
-              + (normalize(chapter.title).includes(query) ? 20 : 0)
-              + (normalize(course.title).includes(query) ? 10 : 0)
-            : 1;
+
+          const score = weightedSearchScore(terms, phrase, [
+            { value: lesson.title, weight: 60 },
+            { value: lesson.concept, weight: 45 },
+            { value: (lesson.skillIds ?? []).join(' '), weight: 40 },
+            { value: unit.title, weight: 28 },
+            { value: chapter.title, weight: 20 },
+            { value: course.title, weight: 16 },
+            { value: course.language, weight: 12 },
+          ]);
+          if (terms.length && score <= 0) continue;
           results.push({ course, lesson, chapterId: chapter.id, unitId: unit.id, score });
         }
       }
@@ -71,10 +110,11 @@ export function searchLearningActivities(
 
 export function courseNavigationSummary(course: Course, completedLessonIds: string[], mastery: MasteryMap) {
   const masterySnapshot = courseMasterySnapshot(course, mastery);
-  const completed = course.starterLessons.filter((lesson) => completedLessonIds.includes(lesson.id)).length;
+  const completedSet = new Set(completedLessonIds);
+  const completed = course.starterLessons.filter((lesson) => completedSet.has(lesson.id)).length;
   const chapters = course.chapters.map((chapter) => {
-    const chapterCompleted = chapter.lessonIds.filter((id) => completedLessonIds.includes(id)).length;
-    const nextLessonId = chapter.lessonIds.find((id) => !completedLessonIds.includes(id));
+    const chapterCompleted = chapter.lessonIds.filter((id) => completedSet.has(id)).length;
+    const nextLessonId = chapter.lessonIds.find((id) => !completedSet.has(id));
     return {
       id: chapter.id,
       title: chapter.title,
