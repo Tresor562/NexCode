@@ -3,8 +3,10 @@ import path from 'node:path';
 
 const componentsFile = path.resolve('src/ui/components.tsx');
 const themeFile = path.resolve('src/ui/theme.ts');
+const feedbackFile = path.resolve('src/ui/learningFeedback.ts');
 const components = fs.readFileSync(componentsFile, 'utf8');
 const theme = fs.readFileSync(themeFile, 'utf8');
+const feedback = fs.readFileSync(feedbackFile, 'utf8');
 
 const requireSnippet = (source, snippet, message) => {
   if (!source.includes(snippet)) throw new Error(message);
@@ -35,7 +37,10 @@ for (const token of requiredTokens) {
   requireSnippet(components, `theme.colors.${token}`, `Shared components must consume semantic token theme.colors.${token}.`);
 }
 
-requireSnippet(components, "import * as Haptics from 'expo-haptics';", 'Shared tactile controls must keep native haptic feedback wired through expo-haptics.');
+requireSnippet(components, "import { createLearningFeedbackGate, LearningImpactTone } from './learningFeedback';", 'Shared tactile controls must route feedback through the centralized learning feedback boundary.');
+requireSnippet(feedback, "import * as Haptics from 'expo-haptics';", 'Centralized learning feedback must keep native haptic feedback wired through expo-haptics.');
+requireSnippet(feedback, 'if (!appActive) return false;', 'Centralized haptic feedback must remain foreground-only.');
+requireSnippet(feedback, "Haptics.impactAsync(style).catch(() => undefined);", 'Centralized impact haptics must fail softly when the native API is unavailable.');
 requireSnippet(components, "import { shadows, theme } from './theme';", 'Shared components must use the central theme.');
 requireSnippet(components, "import { useMotionPreferences } from './motionPreferences';", 'Shared controls must retain the shared motion lifecycle.');
 requireSnippet(components, 'const SHARED_TOUCH_HIT_SLOP = 8;', 'Shared tactile controls must keep an expanded invisible mobile hit target.');
@@ -48,8 +53,8 @@ requireSnippet(components, 'if (appActive && !reduceMotion && !disabled) return;
 requireSnippet(components, 'if (disabled) {', 'Tactile animation must fail safe when a control is disabled.');
 requireSnippet(components, 'scale.setValue(1);', 'Disabled tactile controls must restore neutral scale.');
 requireSnippet(components, 'depth.setValue(0);', 'Disabled tactile controls must restore neutral depth.');
-requireSnippet(components, 'void Haptics.impactAsync(style).catch(() => undefined);', 'Shared haptic feedback must fail softly when the native haptics API is unavailable.');
-requireSnippet(components, 'if (disabled) return;\n    if (appActive) fireImpactHaptic(haptic);', 'Disabled tactile controls must never emit haptics and shared haptics must stay foreground-only.');
+requireSnippet(components, 'feedback.impact(appActive, haptic);', 'Shared controls must emit semantic impact feedback through the centralized gate.');
+requireSnippet(components, 'if (disabled) return;\n    feedback.impact(appActive, haptic);', 'Disabled tactile controls must never emit haptics and shared haptics must stay behind the shared gate.');
 requireSnippet(components, 'haptic="medium"', 'Primary actions must keep a distinct medium haptic emphasis.');
 requireSnippet(components, 'haptic="light"', 'Secondary and icon actions must keep light haptic emphasis.');
 requireSnippet(components, 'accessibilityState={{ disabled: Boolean(disabled), selected: accessibilitySelected, busy: accessibilityBusy }}', 'The shared tactile boundary must expose disabled, selected, and busy state to assistive technologies.');
@@ -139,4 +144,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), foreground-only resilient haptics, unified loading/disable-safe primary/secondary/icon/section controls, expanded shared hit targets, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), centralized foreground-only resilient feedback, unified loading/disable-safe primary/secondary/icon/section controls, expanded shared hit targets, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
