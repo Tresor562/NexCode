@@ -22,6 +22,17 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
 // duplicate vibrations or sounds just because each control owns a different gate.
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 
+// Audio seeking is asynchronous. A slower seek from feedback A can resolve after
+// feedback B has already started and replay the obsolete cue. Keep one generation
+// per player so only the newest requested replay is allowed to call play().
+const sharedAudioGeneration = new WeakMap<ReplayableAudioPlayer, number>();
+
+function supersedeAudio(player: ReplayableAudioPlayer): number {
+  const generation = (sharedAudioGeneration.get(player) ?? 0) + 1;
+  sharedAudioGeneration.set(player, generation);
+  return generation;
+}
+
 export function createLearningFeedbackGate(now: () => number = Date.now) {
   function canTrigger(kind: LearningFeedbackKind, appActive: boolean) {
     if (!appActive) return false;
@@ -51,8 +62,17 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       Haptics.impactAsync(style).catch(() => undefined);
     },
     sound(appActive: boolean, player: ReplayableAudioPlayer) {
+      // Supersede first, even when this request is rejected by the foreground or
+      // cooldown gate. A later interaction must be able to invalidate an older
+      // seek that is still resolving rather than letting stale audio leak through.
+      const generation = supersedeAudio(player);
       if (!canTrigger('sound', appActive)) return;
-      player.seekTo(0).then(() => player.play()).catch(() => undefined);
+      player.seekTo(0)
+        .then(() => {
+          if (sharedAudioGeneration.get(player) !== generation) return;
+          player.play();
+        })
+        .catch(() => undefined);
     },
   };
 }
