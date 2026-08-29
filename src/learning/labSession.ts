@@ -1,5 +1,6 @@
 import { Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
+import { workspaceCollisionKey } from '../lib/workspaceSafety';
 import { LabWorkspace, openLabWorkspace, validateLabDraft } from './labEngine';
 
 export type LabReturnTarget = {
@@ -107,6 +108,11 @@ function normalizePreviewAssetPath(rawReference: string) {
   return normalized.join('/');
 }
 
+function resolvePreviewWorkspaceFile(draft: LabDraft, normalizedPath: string) {
+  const collisionKey = workspaceCollisionKey(normalizedPath);
+  return Object.keys(draft.files).find((filename) => workspaceCollisionKey(filename) === collisionKey);
+}
+
 function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
   const inlinedStyles = new Set<string>();
   const inlinedScripts = new Set<string>();
@@ -115,8 +121,10 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
     const rel = previewAttribute(tag, 'rel')?.toLowerCase().split(/\s+/) ?? [];
     const href = previewAttribute(tag, 'href');
     if (!href || !rel.includes('stylesheet')) return tag;
-    const path = normalizePreviewAssetPath(href);
-    if (!path || !path.toLowerCase().endsWith('.css')) return tag;
+    const normalizedPath = normalizePreviewAssetPath(href);
+    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.css')) return tag;
+    const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
+    if (!path) return tag;
     const source = draft.files[path];
     if (source === undefined) return tag;
     inlinedStyles.add(path);
@@ -127,8 +135,10 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
   output = output.replace(/<script\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>\s*<\/script>/gi, (tag) => {
     const src = previewAttribute(tag, 'src');
     if (!src) return tag;
-    const path = normalizePreviewAssetPath(src);
-    if (!path || !path.toLowerCase().endsWith('.js')) return tag;
+    const normalizedPath = normalizePreviewAssetPath(src);
+    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.js')) return tag;
+    const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
+    if (!path) return tag;
     const source = draft.files[path];
     if (source === undefined) return tag;
     inlinedScripts.add(path);
