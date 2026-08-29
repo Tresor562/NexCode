@@ -119,3 +119,11 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
   clearPendingPush();
   queueFlush(delayMs);
 }
+
+export async function flushCloudStateNow(): Promise<void> {
+  // Mobile operating systems may suspend JavaScript shortly after the app leaves
+  // the foreground. Do not let a learner finish a lesson and lose the cloud copy
+  // simply because the normal debounce timer had not fired yet.
+  clearPendingPush();
+  await flushLatestState();
+}
