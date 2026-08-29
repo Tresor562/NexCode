@@ -40,11 +40,27 @@ assert.deepEqual(
   { completedSteps: 2, nextStep: 'Interaction', complete: false },
   '67% persisted progress must restore to 2/3 completed steps',
 );
-assert.equal(nextProjectStep(project, 100).completedSteps, 3, '100% must restore all steps as complete');
-assert.equal(nextProjectStep(project, 100).complete, true, '100% must mark the project complete');
+assert.deepEqual(
+  nextProjectStep(project, 99.9),
+  { completedSteps: 2, nextStep: 'Interaction', complete: false },
+  'near-complete progress must not infer the final step before the project is truly complete',
+);
+assert.deepEqual(
+  nextProjectStep(project, 100),
+  { completedSteps: 3, nextStep: undefined, complete: true },
+  '100% must restore all steps and expose no remaining next step',
+);
 assert.equal(nextProjectStep(project, Number.NaN).completedSteps, 0, 'NaN progress must fail safely to zero steps');
 assert.equal(nextProjectStep(project, -50).completedSteps, 0, 'negative progress must be clamped to zero');
 assert.equal(nextProjectStep(project, 999).completedSteps, 3, 'progress above 100 must be clamped to the final step');
 assert.equal(nextProjectStep(project, 999).complete, true, 'clamped over-100 progress must remain complete');
+assert.equal(nextProjectStep(project, 999).nextStep, undefined, 'completed projects must not expose a stale next step');
 
-console.log('Project step audit OK: rounded persisted progress restores exact guided-project steps and invalid values fail safely.');
+const emptyProject = { ...project, id: 'empty-project', steps: [] };
+assert.deepEqual(
+  nextProjectStep(emptyProject, 0),
+  { completedSteps: 0, nextStep: undefined, complete: false },
+  'empty projects must fail safely without indexing a phantom step',
+);
+
+console.log('Project step audit OK: persisted progress restores coherent guided-project steps, near-complete snapshots cannot infer completion, and invalid values fail safely.');
