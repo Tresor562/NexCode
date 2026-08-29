@@ -9,6 +9,7 @@ type PendingCloudState = {
 let pendingPush: ReturnType<typeof setTimeout> | null = null;
 let latestState: PendingCloudState | null = null;
 let activeFlush: Promise<boolean> | null = null;
+let deferredFlushDelayMs: number | null = null;
 let retryDelayMs = 1_500;
 
 const BASE_RETRY_DELAY_MS = 1_500;
@@ -30,7 +31,20 @@ function clearPendingPush(): void {
 }
 
 function queueFlush(delayMs: number): void {
-  if (pendingPush || activeFlush || !latestState) return;
+  if (!latestState) return;
+
+  if (activeFlush) {
+    // A retry or account handoff may be requested while the current request is
+    // still unwinding. Preserve the requested delay and schedule it only after
+    // the active promise has settled; otherwise the fallback follow-up delay can
+    // accidentally erase exponential backoff while offline.
+    deferredFlushDelayMs = deferredFlushDelayMs === null
+      ? Math.max(0, delayMs)
+      : Math.min(deferredFlushDelayMs, Math.max(0, delayMs));
+    return;
+  }
+
+  if (pendingPush) return;
   pendingPush = setTimeout(() => {
     pendingPush = null;
     void flushLatestState();
@@ -114,7 +128,12 @@ async function flushLatestState(): Promise<boolean> {
     return await flush;
   } finally {
     if (activeFlush === flush) activeFlush = null;
-    if (latestState && !pendingPush) queueFlush(FOLLOW_UP_DELAY_MS);
+
+    const deferredDelay = deferredFlushDelayMs;
+    deferredFlushDelayMs = null;
+    if (latestState && !pendingPush) {
+      queueFlush(deferredDelay ?? FOLLOW_UP_DELAY_MS);
+    }
   }
 }
 
