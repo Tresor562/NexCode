@@ -102,6 +102,20 @@ function assertPreviewPolicy(output) {
 
 {
   const output = webPreviewDocument(draft({
+    'INDEX.HTML': '<html><body><main>Portable entry</main></body></html>',
+    'Styles.CSS': 'main { color: rebeccapurple; }',
+    'SCRIPT.JS': 'document.body.dataset.fallback = "portable";',
+  }));
+  assertPreviewPolicy(output);
+  assert.match(output, /<main>Portable entry<\/main>/, 'preview entry must resolve index.html with the same portable path policy as the workspace');
+  assert.match(output, /data-nexcode-source="Styles\.CSS"/, 'fallback stylesheet must resolve case-equivalent workspace names');
+  assert.match(output, /color: rebeccapurple/, 'portable fallback stylesheet must keep its content');
+  assert.match(output, /data-nexcode-source="SCRIPT\.JS"/, 'fallback script must resolve case-equivalent workspace names');
+  assert.match(output, /dataset\.fallback = "portable"/, 'portable fallback script must keep its content');
+}
+
+{
+  const output = webPreviewDocument(draft({
     'index.html': '<html><body><main>No head</main></body></html>',
     'styles.css': 'main { display: grid; }',
     'script.js': 'console.log("preview")',
@@ -200,4 +214,4 @@ function assertPreviewPolicy(output) {
   assert.match(output, /<body>\s*<main><\/main>/i, 'empty HTML must fall back to a stable preview scaffold');
 }
 
-console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, portable multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
+console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, portable entry/fallback files, portable multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
