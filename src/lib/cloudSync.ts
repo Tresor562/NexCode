@@ -15,6 +15,13 @@ let retryDelayMs = 1_500;
 const BASE_RETRY_DELAY_MS = 1_500;
 const MAX_RETRY_DELAY_MS = 30_000;
 const FOLLOW_UP_DELAY_MS = 250;
+const DEFAULT_PUSH_DELAY_MS = 900;
+const MAX_PUSH_DELAY_MS = 60_000;
+
+function normalizeFlushDelay(value: unknown, fallback = DEFAULT_PUSH_DELAY_MS): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(MAX_PUSH_DELAY_MS, Math.floor(value)));
+}
 
 function snapshotCloudState(state: LocalState): LocalState {
   // LocalState is intentionally JSON-serializable because the same shape is
@@ -32,6 +39,7 @@ function clearPendingPush(): void {
 
 function queueFlush(delayMs: number): void {
   if (!latestState) return;
+  const safeDelay = normalizeFlushDelay(delayMs, FOLLOW_UP_DELAY_MS);
 
   if (activeFlush) {
     // A retry or account handoff may be requested while the current request is
@@ -39,8 +47,8 @@ function queueFlush(delayMs: number): void {
     // the active promise has settled; otherwise the fallback follow-up delay can
     // accidentally erase exponential backoff while offline.
     deferredFlushDelayMs = deferredFlushDelayMs === null
-      ? Math.max(0, delayMs)
-      : Math.min(deferredFlushDelayMs, Math.max(0, delayMs));
+      ? safeDelay
+      : Math.min(deferredFlushDelayMs, safeDelay);
     return;
   }
 
@@ -48,7 +56,7 @@ function queueFlush(delayMs: number): void {
   pendingPush = setTimeout(() => {
     pendingPush = null;
     void flushLatestState();
-  }, Math.max(0, delayMs));
+  }, safeDelay);
 }
 
 async function performLatestStateFlush(): Promise<boolean> {
@@ -137,7 +145,7 @@ async function flushLatestState(): Promise<boolean> {
   }
 }
 
-export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
+export function scheduleCloudStatePush(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS): void {
   if (!isCloudConfigured()) return;
   const session = loadCloudSession();
   if (!session) return;
@@ -147,7 +155,7 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
   // is in flight. The completed request immediately flushes any newer snapshot.
   if (activeFlush) return;
   clearPendingPush();
-  queueFlush(delayMs);
+  queueFlush(normalizeFlushDelay(delayMs));
 }
 
 export async function flushCloudStateNow(): Promise<void> {
