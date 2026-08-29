@@ -146,12 +146,41 @@ export function addLabFile(draft: LabDraft, filename: string) {
   });
 }
 
+export function renameLabFile(draft: LabDraft, filename: string, nextFilename: string) {
+  const existingFilename = resolveEditableLabFilename(draft, filename);
+  const safeNext = canonicalWorkspacePath(nextFilename);
+  if (!existingFilename || !safeNext || isSensitiveWorkspaceFilename(safeNext)) return draft;
+
+  const nextKey = workspaceCollisionKey(safeNext);
+  const collision = Object.keys(draft.files).find(
+    (existing) => existing !== existingFilename && workspaceCollisionKey(existing) === nextKey,
+  );
+  if (collision) return draft;
+  if (existingFilename === safeNext) return draft;
+
+  const files: Record<string, string> = {};
+  for (const [name, content] of Object.entries(draft.files)) {
+    files[name === existingFilename ? safeNext : name] = content;
+  }
+
+  return invalidateLabValidation({
+    ...draft,
+    files,
+    activeFile: draft.activeFile === existingFilename ? safeNext : draft.activeFile,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export function removeLabFile(draft: LabDraft, filename: string) {
   const names = Object.keys(draft.files);
-  if (names.length <= 1 || draft.files[filename] === undefined) return draft;
+  if (names.length <= 1) return draft;
+
+  const existingFilename = resolveEditableLabFilename(draft, filename);
+  if (!existingFilename) return draft;
+
   const files = { ...draft.files };
-  delete files[filename];
-  const activeFile = draft.activeFile === filename ? Object.keys(files)[0]! : draft.activeFile;
+  delete files[existingFilename];
+  const activeFile = draft.activeFile === existingFilename ? Object.keys(files)[0]! : draft.activeFile;
   return invalidateLabValidation({ ...draft, files, activeFile, updatedAt: new Date().toISOString() });
 }
 
