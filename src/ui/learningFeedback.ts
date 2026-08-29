@@ -1,6 +1,8 @@
 import * as Haptics from 'expo-haptics';
 
 export type LearningFeedbackKind = 'selection' | 'success' | 'error' | 'impact';
+export type LearningImpactTone = 'light' | 'medium';
+export type LearningNotificationTone = 'success' | 'error';
 
 export type ReplayableAudioPlayer = {
   seekTo: (seconds: number) => Promise<unknown>;
@@ -31,13 +33,14 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       if (!canTrigger('selection', appActive)) return;
       Haptics.selectionAsync().catch(() => undefined);
     },
-    notification(appActive: boolean, type: Haptics.NotificationFeedbackType) {
-      const kind: LearningFeedbackKind = type === Haptics.NotificationFeedbackType.Error ? 'error' : 'success';
-      if (!canTrigger(kind, appActive)) return;
+    notification(appActive: boolean, tone: LearningNotificationTone) {
+      if (!canTrigger(tone, appActive)) return;
+      const type = tone === 'error' ? Haptics.NotificationFeedbackType.Error : Haptics.NotificationFeedbackType.Success;
       Haptics.notificationAsync(type).catch(() => undefined);
     },
-    impact(appActive: boolean, style: Haptics.ImpactFeedbackStyle) {
+    impact(appActive: boolean, tone: LearningImpactTone) {
       if (!canTrigger('impact', appActive)) return;
+      const style = tone === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light;
       Haptics.impactAsync(style).catch(() => undefined);
     },
     sound(appActive: boolean, player: ReplayableAudioPlayer) {
