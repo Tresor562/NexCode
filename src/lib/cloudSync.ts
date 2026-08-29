@@ -8,7 +8,7 @@ type PendingCloudState = {
 
 let pendingPush: ReturnType<typeof setTimeout> | null = null;
 let latestState: PendingCloudState | null = null;
-let pushInFlight = false;
+let activeFlush: Promise<boolean> | null = null;
 let retryDelayMs = 1_500;
 
 const BASE_RETRY_DELAY_MS = 1_500;
@@ -30,19 +30,19 @@ function clearPendingPush(): void {
 }
 
 function queueFlush(delayMs: number): void {
-  if (pendingPush || pushInFlight || !latestState) return;
+  if (pendingPush || activeFlush || !latestState) return;
   pendingPush = setTimeout(() => {
     pendingPush = null;
     void flushLatestState();
   }, Math.max(0, delayMs));
 }
 
-async function flushLatestState(): Promise<void> {
-  if (pushInFlight || !latestState) return;
+async function performLatestStateFlush(): Promise<boolean> {
+  if (!latestState) return true;
   const session = loadCloudSession();
   if (!session) {
     latestState = null;
-    return;
+    return true;
   }
 
   const snapshot = latestState;
@@ -52,11 +52,10 @@ async function flushLatestState(): Promise<void> {
   if (session.user.id !== snapshot.userId) {
     latestState = null;
     retryDelayMs = BASE_RETRY_DELAY_MS;
-    return;
+    return true;
   }
 
   latestState = null;
-  pushInFlight = true;
 
   try {
     // Reconcile the queued local snapshot with the latest remote state before
@@ -72,19 +71,19 @@ async function flushLatestState(): Promise<void> {
     }
     await pushCloudState(reconciled.session, reconciled.state);
     retryDelayMs = BASE_RETRY_DELAY_MS;
+    return true;
   } catch {
     // Keep the newest local snapshot queued while offline. If another mutation
     // happened during the request, that newer state already supersedes this one.
     if (!latestState) latestState = snapshot;
     const delay = retryDelayMs;
     retryDelayMs = Math.min(MAX_RETRY_DELAY_MS, retryDelayMs * 2);
-    pushInFlight = false;
 
     const current = loadCloudSession();
     if (!current) {
       if (latestState?.userId === snapshot.userId) latestState = null;
       retryDelayMs = BASE_RETRY_DELAY_MS;
-      return;
+      return false;
     }
 
     if (current.user.id !== snapshot.userId) {
@@ -95,16 +94,28 @@ async function flushLatestState(): Promise<void> {
       if (latestState?.userId === snapshot.userId) latestState = null;
       retryDelayMs = BASE_RETRY_DELAY_MS;
       if (latestState?.userId === current.user.id) queueFlush(FOLLOW_UP_DELAY_MS);
-      return;
+      return false;
     }
 
     queueFlush(delay);
-    return;
-  } finally {
-    pushInFlight = false;
+    return false;
   }
+}
 
-  if (latestState) queueFlush(FOLLOW_UP_DELAY_MS);
+async function flushLatestState(): Promise<boolean> {
+  // Share the same promise with lifecycle flushes so a background transition can
+  // wait for an already-running Supabase reconciliation instead of returning
+  // immediately and relying on a follow-up timer that the OS may suspend.
+  if (activeFlush) return activeFlush;
+
+  const flush = performLatestStateFlush();
+  activeFlush = flush;
+  try {
+    return await flush;
+  } finally {
+    if (activeFlush === flush) activeFlush = null;
+    if (latestState && !pendingPush) queueFlush(FOLLOW_UP_DELAY_MS);
+  }
 }
 
 export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
@@ -115,15 +126,23 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = 900): void {
 
   // Debounce rapid local mutations, but never start a second request while one
   // is in flight. The completed request immediately flushes any newer snapshot.
-  if (pushInFlight) return;
+  if (activeFlush) return;
   clearPendingPush();
   queueFlush(delayMs);
 }
 
 export async function flushCloudStateNow(): Promise<void> {
   // Mobile operating systems may suspend JavaScript shortly after the app leaves
-  // the foreground. Do not let a learner finish a lesson and lose the cloud copy
-  // simply because the normal debounce timer had not fired yet.
+  // the foreground. Cancel the debounce, await any request already in flight,
+  // then immediately drain one newer snapshot that arrived during that request.
   clearPendingPush();
-  await flushLatestState();
+  const completed = await flushLatestState();
+  clearPendingPush();
+
+  // Only perform the second drain after a successful reconciliation. When the
+  // device is offline, the failed snapshot must keep its exponential retry rather
+  // than spin synchronously while the app is transitioning to the background.
+  if (completed && latestState) {
+    await flushLatestState();
+  }
 }
