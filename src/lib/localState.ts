@@ -101,24 +101,6 @@ export type ProgressReward = {
   now?: Date;
 };
 
-export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
-  const now = reward.now ?? new Date();
-  const active = touchDailyActivity(state, now);
-  const minutes = Math.max(0, reward.minutes ?? 0);
-  const dailyCompleted = Math.min(active.dailyGoal, active.dailyCompleted + minutes);
-  const today = localDateKey(now);
-  const shouldGrantGoalBonus = dailyCompleted >= active.dailyGoal && active.dailyGoalRewardDate !== today;
-
-  return {
-    ...active,
-    xp: active.xp + Math.max(0, reward.xp ?? 0) + (shouldGrantGoalBonus ? 40 : 0),
-    nexCoins: active.nexCoins + Math.max(0, reward.nexCoins ?? 0) + (shouldGrantGoalBonus ? 20 : 0),
-    dailyCompleted,
-    dailyGoalRewardDate: shouldGrantGoalBonus ? today : active.dailyGoalRewardDate,
-    totalLearningMinutes: active.totalLearningMinutes + minutes,
-  };
-}
-
 function finiteNumber(value: unknown, fallback: number, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.max(minimum, Math.min(maximum, value));
@@ -126,6 +108,27 @@ function finiteNumber(value: unknown, fallback: number, minimum = 0, maximum = N
 
 function finiteInteger(value: unknown, fallback: number, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
   return Math.floor(finiteNumber(value, fallback, minimum, maximum));
+}
+
+export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
+  const requestedNow = reward.now;
+  const now = requestedNow instanceof Date && Number.isFinite(requestedNow.getTime()) ? requestedNow : new Date();
+  const active = touchDailyActivity(state, now);
+  const minutes = finiteNumber(reward.minutes, 0, 0, 240);
+  const xp = finiteInteger(reward.xp, 0, 0, 1_000_000);
+  const nexCoins = finiteInteger(reward.nexCoins, 0, 0, 1_000_000);
+  const dailyCompleted = Math.min(active.dailyGoal, active.dailyCompleted + minutes);
+  const today = localDateKey(now);
+  const shouldGrantGoalBonus = dailyCompleted >= active.dailyGoal && active.dailyGoalRewardDate !== today;
+
+  return {
+    ...active,
+    xp: active.xp + xp + (shouldGrantGoalBonus ? 40 : 0),
+    nexCoins: active.nexCoins + nexCoins + (shouldGrantGoalBonus ? 20 : 0),
+    dailyCompleted,
+    dailyGoalRewardDate: shouldGrantGoalBonus ? today : active.dailyGoalRewardDate,
+    totalLearningMinutes: active.totalLearningMinutes + minutes,
+  };
 }
 
 function cleanString(value: unknown, fallback: string, maxLength = 240): string {
