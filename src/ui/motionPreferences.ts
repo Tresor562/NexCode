@@ -167,6 +167,13 @@ function stopNativeListeners() {
   clearHydrationRetry();
   nativeSubscriptions.forEach((subscription) => subscription.remove());
   nativeSubscriptions = [];
+
+  // useSyncExternalStore may render a newly mounted consumer once before
+  // subscribe() restarts the native listeners. Never leave an old `false`
+  // reduced-motion value cached across that listener-free gap, otherwise a
+  // remounted mentor/path can animate for one frame before the OS preference is
+  // rehydrated. Keep motion disabled until the next native read proves it safe.
+  publish({ reduceMotion: true, appActive: AppState.currentState === 'active' });
 }
 
 function subscribe(listener: () => void) {
