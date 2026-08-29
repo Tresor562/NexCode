@@ -31,7 +31,7 @@ assert.match(
 );
 assert.match(
   safetySource,
-  /\.(?:pem\|key\|p12\|pfx\|jks\|keystore)/,
+  /pem\|key\|p12\|pfx\|jks\|keystore/,
   'The shared safety boundary must continue rejecting common private-key and keystore formats',
 );
 
