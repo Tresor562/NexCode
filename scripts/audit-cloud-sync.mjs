@@ -49,12 +49,16 @@ requirePattern(
   'Transient cloud failures must retain bounded exponential backoff.',
 );
 requirePattern(
-  /finally \{[\s\S]*pushInFlight = false;[\s\S]*\}/,
-  'Cloud sync must always release its in-flight lock, including account changes during reconciliation.',
+  /let activeFlush: Promise<boolean> \| null = null;/,
+  'Cloud sync must retain the active reconciliation promise instead of using a lossy boolean lock.',
 );
 requirePattern(
-  /if \(latestState\) queueFlush\(FOLLOW_UP_DELAY_MS\);/,
-  'A successful push must immediately follow up with any newer queued snapshot.',
+  /async function flushLatestState\(\): Promise<boolean> \{[\s\S]*if \(activeFlush\) return activeFlush;[\s\S]*activeFlush = flush;[\s\S]*finally \{[\s\S]*if \(activeFlush === flush\) activeFlush = null;/,
+  'Cloud sync must share in-flight work and always release the active reconciliation promise.',
+);
+requirePattern(
+  /finally \{[\s\S]*const deferredDelay = deferredFlushDelayMs;[\s\S]*if \(latestState && !pendingPush\) \{[\s\S]*queueFlush\(deferredDelay \?\? FOLLOW_UP_DELAY_MS\);/,
+  'A settled push must schedule any newer queued snapshot while preserving deferred retry timing.',
 );
 
 requirePattern(
@@ -88,4 +92,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, remote reconciliation, account-scoped queueing, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, and follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, remote reconciliation, account-scoped queueing, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
