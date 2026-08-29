@@ -25,6 +25,18 @@ requirePattern(
   'Cloud scheduling must enqueue the immutable state snapshot rather than the caller-owned object reference.',
 );
 requirePattern(
+  /const MAX_PUSH_DELAY_MS = 60_000;[\s\S]*function normalizeFlushDelay\(value: unknown, fallback = DEFAULT_PUSH_DELAY_MS\): number \{[\s\S]*Number\.isFinite\(value\)[\s\S]*Math\.min\(MAX_PUSH_DELAY_MS, Math\.floor\(value\)\)/,
+  'Cloud scheduling delays must reject non-finite input and remain bounded before reaching setTimeout.',
+);
+requirePattern(
+  /function queueFlush\(delayMs: number\): void \{[\s\S]*const safeDelay = normalizeFlushDelay\(delayMs, FOLLOW_UP_DELAY_MS\);[\s\S]*setTimeout\([\s\S]*safeDelay\);/,
+  'Every queued cloud flush, including retry and handoff paths, must use a sanitized finite delay.',
+);
+requirePattern(
+  /export function scheduleCloudStatePush\(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS\): void \{[\s\S]*queueFlush\(normalizeFlushDelay\(delayMs\)\);/,
+  'Caller-provided debounce delays must be normalized before scheduling cloud state.',
+);
+requirePattern(
   /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*await pushCloudState\(reconciled\.session, reconciled\.state\);/,
   'Cloud pushes must reconcile the queued snapshot with the latest Supabase state before writing, so another device\'s newer progress is not blindly overwritten.',
 );
@@ -92,4 +104,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, remote reconciliation, account-scoped queueing, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, account-scoped queueing, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
