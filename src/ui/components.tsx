@@ -1,19 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { shadows, theme } from './theme';
 import { useMotionPreferences } from './motionPreferences';
+import { createLearningFeedbackGate, LearningImpactTone } from './learningFeedback';
 
 type CardTone = 'default' | 'primary' | 'success';
 type PillTone = 'neutral' | 'success' | 'primary' | 'warning';
-type HapticTone = 'light' | 'medium';
+type HapticTone = LearningImpactTone;
 
 const SHARED_TOUCH_HIT_SLOP = 8;
-
-function fireImpactHaptic(tone: HapticTone) {
-  const style = tone === 'medium' ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light;
-  void Haptics.impactAsync(style).catch(() => undefined);
-}
 
 export function Card({ children, style, tone = 'default' }: { children: React.ReactNode; style?: ViewStyle | ViewStyle[]; tone?: CardTone }) {
   return <View style={[styles.card, tone === 'primary' && styles.cardPrimary, tone === 'success' && styles.cardSuccess, style]}>{children}</View>;
@@ -84,6 +79,7 @@ function TactileButton({
 }) {
   const scale = useRef(new Animated.Value(1)).current;
   const depth = useRef(new Animated.Value(0)).current;
+  const feedback = useRef(createLearningFeedbackGate()).current;
   const { reduceMotion, appActive } = useMotionPreferences();
 
   useEffect(() => {
@@ -135,7 +131,7 @@ function TactileButton({
 
   const handlePress = () => {
     if (disabled) return;
-    if (appActive) fireImpactHaptic(haptic);
+    feedback.impact(appActive, haptic);
     onPress();
   };
 
