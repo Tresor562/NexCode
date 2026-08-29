@@ -68,15 +68,22 @@ export function nextProjectStep(project: GuidedProject, progress: number) {
   const safeProgress = typeof progress === 'number' && Number.isFinite(progress)
     ? Math.max(0, Math.min(100, progress))
     : 0;
+  const stepCount = project.steps.length;
+  const complete = safeProgress >= 100;
   // Progress is persisted as a rounded percentage (e.g. 33/67 for 3 steps).
-  // Reconstruct the completed step count with the same rounding semantics so a
-  // saved 33% project restores to 1/3 instead of falling back to 0/3.
-  const completed = project.steps.length
-    ? Math.min(project.steps.length, Math.max(0, Math.round((safeProgress / 100) * project.steps.length)))
+  // Reconstruct the completed step count with the same rounding semantics, but
+  // never infer the final step from a merely near-complete percentage. This
+  // keeps completedSteps, nextStep and complete logically consistent after
+  // restoring old/local/cloud progress snapshots.
+  const roundedCompleted = stepCount
+    ? Math.max(0, Math.round((safeProgress / 100) * stepCount))
+    : 0;
+  const completed = stepCount
+    ? Math.min(complete ? stepCount : Math.max(0, stepCount - 1), roundedCompleted)
     : 0;
   return {
     completedSteps: completed,
-    nextStep: project.steps[Math.min(completed, project.steps.length - 1)],
-    complete: safeProgress >= 100,
+    nextStep: complete || stepCount === 0 ? undefined : project.steps[completed],
+    complete,
   };
 }
