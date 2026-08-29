@@ -13,8 +13,13 @@ assert.match(source, /project: \{ xp: 40, nexCoins: 8 \}/, 'project reward must 
 assert.match(source, /boss: \{ xp: 45, nexCoins: 9 \}/, 'boss reward must remain the highest completion reward');
 assert.match(source, /if \(!Number\.isFinite\(durationMin\)\) return 1;/, 'invalid lesson duration must never poison progress totals');
 assert.match(source, /Math\.max\(1, Math\.min\(15, Math\.round\(durationMin\)\)\)/, 'credited learning minutes must remain bounded');
+assert.match(source, /if \(!Number\.isInteger\(selectedIndex\)\) return null;/, 'non-integer lesson answer indices must be treated as no-answer');
+assert.match(source, /selectedIndex as number\) < 0 \|\| \(selectedIndex as number\) >= lesson\.choices\.length/, 'out-of-range lesson answer indices must be rejected before mastery evidence is recorded');
+assert.match(source, /const answerIndex = normalizeSelectedIndex\(lesson, selectedIndex\);/, 'lesson answer recording must normalize the UI selection first');
+assert.match(source, /const correct = answerIndex !== null && answerIndex === lesson\.correctIndex;/, 'only a valid normalized choice may be considered correct');
+assert.match(source, /inferErrorTag\(lesson, answerIndex\)/, 'error evidence must use the normalized answer index');
 assert.match(source, /if \(state\.completedLessons\.includes\(lesson\.id\)\) return state;/, 'lesson completion rewards must be idempotent');
 assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'learning completion must pass through the shared streak/daily-goal reward engine');
 assert.match(source, /completedLessons: \[\.\.\.rewarded\.completedLessons, lesson\.id\]/, 'rewarded lessons must be persisted as completed atomically with the reward state');
 
-console.log('Learning rewards audit OK: typed reward balance, finite bounded minutes and idempotent completion are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices and idempotent completion are enforced.');
