@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Linking, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import NexCodeApp from './NexCodeApp';
 import { LaunchScreen } from './LaunchScreen';
 import { AuthScreen } from './AuthScreen';
@@ -20,6 +20,7 @@ import {
   signInWithPassword,
   signUpWithPassword,
 } from '../lib/cloudAccount';
+import { flushCloudStateNow } from '../lib/cloudSync';
 import { theme } from './theme';
 
 export default function RootApp() {
@@ -68,6 +69,14 @@ export default function RootApp() {
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!cloudEnabled) return;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') void flushCloudStateNow();
+    });
+    return () => subscription.remove();
+  }, [cloudEnabled]);
 
   useEffect(() => {
     if (!launched || !cloudEnabled || !session || recoverySession) return;
