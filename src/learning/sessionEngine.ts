@@ -27,6 +27,12 @@ const completionRewards: Readonly<Record<ActivityKind, Readonly<Omit<LearningCom
   project: { xp: 40, nexCoins: 8 },
 };
 
+function normalizeSelectedIndex(lesson: Lesson, selectedIndex: number | null): number | null {
+  if (!Number.isInteger(selectedIndex)) return null;
+  if ((selectedIndex as number) < 0 || (selectedIndex as number) >= lesson.choices.length) return null;
+  return selectedIndex;
+}
+
 function inferErrorTag(lesson: Lesson, selectedIndex: number | null) {
   const skill = lesson.skillIds?.[0] ?? lesson.id;
   if (selectedIndex === null) return `${skill}.no-answer`;
@@ -62,9 +68,10 @@ export function recordLessonAnswer(
   selectedIndex: number | null,
   now = new Date(),
 ): AttemptResult {
-  const correct = selectedIndex === lesson.correctIndex;
+  const answerIndex = normalizeSelectedIndex(lesson, selectedIndex);
+  const correct = answerIndex !== null && answerIndex === lesson.correctIndex;
   const attempts = (state.lessonAttempts[lesson.id] ?? 0) + 1;
-  const errorTag = correct ? undefined : inferErrorTag(lesson, selectedIndex);
+  const errorTag = correct ? undefined : inferErrorTag(lesson, answerIndex);
   const mastery = recordSkillAttempt(state.mastery, lesson, correct, now, errorTag);
   const previousScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (state.mastery[id]?.score ?? 0), 0);
   const nextScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0);
