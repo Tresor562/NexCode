@@ -63,10 +63,28 @@ const masteryState = (htmlScore, cssScore) => ({
 }
 
 {
+  const result = projectReadiness(project, masteryState(10, 10), -25);
+  assert.equal(result.ready, false, 'negative gates must fall back to the product default');
+  assert.deepEqual(result.weakSkills, ['html', 'css']);
+}
+
+{
+  const result = projectReadiness(project, masteryState(60, 60), 140);
+  assert.equal(result.ready, true, 'gates above 100 must fall back to the product default');
+  assert.deepEqual(result.weakSkills, []);
+}
+
+{
+  const result = projectReadiness(project, masteryState(0, 0), 0);
+  assert.equal(result.ready, true, 'an explicit zero gate remains a valid caller choice');
+  assert.deepEqual(result.weakSkills, []);
+}
+
+{
   const result = projectReadiness(project, { html: { skillId: 'html', score: 90 } }, 55);
   assert.equal(result.ready, false, 'missing mastery must still block readiness');
   assert.deepEqual(result.missingSkills, ['css']);
   assert.equal(result.score, 45, 'missing mastery contributes zero to the readiness summary');
 }
 
-console.log('Project engine readiness audit OK: invalid mastery is bounded and invalid gates fall back safely.');
+console.log('Project engine readiness audit OK: mastery is bounded and malformed gates fall back safely.');
