@@ -30,20 +30,31 @@ function normalizeSource(content: string): string {
     .replace(/\n+$/g, '');
 }
 
+function portableWorkspaceKey(filename: string): string {
+  return filename.normalize('NFC').toLocaleLowerCase('en-US');
+}
+
 function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolean {
   const starterFiles = mission.starterFiles ?? {};
   const starterEntries = Object.entries(starterFiles);
 
   if (starterEntries.length) {
-    const starterNames = new Set(starterEntries.map(([filename]) => filename));
-    const changedStarterFile = starterEntries.some(([filename, starterContent]) => (
-      normalizeSource(draft.files[filename] ?? '') !== normalizeSource(starterContent)
-    ));
-    if (changedStarterFile) return true;
+    const starterByKey = new Map(starterEntries.map(([filename, content]) => [portableWorkspaceKey(filename), content]));
+    const seenStarterKeys = new Set<string>();
 
-    return Object.entries(draft.files).some(([filename, content]) => (
-      !starterNames.has(filename) && normalizeSource(content).trim().length > 0
-    ));
+    for (const [filename, content] of Object.entries(draft.files)) {
+      const key = portableWorkspaceKey(filename);
+      const starterContent = starterByKey.get(key);
+      if (starterContent === undefined) {
+        if (normalizeSource(content).trim().length > 0) return true;
+        continue;
+      }
+
+      seenStarterKeys.add(key);
+      if (normalizeSource(content) !== normalizeSource(starterContent)) return true;
+    }
+
+    return starterEntries.some(([filename]) => !seenStarterKeys.has(portableWorkspaceKey(filename)));
   }
 
   const starterCode = mission.starterCode;
