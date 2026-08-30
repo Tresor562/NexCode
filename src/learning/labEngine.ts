@@ -199,17 +199,24 @@ function containsLikelySecret(files: Record<string, string>) {
 function meaningfulChange(mission: LabMission, files: Record<string, string>) {
   const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
   const normalized = (value: string) => value.replace(/\s+/g, ' ').trim();
-  const starterNames = new Set(Object.keys(starterFiles));
+  const starterByKey = new Map(
+    Object.entries(starterFiles).map(([filename, content]) => [workspaceCollisionKey(filename), content]),
+  );
+  const seenStarterKeys = new Set<string>();
 
   for (const [filename, content] of Object.entries(files)) {
-    if (!starterNames.has(filename)) {
+    const key = workspaceCollisionKey(filename);
+    const starterContent = starterByKey.get(key);
+    if (starterContent === undefined) {
       if (normalized(content).length >= 3) return true;
       continue;
     }
-    if (normalized(content) !== normalized(starterFiles[filename] ?? '')) return true;
+
+    seenStarterKeys.add(key);
+    if (normalized(content) !== normalized(starterContent)) return true;
   }
 
-  return Object.keys(starterFiles).some((filename) => files[filename] === undefined);
+  return Object.keys(starterFiles).some((filename) => !seenStarterKeys.has(workspaceCollisionKey(filename)));
 }
 
 function languageStructureCheck(language: LabMission['language'], files: Record<string, string>) {
@@ -258,41 +265,39 @@ function completenessCheck(language: LabMission['language'], files: Record<strin
   return nonEmptyFiles.length >= 1 && nonEmptyFiles.some(([, value]) => value.trim().length >= 20);
 }
 
+function successCriteriaChecks(mission: LabMission, files: Record<string, string>) {
+  const criteria = mission.successCriteria ?? [];
+  if (!criteria.length) return [];
+  return criteria.map((criterion, index) => {
+    const lower = criterion.toLowerCase();
+    let passed = true;
+    if (lower.includes('modification') || lower.includes('départ') || lower.includes('starter')) passed = meaningfulChange(mission, files);
+    else if (lower.includes('structure') || lower.includes('langage')) passed = languageStructureCheck(mission.language, files);
+    else if (lower.includes('secret') || lower.includes('token')) passed = !containsLikelySecret(files);
+    else if (lower.includes('complet') || lower.includes('relire') || lower.includes('expliqu')) passed = completenessCheck(mission.language, files);
+    return { id: `criterion-${index + 1}`, label: criterion, passed };
+  });
+}
+
 export function validateLabDraft(mission: LabMission, draft: LabDraft): LabValidation {
-  const allText = Object.values(draft.files).join('\n').trim();
-  const nonEmpty = allText.length >= 20;
-  const modified = meaningfulChange(mission, draft.files);
-  const structureValid = languageStructureCheck(mission.language, draft.files);
-  const secretSafe = !containsLikelySecret(draft.files);
-  const completeEnough = completenessCheck(mission.language, draft.files);
-
   const checks = [
-    { id: 'modified', label: mission.successCriteria[0] ?? 'Modification réelle', passed: modified },
-    { id: 'structure', label: mission.successCriteria[1] ?? 'Structure valide', passed: structureValid },
-    { id: 'secret-safe', label: mission.successCriteria[2] ?? 'Aucun secret réel', passed: secretSafe },
-    { id: 'complete', label: mission.successCriteria[3] ?? 'Travail suffisamment complet', passed: nonEmpty && completeEnough },
+    { id: 'mission', label: 'Mission correcte', passed: draft.missionId === mission.id },
+    { id: 'language', label: 'Langage correct', passed: draft.language === mission.language },
+    { id: 'secret', label: 'Aucun secret évident', passed: !containsLikelySecret(draft.files) },
+    { id: 'structure', label: 'Structure cohérente', passed: languageStructureCheck(mission.language, draft.files) },
+    { id: 'complete', label: 'Travail suffisamment complet', passed: completenessCheck(mission.language, draft.files) },
+    ...successCriteriaChecks(mission, draft.files),
   ];
-
-  const passedCriteria = checks.filter((item) => item.passed).map((item) => item.label);
-  const missingCriteria = checks.filter((item) => !item.passed).map((item) => item.label);
-  const passed = checks.every((item) => item.passed);
-
+  const passedCriteria = checks.filter((check) => check.passed).map((check) => check.label);
+  const missingCriteria = checks.filter((check) => !check.passed).map((check) => check.label);
+  const passed = missingCriteria.length === 0;
   return {
     passed,
     passedCriteria,
     missingCriteria,
-    checks,
     feedback: passed
-      ? 'Mission validée localement : modification réelle, structure cohérente, travail complet et aucun secret évident détecté.'
-      : `À améliorer avant validation : ${missingCriteria.join(' • ')}`,
-  };
-}
-
-export function stampLabValidation(draft: LabDraft, result: LabValidation): LabDraft {
-  return {
-    ...draft,
-    lastValidatedAt: new Date().toISOString(),
-    passedCriteria: result.passedCriteria,
-    updatedAt: new Date().toISOString(),
+      ? 'Mission validée. Tu peux retourner au parcours et expliquer ce que tu as changé.'
+      : `À corriger : ${missingCriteria.slice(0, 2).join(' · ')}`,
+    checks,
   };
 }
