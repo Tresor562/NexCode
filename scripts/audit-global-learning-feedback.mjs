@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../src/ui/learningFeedback.ts', import.meta.url), 'utf8');
+const lessonSource = fs.readFileSync(new URL('../src/ui/LessonFlowScreen.tsx', import.meta.url), 'utf8');
 
 const expectations = [
   ['shared cooldown map', 'const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();'],
@@ -50,4 +51,27 @@ if (/player\.seekTo\(0\)\.then\(\(\) => player\.play\(\)\)/.test(source)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: cooldowns and cross-player stale-audio supersession are enforced across controls.');
+const lessonExpectations = [
+  ['lesson shared gate import', "createLearningFeedbackGate"],
+  ['lesson gate instance', 'const feedback = useRef(createLearningFeedbackGate()).current;'],
+  ['lesson sound routing', 'feedback.sound(appActive, player);'],
+  ['lesson selection routing', 'feedback.selection(appActive);'],
+  ['lesson notification routing', 'feedback.notification(appActive, tone);'],
+  ['lesson impact routing', 'feedback.impact(appActive, tone);'],
+];
+const missingLesson = lessonExpectations.filter(([, marker]) => !lessonSource.includes(marker));
+if (missingLesson.length) {
+  console.error('Global learning feedback audit failed in LessonFlowScreen:');
+  for (const [label] of missingLesson) console.error(`- missing ${label}`);
+  process.exit(1);
+}
+if (lessonSource.includes("from 'expo-haptics'")) {
+  console.error('Global learning feedback audit failed: LessonFlowScreen must not bypass the shared haptic gate.');
+  process.exit(1);
+}
+if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
+  console.error('Global learning feedback audit failed: LessonFlowScreen must not bypass stale-audio supersession.');
+  process.exit(1);
+}
+
+console.log('Global learning feedback audit passed: cooldowns, lesson-level routing, and cross-player stale-audio supersession are enforced across controls.');
