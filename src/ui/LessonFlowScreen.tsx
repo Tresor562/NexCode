@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { useAudioPlayer } from 'expo-audio';
 import { Course, Lesson } from '../data/curriculumCore';
 import { masterySnapshot } from '../learning/masteryEngine';
 import { LocalState } from '../lib/localState';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
+import { createLearningFeedbackGate, LearningImpactTone, LearningNotificationTone } from './learningFeedback';
 import { useMotionPreferences } from './motionPreferences';
 import { theme } from './theme';
 
@@ -42,6 +42,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const [transferDraft, setTransferDraft] = useState('');
   const { reduceMotion, appActive } = useMotionPreferences();
   const scale = useRef(new Animated.Value(1)).current;
+  const feedback = useRef(createLearningFeedbackGate()).current;
   const successPlayer = useAudioPlayer(successSound);
   const errorPlayer = useAudioPlayer(errorSound);
   const tapPlayer = useAudioPlayer(tapSound);
@@ -86,23 +87,19 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   }
 
   function sound(player: ReturnType<typeof useAudioPlayer>) {
-    if (!appActive) return;
-    player.seekTo(0).then(() => player.play()).catch(() => undefined);
+    feedback.sound(appActive, player);
   }
 
   function selectionFeedback() {
-    if (!appActive) return;
-    Haptics.selectionAsync().catch(() => undefined);
+    feedback.selection(appActive);
   }
 
-  function notificationFeedback(type: Haptics.NotificationFeedbackType) {
-    if (!appActive) return;
-    Haptics.notificationAsync(type).catch(() => undefined);
+  function notificationFeedback(tone: LearningNotificationTone) {
+    feedback.notification(appActive, tone);
   }
 
-  function impactFeedback(style: Haptics.ImpactFeedbackStyle) {
-    if (!appActive) return;
-    Haptics.impactAsync(style).catch(() => undefined);
+  function impactFeedback(tone: LearningImpactTone) {
+    feedback.impact(appActive, tone);
   }
 
   function next() {
@@ -137,11 +134,11 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
       setRecorded(true);
     }
     if (correct) {
-      notificationFeedback(Haptics.NotificationFeedbackType.Success);
+      notificationFeedback('success');
       sound(successPlayer);
       pulse();
     } else {
-      notificationFeedback(Haptics.NotificationFeedbackType.Error);
+      notificationFeedback('error');
       sound(errorPlayer);
     }
   }
@@ -340,7 +337,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
             ) : null}
             <View style={styles.flags}><Pill label="Code" tone="primary" /><Pill label="Preview" tone="success" /><Pill label="Console" tone="warning" /><Pill label="Tools" /></View>
           </Card>
-          <PrimaryButton label="Ouvrir le Lab" icon="⌘" onPress={() => { impactFeedback(Haptics.ImpactFeedbackStyle.Medium); onOpenLab(); }} />
+          <PrimaryButton label="Ouvrir le Lab" icon="⌘" onPress={() => { impactFeedback('medium'); onOpenLab(); }} />
         </View>
       ) : null}
 
