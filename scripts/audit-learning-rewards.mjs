@@ -28,8 +28,15 @@ assert.match(localStateSource, /requestedNow instanceof Date && Number\.isFinite
 assert.match(localStateSource, /const minutes = finiteNumber\(reward\.minutes, 0, 0, 240\);/, 'reward minutes must reject NaN or Infinity and remain bounded per activity');
 assert.match(localStateSource, /const xp = finiteInteger\(reward\.xp, 0, 0, 1_000_000\);/, 'XP rewards must be finite non-negative integers with a corruption ceiling');
 assert.match(localStateSource, /const nexCoins = finiteInteger\(reward\.nexCoins, 0, 0, 1_000_000\);/, 'NexCoin rewards must be finite non-negative integers with a corruption ceiling');
-assert.match(localStateSource, /xp: active\.xp \+ xp \+ \(shouldGrantGoalBonus \? 40 : 0\)/, 'progression totals must use normalized XP rather than raw reward input');
-assert.match(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins \+ \(shouldGrantGoalBonus \? 20 : 0\)/, 'wallet totals must use normalized NexCoins rather than raw reward input');
+assert.match(localStateSource, /function safeProgressTotal\(current: unknown, increment: number\): number/, 'cumulative progression must use a shared safe-total helper');
+assert.match(localStateSource, /Math\.min\(Number\.MAX_SAFE_INTEGER, normalizedCurrent \+ normalizedIncrement\)/, 'cumulative progression must saturate before exceeding safe integer precision');
+assert.match(localStateSource, /const dailyGoal = finiteInteger\(active\.dailyGoal, initialState\.dailyGoal, 5, 240\);/, 'runtime daily-goal state must be normalized before reward calculations');
+assert.match(localStateSource, /const currentDailyCompleted = finiteNumber\(active\.dailyCompleted, 0, 0, dailyGoal\);/, 'runtime daily progress must be normalized before adding learning minutes');
+assert.match(localStateSource, /xp: safeProgressTotal\(active\.xp, xpAward\)/, 'XP totals must use saturating safe addition');
+assert.match(localStateSource, /nexCoins: safeProgressTotal\(active\.nexCoins, nexCoinAward\)/, 'NexCoin totals must use saturating safe addition');
+assert.match(localStateSource, /totalLearningMinutes: safeProgressTotal\(active\.totalLearningMinutes, minutes\)/, 'learning-minute totals must use saturating safe addition');
+assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP addition must not bypass safe integer bounds');
+assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, finite economy inputs and idempotent completion are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, saturating progression totals and idempotent completion are enforced.');
