@@ -30,6 +30,15 @@ function safeSessionDate(value: Date) {
   return Number.isFinite(value.getTime()) ? value : new Date();
 }
 
+function snapshotLabDraft(draft: LabDraft, updatedAt: string): LabDraft {
+  return {
+    ...draft,
+    files: { ...draft.files },
+    passedCriteria: draft.passedCriteria ? [...draft.passedCriteria] : undefined,
+    updatedAt,
+  };
+}
+
 export function startLabSession(courseId: string, lesson: Lesson, stored?: LabDraft, now = new Date()): LabSession {
   const sessionDate = safeSessionDate(now);
   return {
@@ -49,7 +58,7 @@ export function autosaveLabSession(session: LabSession, draft: LabDraft, now = n
   const savedAt = safeSessionDate(now).toISOString();
   return {
     ...session,
-    workspace: { ...session.workspace, draft: { ...draft, updatedAt: savedAt } },
+    workspace: { ...session.workspace, draft: snapshotLabDraft(draft, savedAt) },
     lastAutosaveAt: savedAt,
   };
 }
