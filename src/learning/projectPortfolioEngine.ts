@@ -34,6 +34,19 @@ function canonicalProjectSkills(skills: string[]): string[] {
   return canonical;
 }
 
+function canonicalProofSkillIds(skillIds: string[]): string[] {
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const raw of skillIds) {
+    const skillId = raw.trim();
+    const identity = normalize(skillId);
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    canonical.push(skillId);
+  }
+  return canonical;
+}
+
 function boundedPercent(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
 }
@@ -137,6 +150,10 @@ export function buildPortfolioProof(
 
 export function portfolioSkillCoverage(proofs: PortfolioProof[]) {
   const covered = new Map<string, number>();
-  for (const proof of proofs) for (const skillId of proof.skillIds) covered.set(skillId, (covered.get(skillId) ?? 0) + 1);
+  for (const proof of proofs) {
+    for (const skillId of canonicalProofSkillIds(proof.skillIds)) {
+      covered.set(skillId, (covered.get(skillId) ?? 0) + 1);
+    }
+  }
   return [...covered.entries()].map(([skillId, projectCount]) => ({ skillId, projectCount })).sort((a, b) => b.projectCount - a.projectCount);
 }
