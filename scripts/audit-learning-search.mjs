@@ -12,7 +12,18 @@ function requirePattern(pattern, message) {
 requirePattern(/normalize\('NFKD'\)/, 'Learning search must use compatibility-aware normalization so equivalent text forms rank consistently.');
 requirePattern(/\.replace\(\/\\s\+\/g, ' '\)[\s\S]*\.trim\(\)/, 'Learning search normalization must collapse incidental whitespace so phrase ranking stays stable across pasted or spaced queries.');
 requirePattern(/function tokenizeSearch\([\s\S]*new Set\([\s\S]*split\(\/\[\^\\p\{L\}\\p\{N\}\+#\._-\]\+\/u\)[\s\S]*filter\(Boolean\)/, 'Learning search must tokenize natural multi-term queries, preserve programming tokens, and deduplicate repeated intent terms.');
-requirePattern(/const PROGRAMMING_IDENTITY_TERMS = new Set\(\[[\s\S]*'java'[\s\S]*'javascript'[\s\S]*'c\+\+'[\s\S]*'c#'[\s\S]*\]\);/, 'Programming language identities must be explicitly protected from substring collisions such as Java versus JavaScript.');
+
+const identitySetMatch = source.match(/const PROGRAMMING_IDENTITY_TERMS = new Set\(\[([\s\S]*?)\]\);/);
+if (!identitySetMatch) {
+  throw new Error('Programming language identities must be explicitly protected from substring collisions.');
+}
+const identitySetSource = identitySetMatch[1];
+for (const identity of ['java', 'javascript', 'c++', 'c#', 'go', 'r', 'rust', 'typescript']) {
+  if (!identitySetSource.includes(`'${identity}'`)) {
+    throw new Error(`Programming language identity ${identity} must be protected from substring collisions.`);
+  }
+}
+
 requirePattern(/function fieldMatchesTerm\([\s\S]*PROGRAMMING_IDENTITY_TERMS\.has\(term\)[\s\S]*tokenizeSearch\(value\)\.includes\(term\)/, 'Protected programming language identities must match canonical whole tokens rather than arbitrary substrings.');
 requirePattern(/normalizedFields\.some\(\(field\) => fieldMatchesTerm\(field\.value, term\)\)/, 'All-term learning search gating must use language-aware identity matching.');
 requirePattern(/if \(fieldMatchesTerm\(field\.value, term\)\) bestWeight = Math\.max\(bestWeight, field\.weight\);/, 'Weighted relevance scoring must use the same language-aware identity matching as search gating.');
