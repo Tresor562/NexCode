@@ -44,6 +44,11 @@ function safeLearningMinutes(durationMin: number): number {
   return Math.max(1, Math.min(15, Math.round(durationMin)));
 }
 
+function safeAttemptCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(10_000, Math.floor(value)));
+}
+
 export function learningCompletionReward(lesson: Lesson): LearningCompletionReward {
   const reward = completionRewards[lesson.activityKind ?? 'learn'];
   return {
@@ -70,7 +75,7 @@ export function recordLessonAnswer(
 ): AttemptResult {
   const answerIndex = normalizeSelectedIndex(lesson, selectedIndex);
   const correct = answerIndex !== null && answerIndex === lesson.correctIndex;
-  const attempts = (state.lessonAttempts[lesson.id] ?? 0) + 1;
+  const attempts = Math.min(10_000, safeAttemptCount(state.lessonAttempts[lesson.id]) + 1);
   const errorTag = correct ? undefined : inferErrorTag(lesson, answerIndex);
   const mastery = recordSkillAttempt(state.mastery, lesson, correct, now, errorTag);
   const previousScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (state.mastery[id]?.score ?? 0), 0);
