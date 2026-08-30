@@ -22,15 +22,18 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
 // duplicate vibrations or sounds just because each control owns a different gate.
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 
-// Audio seeking is asynchronous. A slower seek from feedback A can resolve after
-// feedback B has already started and replay the obsolete cue. Keep one generation
-// per player so only the newest requested replay is allowed to call play().
-const sharedAudioGeneration = new WeakMap<ReplayableAudioPlayer, number>();
+// Audio seeking is asynchronous. A slower seek from one cue can resolve after a
+// newer cue has already been requested. The generation is global rather than
+// per-player because success/error/tap cues use different players but still share
+// one audible feedback channel from the learner's perspective. Only the newest
+// requested cue may call play().
+let sharedAudioRequestGeneration = 0;
 
-function supersedeAudio(player: ReplayableAudioPlayer): number {
-  const generation = (sharedAudioGeneration.get(player) ?? 0) + 1;
-  sharedAudioGeneration.set(player, generation);
-  return generation;
+function supersedeAudio(): number {
+  sharedAudioRequestGeneration = sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER
+    ? 1
+    : sharedAudioRequestGeneration + 1;
+  return sharedAudioRequestGeneration;
 }
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
@@ -63,13 +66,13 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     },
     sound(appActive: boolean, player: ReplayableAudioPlayer) {
       // Supersede first, even when this request is rejected by the foreground or
-      // cooldown gate. A later interaction must be able to invalidate an older
-      // seek that is still resolving rather than letting stale audio leak through.
-      const generation = supersedeAudio(player);
+      // cooldown gate. A later interaction must invalidate any older seek still
+      // resolving, including a seek belonging to a different cue/player.
+      const generation = supersedeAudio();
       if (!canTrigger('sound', appActive)) return;
       player.seekTo(0)
         .then(() => {
-          if (sharedAudioGeneration.get(player) !== generation) return;
+          if (sharedAudioRequestGeneration !== generation) return;
           player.play();
         })
         .catch(() => undefined);
