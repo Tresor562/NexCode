@@ -110,4 +110,32 @@ const masteryState = (htmlScore, cssScore) => ({
   assert.equal(result.score, 50, 'repeated weak skills must not overweight the readiness score');
 }
 
-console.log('Project engine readiness audit OK: mastery, gates and prerequisite identities stay canonical and bounded.');
+{
+  const emptyProject = { ...project, skills: [] };
+  const result = projectReadiness(emptyProject, masteryState(100, 100), 0);
+  assert.equal(result.ready, false, 'a guided project with no prerequisite skills must fail closed');
+  assert.equal(result.score, 0, 'a prerequisite-free malformed project cannot claim mastery readiness');
+  assert.deepEqual(result.missingSkills, []);
+  assert.deepEqual(result.weakSkills, []);
+}
+
+{
+  const malformedProject = { ...project, skills: [null, 42, '  ', 'html', undefined, 'html'] };
+  const result = projectReadiness(malformedProject, masteryState(80, 20), 55);
+  assert.equal(result.ready, true, 'invalid runtime skill entries must be ignored without blocking valid prerequisites');
+  assert.equal(result.score, 80, 'only usable canonical prerequisites may affect readiness');
+  assert.deepEqual(result.missingSkills, []);
+  assert.deepEqual(result.weakSkills, []);
+}
+
+{
+  const missingRuntimeSkills = { ...project, skills: null };
+  const result = projectReadiness(missingRuntimeSkills, masteryState(100, 100), 0);
+  assert.equal(result.ready, false, 'a malformed non-array skills payload must fail closed instead of throwing or unlocking');
+  assert.equal(result.score, 0);
+}
+
+assert.match(source, /const rawSkills: unknown\[\] = Array\.isArray\(project\.skills\) \? project\.skills : \[\];/);
+assert.match(source, /ready: hasPrerequisites && missingSkills\.length === 0 && weakSkills\.length === 0/);
+
+console.log('Project engine readiness audit OK: mastery, gates and prerequisite identities stay canonical, bounded and fail closed when malformed.');
