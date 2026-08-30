@@ -175,17 +175,28 @@ export function lessonExerciseCoverage(lesson: Lesson) {
   return { kinds, missing, varietyScore: Math.round((kinds.length / supportedExerciseKinds.length) * 100) };
 }
 
+function normalizeAttemptCount(attempts: number) {
+  if (!Number.isFinite(attempts)) return 0;
+  return Math.max(0, Math.floor(attempts));
+}
+
+function normalizeHintThreshold(value: number | undefined) {
+  if (value === undefined || !Number.isFinite(value)) return 1;
+  return Math.max(1, Math.floor(value));
+}
+
 export function nextHint(exercise: RichExercise, attempts: number) {
   const hints = exercise.hints ?? [];
   if (!hints.length) return undefined;
-  const threshold = Math.max(1, exercise.maxAttemptsBeforeHint ?? 1);
-  if (attempts < threshold) return undefined;
-  const index = Math.min(hints.length - 1, Math.floor((attempts - threshold) / threshold));
+  const safeAttempts = normalizeAttemptCount(attempts);
+  const threshold = normalizeHintThreshold(exercise.maxAttemptsBeforeHint);
+  if (safeAttempts < threshold) return undefined;
+  const index = Math.min(hints.length - 1, Math.floor((safeAttempts - threshold) / threshold));
   return hints[index];
 }
 
 export function exerciseScaffold(exercise: RichExercise, attempts: number, evaluation?: ExerciseEvaluation): ExerciseScaffold {
-  const safeAttempts = Math.max(0, attempts);
+  const safeAttempts = normalizeAttemptCount(attempts);
   const hint = nextHint(exercise, safeAttempts);
 
   if (evaluation?.passed) {
