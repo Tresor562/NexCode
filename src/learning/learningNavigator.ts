@@ -19,6 +19,24 @@ export type LearningSearchResult = {
   score: number;
 };
 
+const PROGRAMMING_IDENTITY_TERMS = new Set([
+  'c',
+  'c++',
+  'c#',
+  'dart',
+  'go',
+  'java',
+  'javascript',
+  'js',
+  'kotlin',
+  'python',
+  'r',
+  'rust',
+  'swift',
+  'ts',
+  'typescript',
+]);
+
 function normalize(value: string) {
   return value
     .normalize('NFKD')
@@ -37,6 +55,11 @@ function tokenizeSearch(value: string) {
   )];
 }
 
+function fieldMatchesTerm(value: string, term: string) {
+  if (!PROGRAMMING_IDENTITY_TERMS.has(term)) return value.includes(term);
+  return tokenizeSearch(value).includes(term);
+}
+
 function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   if (!nextReviewAt) return true;
   const nextReviewMs = Date.parse(nextReviewAt);
@@ -52,18 +75,18 @@ function weightedSearchScore(
 ) {
   if (!terms.length) return 1;
   const normalizedFields = fields.map(({ value, weight }) => ({ value: normalize(value), weight }));
-  const combined = normalizedFields.map((field) => field.value).join(' ');
-  if (!terms.every((term) => combined.includes(term))) return 0;
+  if (!terms.every((term) => normalizedFields.some((field) => fieldMatchesTerm(field.value, term)))) return 0;
 
   let score = 0;
   for (const term of terms) {
     let bestWeight = 0;
     for (const field of normalizedFields) {
-      if (field.value.includes(term)) bestWeight = Math.max(bestWeight, field.weight);
+      if (fieldMatchesTerm(field.value, term)) bestWeight = Math.max(bestWeight, field.weight);
     }
     score += bestWeight;
   }
 
+  const combined = normalizedFields.map((field) => field.value).join(' ');
   if (phrase && normalizedFields[0]?.value.includes(phrase)) score += 80;
   else if (phrase && combined.includes(phrase)) score += 35;
 
