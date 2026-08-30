@@ -12,9 +12,10 @@ const expectations = [
   ['success cooldown', "success: 180"],
   ['error cooldown', "error: 180"],
   ['sound cooldown', "sound: 90"],
-  ['shared audio generation', 'const sharedAudioGeneration = new WeakMap<ReplayableAudioPlayer, number>();'],
-  ['audio supersession', 'const generation = supersedeAudio(player);'],
-  ['stale audio guard', 'if (sharedAudioGeneration.get(player) !== generation) return;'],
+  ['global audio generation', 'let sharedAudioRequestGeneration = 0;'],
+  ['audio supersession', 'const generation = supersedeAudio();'],
+  ['cross-player stale audio guard', 'if (sharedAudioRequestGeneration !== generation) return;'],
+  ['generation overflow guard', 'sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER'],
 ];
 
 const missing = expectations.filter(([, marker]) => !source.includes(marker));
@@ -26,13 +27,13 @@ if (missing.length) {
 
 const factoryStart = source.indexOf('export function createLearningFeedbackGate');
 const sharedMapStart = source.indexOf('const sharedLastTriggeredAt');
-const sharedAudioStart = source.indexOf('const sharedAudioGeneration');
+const sharedAudioStart = source.indexOf('let sharedAudioRequestGeneration');
 if (sharedMapStart < 0 || factoryStart < 0 || sharedMapStart > factoryStart) {
   console.error('Global learning feedback audit failed: cooldown state must live outside individual gate instances.');
   process.exit(1);
 }
 if (sharedAudioStart < 0 || sharedAudioStart > factoryStart) {
-  console.error('Global learning feedback audit failed: audio replay generations must be shared across gate instances.');
+  console.error('Global learning feedback audit failed: audio replay generation must be shared across every gate and player.');
   process.exit(1);
 }
 
@@ -40,9 +41,13 @@ if (source.includes('const lastTriggeredAt = new Map<LearningFeedbackKind, numbe
   console.error('Global learning feedback audit failed: per-instance cooldown map was reintroduced.');
   process.exit(1);
 }
+if (source.includes('new WeakMap<ReplayableAudioPlayer, number>()')) {
+  console.error('Global learning feedback audit failed: per-player audio generations can allow stale cross-cue overlap.');
+  process.exit(1);
+}
 if (/player\.seekTo\(0\)\.then\(\(\) => player\.play\(\)\)/.test(source)) {
   console.error('Global learning feedback audit failed: asynchronous audio seek may not replay without a stale-generation guard.');
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: cooldowns and stale-audio supersession are enforced across controls.');
+console.log('Global learning feedback audit passed: cooldowns and cross-player stale-audio supersession are enforced across controls.');
