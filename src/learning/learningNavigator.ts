@@ -19,6 +19,11 @@ export type LearningSearchResult = {
   score: number;
 };
 
+const PROGRAMMING_IDENTITY_ALIASES = new Map([
+  ['js', 'javascript'],
+  ['ts', 'typescript'],
+]);
+
 const PROGRAMMING_IDENTITY_TERMS = new Set([
   'c',
   'c++',
@@ -27,13 +32,11 @@ const PROGRAMMING_IDENTITY_TERMS = new Set([
   'go',
   'java',
   'javascript',
-  'js',
   'kotlin',
   'python',
   'r',
   'rust',
   'swift',
-  'ts',
   'typescript',
 ]);
 
@@ -46,11 +49,15 @@ function normalize(value: string) {
     .trim();
 }
 
+function canonicalSearchToken(token: string) {
+  return PROGRAMMING_IDENTITY_ALIASES.get(token) ?? token;
+}
+
 function tokenizeSearch(value: string) {
   return [...new Set(
     normalize(value)
       .split(/[^\p{L}\p{N}+#._-]+/u)
-      .map((token) => token.trim())
+      .map((token) => canonicalSearchToken(token.trim()))
       .filter(Boolean),
   )];
 }
