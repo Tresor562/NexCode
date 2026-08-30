@@ -14,8 +14,16 @@ requirePattern(
   'Learning search must use compatibility-aware normalization so equivalent text forms rank consistently.',
 );
 requirePattern(
-  /function tokenizeSearch\([\s\S]*split\(\/\[\^\\p\{L\}\\p\{N\}\+#\._-\]\+\/u\)[\s\S]*filter\(Boolean\)/,
-  'Learning search must tokenize natural multi-term queries while preserving common programming tokens.',
+  /\.replace\(\/\\s\+\/g, ' '\)[\s\S]*\.trim\(\)/,
+  'Learning search normalization must collapse incidental whitespace so phrase ranking stays stable across pasted or spaced queries.',
+);
+requirePattern(
+  /function tokenizeSearch\([\s\S]*new Set\([\s\S]*split\(\/\[\^\\p\{L\}\\p\{N\}\+#\._-\]\+\/u\)[\s\S]*filter\(Boolean\)/,
+  'Learning search must tokenize natural multi-term queries, preserve programming tokens, and deduplicate repeated intent terms.',
+);
+requirePattern(
+  /const terms = tokenizeSearch\(query\);[\s\S]*const phrase = terms\.join\(' '\);/,
+  'Phrase ranking must be derived from canonical unique query terms instead of raw whitespace or repeated words.',
 );
 requirePattern(
   /if \(!terms\.every\(\(term\) => combined\.includes\(term\)\)\) return 0;/,
@@ -46,4 +54,4 @@ requirePattern(
   'Due-review search must distinguish existing mastery with no schedule from completely unseen skills.',
 );
 
-console.log('Learning search audit OK: multi-term intent matching, weighted pedagogy fields, phrase ranking, compatibility normalization, scalable completion lookup, and due-review mastery semantics are protected.');
+console.log('Learning search audit OK: canonical multi-term intent, stable phrase ranking, weighted pedagogy fields, compatibility normalization, scalable completion lookup, and due-review mastery semantics are protected.');
