@@ -110,6 +110,12 @@ function finiteInteger(value: unknown, fallback: number, minimum = 0, maximum = 
   return Math.floor(finiteNumber(value, fallback, minimum, maximum));
 }
 
+function safeProgressTotal(current: unknown, increment: number): number {
+  const normalizedCurrent = finiteInteger(current, 0, 0, Number.MAX_SAFE_INTEGER);
+  const normalizedIncrement = finiteInteger(increment, 0, 0, Number.MAX_SAFE_INTEGER);
+  return Math.min(Number.MAX_SAFE_INTEGER, normalizedCurrent + normalizedIncrement);
+}
+
 export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
   const requestedNow = reward.now;
   const now = requestedNow instanceof Date && Number.isFinite(requestedNow.getTime()) ? requestedNow : new Date();
@@ -117,17 +123,22 @@ export function rewardProgress(state: LocalState, reward: ProgressReward): Local
   const minutes = finiteNumber(reward.minutes, 0, 0, 240);
   const xp = finiteInteger(reward.xp, 0, 0, 1_000_000);
   const nexCoins = finiteInteger(reward.nexCoins, 0, 0, 1_000_000);
-  const dailyCompleted = Math.min(active.dailyGoal, active.dailyCompleted + minutes);
+  const dailyGoal = finiteInteger(active.dailyGoal, initialState.dailyGoal, 5, 240);
+  const currentDailyCompleted = finiteNumber(active.dailyCompleted, 0, 0, dailyGoal);
+  const dailyCompleted = Math.min(dailyGoal, currentDailyCompleted + minutes);
   const today = localDateKey(now);
-  const shouldGrantGoalBonus = dailyCompleted >= active.dailyGoal && active.dailyGoalRewardDate !== today;
+  const shouldGrantGoalBonus = dailyCompleted >= dailyGoal && active.dailyGoalRewardDate !== today;
+  const xpAward = xp + (shouldGrantGoalBonus ? 40 : 0);
+  const nexCoinAward = nexCoins + (shouldGrantGoalBonus ? 20 : 0);
 
   return {
     ...active,
-    xp: active.xp + xp + (shouldGrantGoalBonus ? 40 : 0),
-    nexCoins: active.nexCoins + nexCoins + (shouldGrantGoalBonus ? 20 : 0),
+    dailyGoal,
+    xp: safeProgressTotal(active.xp, xpAward),
+    nexCoins: safeProgressTotal(active.nexCoins, nexCoinAward),
     dailyCompleted,
     dailyGoalRewardDate: shouldGrantGoalBonus ? today : active.dailyGoalRewardDate,
-    totalLearningMinutes: active.totalLearningMinutes + minutes,
+    totalLearningMinutes: safeProgressTotal(active.totalLearningMinutes, minutes),
   };
 }
 
