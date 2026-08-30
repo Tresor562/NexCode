@@ -26,25 +26,31 @@ function labReturnSource(lesson: Lesson): LabReturnTarget['source'] {
   return 'lesson';
 }
 
+function safeSessionDate(value: Date) {
+  return Number.isFinite(value.getTime()) ? value : new Date();
+}
+
 export function startLabSession(courseId: string, lesson: Lesson, stored?: LabDraft, now = new Date()): LabSession {
+  const sessionDate = safeSessionDate(now);
   return {
-    id: `${courseId}:${lesson.id}:${now.getTime()}`,
+    id: `${courseId}:${lesson.id}:${sessionDate.getTime()}`,
     workspace: openLabWorkspace(lesson, stored),
     returnTarget: {
       courseId,
       lessonId: lesson.id,
       source: labReturnSource(lesson),
     },
-    openedAt: now.toISOString(),
+    openedAt: sessionDate.toISOString(),
     runCount: 0,
   };
 }
 
 export function autosaveLabSession(session: LabSession, draft: LabDraft, now = new Date()): LabSession {
+  const savedAt = safeSessionDate(now).toISOString();
   return {
     ...session,
-    workspace: { ...session.workspace, draft: { ...draft, updatedAt: now.toISOString() } },
-    lastAutosaveAt: now.toISOString(),
+    workspace: { ...session.workspace, draft: { ...draft, updatedAt: savedAt } },
+    lastAutosaveAt: savedAt,
   };
 }
 
