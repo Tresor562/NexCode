@@ -20,14 +20,21 @@ export type LearningSearchResult = {
 };
 
 function normalize(value: string) {
-  return value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function tokenizeSearch(value: string) {
-  return normalize(value)
-    .split(/[^\p{L}\p{N}+#._-]+/u)
-    .map((token) => token.trim())
-    .filter(Boolean);
+  return [...new Set(
+    normalize(value)
+      .split(/[^\p{L}\p{N}+#._-]+/u)
+      .map((token) => token.trim())
+      .filter(Boolean),
+  )];
 }
 
 function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
@@ -71,8 +78,8 @@ export function searchLearningActivities(
   now = new Date(),
 ): LearningSearchResult[] {
   const query = filter.query?.trim() ?? '';
-  const phrase = normalize(query);
   const terms = tokenizeSearch(query);
+  const phrase = terms.join(' ');
   const completed = new Set(completedLessonIds);
   const results: LearningSearchResult[] = [];
   for (const course of courses) {
