@@ -1,0 +1,86 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+
+const sourceUrl = new URL('../src/learning/labBehavioralTests.ts', import.meta.url);
+const source = fs.readFileSync(sourceUrl, 'utf8');
+const compiled = ts.transpileModule(source, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+    esModuleInterop: true,
+  },
+  fileName: 'labBehavioralTests.ts',
+}).outputText;
+
+const exports = {};
+const module = { exports };
+new Function('require', 'exports', 'module', compiled)(() => ({}), exports, module);
+const { runBehavioralSuite } = module.exports;
+assert.equal(typeof runBehavioralSuite, 'function', 'runBehavioralSuite must stay exported');
+
+const mission = {
+  id: 'html-card-lab',
+  title: 'Carte profil',
+  instructions: 'Personnalise réellement le composant de départ.',
+  language: 'HTML/CSS',
+  starterFiles: {
+    'index.html': '<main>\n  <h1>NexCode Lab</h1>\n</main>\n',
+    'styles.css': 'body {\n  font-family: sans-serif;\n}\n',
+    'script.js': '',
+  },
+  successCriteria: [],
+};
+
+function draft(files) {
+  return {
+    missionId: mission.id,
+    language: mission.language,
+    files,
+    activeFile: 'index.html',
+    updatedAt: '2026-08-30T12:00:00.000Z',
+  };
+}
+
+const unchanged = runBehavioralSuite(mission, draft({ ...mission.starterFiles }));
+assert.equal(unchanged.passed, false, 'an untouched starter workspace must never pass the Lab suite');
+assert.equal(unchanged.hiddenTotal, 1, 'starter-change proof must stay hidden from the learner');
+assert.equal(unchanged.hiddenPassed, 0, 'an untouched starter workspace must fail the hidden delta check');
+
+const newlineOnly = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'index.html': '<main>\r\n  <h1>NexCode Lab</h1>\r\n</main>\r\n\r\n',
+}));
+assert.equal(newlineOnly.hiddenPassed, 0, 'line-ending or trailing-whitespace churn must not count as real work');
+
+const edited = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'index.html': '<main>\n  <h1>Mon portfolio</h1>\n</main>\n',
+}));
+assert.equal(edited.hiddenPassed, 1, 'a substantive edit to a starter file must satisfy the hidden delta check');
+assert.equal(edited.passed, true, 'a valid substantive HTML edit should pass the behavioral suite');
+
+const addedFile = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'notes.md': 'Décisions de conception : hiérarchie, contraste et contenu personnalisé.',
+}));
+assert.equal(addedFile.hiddenPassed, 1, 'a substantive learner-created file must count as a real workspace change');
+
+const singleFileMission = {
+  id: 'js-lab',
+  title: 'Compteur',
+  instructions: 'Modifie le comportement.',
+  language: 'JavaScript',
+  starterCode: 'const count = 0;',
+  successCriteria: [],
+};
+const singleUnchanged = runBehavioralSuite(singleFileMission, {
+  missionId: singleFileMission.id,
+  language: singleFileMission.language,
+  files: { 'main.js': 'const count = 0;' },
+  activeFile: 'main.js',
+  updatedAt: '2026-08-30T12:00:00.000Z',
+});
+assert.equal(singleUnchanged.hiddenPassed, 0, 'starterCode-only missions must also reject unchanged submissions');
+
+console.log('Lab starter delta audit OK: starter templates cannot pass as learner work, while substantive edits and new files are recognized.');
