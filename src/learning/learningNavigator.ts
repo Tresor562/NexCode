@@ -31,7 +31,7 @@ function tokenizeSearch(value: string) {
 }
 
 function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
-  if (!nextReviewAt) return false;
+  if (!nextReviewAt) return true;
   const nextReviewMs = Date.parse(nextReviewAt);
   if (!Number.isFinite(nextReviewMs)) return true;
   const nowMs = now.getTime();
@@ -86,7 +86,10 @@ export function searchLearningActivities(
           if (filter.kinds?.length && !filter.kinds.includes(lesson.activityKind ?? 'learn')) continue;
           if (filter.difficulty?.length && !filter.difficulty.includes(lesson.difficulty ?? 1)) continue;
           if (filter.onlyDueReview) {
-            const due = (lesson.skillIds ?? []).some((skillId) => reviewIsDue(mastery[skillId]?.nextReviewAt, now));
+            const due = (lesson.skillIds ?? []).some((skillId) => {
+              const state = mastery[skillId];
+              return state ? reviewIsDue(state.nextReviewAt, now) : false;
+            });
             if (!due) continue;
           }
 
