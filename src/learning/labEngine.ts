@@ -301,3 +301,17 @@ export function validateLabDraft(mission: LabMission, draft: LabDraft): LabValid
     checks,
   };
 }
+
+export function stampLabValidation(draft: LabDraft, result: LabValidation, now = new Date()): LabDraft {
+  const validDate = Number.isFinite(now.getTime()) ? now : new Date();
+  const validatedAt = validDate.toISOString();
+  const missionCriteria = result.checks
+    .filter((check) => check.id.startsWith('criterion-') && check.passed)
+    .map((check) => check.label);
+  return {
+    ...draft,
+    lastValidatedAt: validatedAt,
+    passedCriteria: missionCriteria.length ? missionCriteria : [...result.passedCriteria],
+    updatedAt: validatedAt,
+  };
+}
