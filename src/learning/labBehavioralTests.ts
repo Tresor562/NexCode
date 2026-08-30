@@ -34,6 +34,12 @@ function portableWorkspaceKey(filename: string): string {
   return filename.normalize('NFC').toLocaleLowerCase('en-US');
 }
 
+function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
+  const key = portableWorkspaceKey(filename);
+  const actualName = Object.keys(draft.files).find((candidate) => portableWorkspaceKey(candidate) === key);
+  return actualName ? draft.files[actualName] ?? '' : '';
+}
+
 function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolean {
   const starterFiles = mission.starterFiles ?? {};
   const starterEntries = Object.entries(starterFiles);
@@ -103,8 +109,8 @@ export function defaultBehavioralTests(mission: LabMission): BehavioralTest[] {
   ];
   if (language === 'HTML/CSS') {
     tests.push(
-      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(draft.files['index.html'] ?? '') },
-      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: (draft) => /[^{}]+\{[^}]+\}/.test(draft.files['styles.css'] ?? '') },
+      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolvePortableDraftFile(draft, 'index.html')) },
+      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: (draft) => /[^{}]+\{[^}]+\}/.test(resolvePortableDraftFile(draft, 'styles.css')) },
     );
   } else if (language === 'JavaScript') {
     tests.push({ id: 'js-logic', label: 'Le code contient une déclaration ou une fonction', run: (draft) => /\b(const|let|var|function|class)\b/.test(Object.values(draft.files).join('\n')) });
