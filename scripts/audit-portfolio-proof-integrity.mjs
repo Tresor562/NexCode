@@ -12,5 +12,9 @@ assert.match(source, /new Set\(achievedRubricIds\.map\(\(id\) => id\.trim\(\)\)\
 assert.match(source, /const safeRubricIds = canonicalAchievedRubricIds\(project, achievedRubricIds\);[\s\S]*reviewProject\(project, safeRubricIds\)/, 'project review must score the same canonical rubric evidence that is persisted');
 assert.match(source, /rubricIds: safeRubricIds/, 'portfolio proof must persist canonical rubric evidence only');
 assert.match(source, /completedAt: validCompletionDate\(completedAt\)\.toISOString\(\)/, 'portfolio proof serialization must never call toISOString on an unchecked date');
+assert.match(source, /function canonicalProofSkillIds\(skillIds: string\[\]\): string\[\]/, 'portfolio coverage must canonicalize restored skill ids before counting evidence');
+assert.match(source, /const skillId = raw\.trim\(\);[\s\S]*const identity = normalize\(skillId\);[\s\S]*if \(!identity \|\| seen\.has\(identity\)\) continue;/, 'restored portfolio skill ids must be trimmed, empty-filtered and deduplicated by normalized identity');
+assert.match(source, /for \(const skillId of canonicalProofSkillIds\(proof\.skillIds\)\)/, 'each project proof must contribute at most one coverage unit per canonical skill');
+assert.doesNotMatch(source, /for \(const proof of proofs\) for \(const skillId of proof\.skillIds\)/, 'raw restored skill arrays must never be counted directly');
 
-console.log('Portfolio proof integrity audit OK: completion dates and rubric evidence are canonicalized before scoring and persistence.');
+console.log('Portfolio proof integrity audit OK: dates, rubric evidence, and per-project skill coverage are canonicalized before persistence or counting.');
