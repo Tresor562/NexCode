@@ -42,6 +42,15 @@ function readinessGate(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 55;
 }
 
+function validCompletionDate(value: Date): Date {
+  return value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
+}
+
+function canonicalAchievedRubricIds(project: GuidedProject, achievedRubricIds: string[]): string[] {
+  const allowed = new Set(defaultProjectRubric(project).map((item) => item.id));
+  return [...new Set(achievedRubricIds.map((id) => id.trim()).filter((id) => id && allowed.has(id)))];
+}
+
 export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[]): ResolvedProjectSkill[] {
   return canonicalProjectSkills(project.skills).map((requested) => {
     const terms = normalize(requested).split(/\s+/).filter((term) => term.length >= 3);
@@ -109,18 +118,19 @@ export function buildPortfolioProof(
   achievedRubricIds: string[],
   completedAt = new Date(),
 ): PortfolioProof | undefined {
-  const review = reviewProject(project, achievedRubricIds);
+  const safeRubricIds = canonicalAchievedRubricIds(project, achievedRubricIds);
+  const review = reviewProject(project, safeRubricIds);
   if (!review.passed) return undefined;
   const skillIds = [...new Set(resolveProjectSkills(project, graph).flatMap((item) => item.skillIds))];
   const rubric = defaultProjectRubric(project);
-  const achievedTitles = rubric.filter((item) => achievedRubricIds.includes(item.id)).map((item) => item.title);
+  const achievedTitles = rubric.filter((item) => safeRubricIds.includes(item.id)).map((item) => item.title);
   return {
     projectId: project.id,
     title: project.title,
-    completedAt: completedAt.toISOString(),
+    completedAt: validCompletionDate(completedAt).toISOString(),
     score: review.score,
     skillIds,
-    rubricIds: achievedRubricIds,
+    rubricIds: safeRubricIds,
     evidenceSummary: `${project.title} • ${review.score}/100 • preuves : ${achievedTitles.join(', ')}`,
   };
 }
