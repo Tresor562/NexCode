@@ -37,5 +37,13 @@ requirePattern(
   /const completedSet = new Set\(completedLessonIds\);[\s\S]*completedSet\.has\(lesson\.id\)[\s\S]*completedSet\.has\(id\)/,
   'Course navigation summaries must also use constant-time completion membership checks.',
 );
+requirePattern(
+  /function reviewIsDue\([\s\S]*if \(!nextReviewAt\) return true;/,
+  'Existing mastery without a scheduled nextReviewAt must stay reviewable instead of disappearing from the due-review path.',
+);
+requirePattern(
+  /const state = mastery\[skillId\];[\s\S]*return state \? reviewIsDue\(state\.nextReviewAt, now\) : false;/,
+  'Due-review search must distinguish existing mastery with no schedule from completely unseen skills.',
+);
 
-console.log('Learning search audit OK: multi-term intent matching, weighted pedagogy fields, phrase ranking, compatibility normalization, and scalable completion lookup are protected.');
+console.log('Learning search audit OK: multi-term intent matching, weighted pedagogy fields, phrase ranking, compatibility normalization, scalable completion lookup, and due-review mastery semantics are protected.');
