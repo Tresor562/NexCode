@@ -11,6 +11,7 @@ let latestState: PendingCloudState | null = null;
 let activeFlush: Promise<boolean> | null = null;
 let deferredFlushDelayMs: number | null = null;
 let retryDelayMs = 1_500;
+let retryUserId: string | null = null;
 
 const BASE_RETRY_DELAY_MS = 1_500;
 const MAX_RETRY_DELAY_MS = 30_000;
@@ -21,6 +22,25 @@ const MAX_PUSH_DELAY_MS = 60_000;
 function normalizeFlushDelay(value: unknown, fallback = DEFAULT_PUSH_DELAY_MS): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
   return Math.max(0, Math.min(MAX_PUSH_DELAY_MS, Math.floor(value)));
+}
+
+function resetRetryBackoff(): void {
+  retryDelayMs = BASE_RETRY_DELAY_MS;
+  retryUserId = null;
+}
+
+function consumeRetryDelay(userId: string): number {
+  // Backoff belongs to the learner whose request failed. A previous account may
+  // have reached the 30s ceiling while offline; carrying that delay into another
+  // learner session would make the first retry on the new account unnecessarily
+  // slow even though it has never failed.
+  if (retryUserId !== userId) {
+    retryDelayMs = BASE_RETRY_DELAY_MS;
+    retryUserId = userId;
+  }
+  const delay = retryDelayMs;
+  retryDelayMs = Math.min(MAX_RETRY_DELAY_MS, retryDelayMs * 2);
+  return delay;
 }
 
 function snapshotCloudState(state: LocalState): LocalState {
@@ -64,6 +84,7 @@ async function performLatestStateFlush(): Promise<boolean> {
   const session = loadCloudSession();
   if (!session) {
     latestState = null;
+    resetRetryBackoff();
     return true;
   }
 
@@ -73,7 +94,7 @@ async function performLatestStateFlush(): Promise<boolean> {
   // queued progress through learner B's Supabase session.
   if (session.user.id !== snapshot.userId) {
     latestState = null;
-    retryDelayMs = BASE_RETRY_DELAY_MS;
+    resetRetryBackoff();
     return true;
   }
 
@@ -92,19 +113,17 @@ async function performLatestStateFlush(): Promise<boolean> {
       throw new Error('Cloud account changed during reconciliation.');
     }
     await pushCloudState(reconciled.session, reconciled.state);
-    retryDelayMs = BASE_RETRY_DELAY_MS;
+    resetRetryBackoff();
     return true;
   } catch {
     // Keep the newest local snapshot queued while offline. If another mutation
     // happened during the request, that newer state already supersedes this one.
     if (!latestState) latestState = snapshot;
-    const delay = retryDelayMs;
-    retryDelayMs = Math.min(MAX_RETRY_DELAY_MS, retryDelayMs * 2);
 
     const current = loadCloudSession();
     if (!current) {
       if (latestState?.userId === snapshot.userId) latestState = null;
-      retryDelayMs = BASE_RETRY_DELAY_MS;
+      resetRetryBackoff();
       return false;
     }
 
@@ -114,12 +133,12 @@ async function performLatestStateFlush(): Promise<boolean> {
       // progress until another mutation happens: discard only A's stale retry and
       // immediately schedule B's pending state under B's own current session.
       if (latestState?.userId === snapshot.userId) latestState = null;
-      retryDelayMs = BASE_RETRY_DELAY_MS;
+      resetRetryBackoff();
       if (latestState?.userId === current.user.id) queueFlush(FOLLOW_UP_DELAY_MS);
       return false;
     }
 
-    queueFlush(delay);
+    queueFlush(consumeRetryDelay(snapshot.userId));
     return false;
   }
 }
