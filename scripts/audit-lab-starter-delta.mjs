@@ -19,6 +19,8 @@ new Function('require', 'exports', 'module', compiled)(() => ({}), exports, modu
 const { runBehavioralSuite } = module.exports;
 assert.equal(typeof runBehavioralSuite, 'function', 'runBehavioralSuite must stay exported');
 assert.match(source, /normalize\('NFC'\)\.toLocaleLowerCase\('en-US'\)/, 'starter delta paths must use the portable case/Unicode identity policy');
+assert.match(source, /resolvePortableDraftFile\(draft, 'index\.html'\)/, 'HTML behavioral checks must resolve portable workspace paths');
+assert.match(source, /resolvePortableDraftFile\(draft, 'styles\.css'\)/, 'CSS behavioral checks must resolve portable workspace paths');
 
 const mission = {
   id: 'html-card-lab',
@@ -54,6 +56,8 @@ const caseOnlyRename = runBehavioralSuite(mission, draft({
   'SCRIPT.JS': mission.starterFiles['script.js'],
 }));
 assert.equal(caseOnlyRename.hiddenPassed, 0, 'portable case-only starter renames must not masquerade as learner work');
+assert.equal(caseOnlyRename.visible.every((check) => check.passed), true, 'portable case-only names must still satisfy visible HTML/CSS structure checks');
+assert.equal(caseOnlyRename.passed, false, 'case-only renames must fail only because no substantive starter delta exists');
 
 const newlineOnly = runBehavioralSuite(mission, draft({
   ...mission.starterFiles,
@@ -91,4 +95,4 @@ const singleUnchanged = runBehavioralSuite(singleFileMission, {
 });
 assert.equal(singleUnchanged.hiddenPassed, 0, 'starterCode-only missions must also reject unchanged submissions');
 
-console.log('Lab starter delta audit OK: portable starter renames stay unchanged, while substantive edits and new files are recognized.');
+console.log('Lab starter delta audit OK: portable starter renames stay unchanged and structurally valid, while substantive edits are recognized.');
