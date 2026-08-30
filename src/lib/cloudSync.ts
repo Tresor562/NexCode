@@ -112,7 +112,12 @@ async function performLatestStateFlush(): Promise<boolean> {
       // newly signed-in learner while the pull was running is scheduled at once.
       throw new Error('Cloud account changed during reconciliation.');
     }
-    await pushCloudState(reconciled.session, reconciled.state);
+
+    // pullCloudState may have started with a session whose access token was
+    // refreshed while the request was in flight. We already re-read and verify
+    // the active learner above, so push with that freshest session rather than
+    // reusing the potentially stale session object returned by the reconciliation.
+    await pushCloudState(currentBeforePush, reconciled.state);
     resetRetryBackoff();
     return true;
   } catch {
