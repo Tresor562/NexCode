@@ -45,20 +45,28 @@ requirePattern(
   'Account identity must be rechecked after remote reconciliation and account changes must enter the normal handoff path.',
 );
 requirePattern(
-  /if \(session\.user\.id !== snapshot\.userId\) \{[\s\S]*latestState = null;[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;/,
+  /let retryUserId: string \| null = null;[\s\S]*function resetRetryBackoff\(\): void \{[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;[\s\S]*retryUserId = null;/,
+  'Cloud retry state must retain the learner identity and provide an explicit account-safe reset.',
+);
+requirePattern(
+  /function consumeRetryDelay\(userId: string\): number \{[\s\S]*if \(retryUserId !== userId\) \{[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;[\s\S]*retryUserId = userId;[\s\S]*retryDelayMs = Math\.min\(MAX_RETRY_DELAY_MS, retryDelayMs \* 2\);/,
+  'Exponential retry backoff must restart from the base delay when the failing learner changes.',
+);
+requirePattern(
+  /if \(session\.user\.id !== snapshot\.userId\) \{[\s\S]*latestState = null;[\s\S]*resetRetryBackoff\(\);/,
   'A debounce timer must not send a queued snapshot through another learner session.',
 );
 requirePattern(
-  /if \(current\.user\.id !== snapshot\.userId\) \{[\s\S]*if \(latestState\?\.userId === snapshot\.userId\) latestState = null;[\s\S]*if \(latestState\?\.userId === current\.user\.id\) queueFlush\(FOLLOW_UP_DELAY_MS\);/,
-  'A failed stale-account request must schedule the newly active learner snapshot instead of stranding it.',
+  /if \(current\.user\.id !== snapshot\.userId\) \{[\s\S]*if \(latestState\?\.userId === snapshot\.userId\) latestState = null;[\s\S]*resetRetryBackoff\(\);[\s\S]*if \(latestState\?\.userId === current\.user\.id\) queueFlush\(FOLLOW_UP_DELAY_MS\);/,
+  'A failed stale-account request must reset old backoff and schedule the newly active learner snapshot instead of stranding it.',
 );
 requirePattern(
-  /if \(!current\) \{[\s\S]*latestState\?\.userId === snapshot\.userId[\s\S]*retryDelayMs = BASE_RETRY_DELAY_MS;/,
+  /if \(!current\) \{[\s\S]*latestState\?\.userId === snapshot\.userId[\s\S]*resetRetryBackoff\(\);/,
   'Signing out during a failed push must clear only the stale learner retry and reset backoff.',
 );
 requirePattern(
-  /retryDelayMs = Math\.min\(MAX_RETRY_DELAY_MS, retryDelayMs \* 2\)/,
-  'Transient cloud failures must retain bounded exponential backoff.',
+  /queueFlush\(consumeRetryDelay\(snapshot\.userId\)\);/,
+  'Transient cloud failures must consume bounded backoff for the learner that actually failed.',
 );
 requirePattern(
   /let activeFlush: Promise<boolean> \| null = null;/,
@@ -104,4 +112,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, account-scoped queueing, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, account-scoped queueing and retry backoff, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
