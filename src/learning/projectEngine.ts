@@ -36,14 +36,29 @@ function projectReadinessGate(value: unknown): number {
   return value;
 }
 
+function canonicalProjectSkills(project: GuidedProject): string[] {
+  const seen = new Set<string>();
+  const skills: string[] = [];
+
+  for (const rawSkill of project.skills) {
+    const skillId = rawSkill.trim();
+    if (!skillId || seen.has(skillId)) continue;
+    seen.add(skillId);
+    skills.push(skillId);
+  }
+
+  return skills;
+}
+
 export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = DEFAULT_PROJECT_READINESS_GATE): ProjectReadiness {
   // A malformed runtime gate must never make a project easier to unlock.
   // Fall back to the product default rather than coercing invalid input to 0.
   const safeGate = projectReadinessGate(gate);
-  const missingSkills = project.skills.filter((skillId) => !mastery[skillId]);
-  const weakSkills = project.skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
-  const masteredScore = project.skills.length
-    ? Math.round(project.skills.reduce((sum, id) => sum + boundedPercent(mastery[id]?.score), 0) / project.skills.length)
+  const skills = canonicalProjectSkills(project);
+  const missingSkills = skills.filter((skillId) => !mastery[skillId]);
+  const weakSkills = skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
+  const masteredScore = skills.length
+    ? Math.round(skills.reduce((sum, id) => sum + boundedPercent(mastery[id]?.score), 0) / skills.length)
     : 0;
   return {
     ready: missingSkills.length === 0 && weakSkills.length === 0,
