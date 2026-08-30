@@ -37,8 +37,8 @@ requirePattern(
   'Caller-provided debounce delays must be normalized before scheduling cloud state.',
 );
 requirePattern(
-  /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*await pushCloudState\(reconciled\.session, reconciled\.state\);/,
-  'Cloud pushes must reconcile the queued snapshot with the latest Supabase state before writing, so another device\'s newer progress is not blindly overwritten.',
+  /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*const currentBeforePush = loadCloudSession\(\);[\s\S]*await pushCloudState\(currentBeforePush, reconciled\.state\);/,
+  'Cloud pushes must reconcile the queued snapshot and use the freshest verified session for the write, so refreshed credentials are not discarded.',
 );
 requirePattern(
   /const currentBeforePush = loadCloudSession\(\);[\s\S]*if \(!currentBeforePush \|\| currentBeforePush\.user\.id !== snapshot\.userId\) \{[\s\S]*throw new Error\('Cloud account changed during reconciliation\.'\);/,
@@ -112,4 +112,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, account-scoped queueing and retry backoff, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
