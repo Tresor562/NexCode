@@ -17,6 +17,10 @@ function canonicalSkillIds(skillIds: string[] | undefined) {
   return [...new Set((skillIds ?? []).map((id) => id.trim()).filter(Boolean))];
 }
 
+function validNow(now: Date): Date {
+  return now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
+}
+
 function daysUntil(iso: string | undefined, now: Date) {
   if (!iso) return 0;
   const timestamp = Date.parse(iso);
@@ -37,6 +41,7 @@ function boundedUrgency(value: number) {
 }
 
 export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = new Date()): ReviewItem[] {
+  const referenceNow = validNow(now);
   const items: ReviewItem[] = [];
   for (const course of courses) {
     for (const lesson of course.starterLessons) {
@@ -45,7 +50,7 @@ export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = n
         .map((id) => mastery[id])
         .filter((state): state is NonNullable<typeof state> => Boolean(state));
       if (!states.length) continue;
-      const nextDays = Math.min(...states.map((state) => daysUntil(state.nextReviewAt, now)));
+      const nextDays = Math.min(...states.map((state) => daysUntil(state.nextReviewAt, referenceNow)));
       const weakest = Math.max(0, Math.min(100, Math.min(...states.map((state) => Number.isFinite(state.score) ? state.score : 0))));
       const recurringErrors = states.reduce((total, state) => total + new Set(state?.errorTags ?? []).size, 0);
       const window = windowFor(nextDays);
@@ -76,8 +81,9 @@ export function interleavedPracticeSession(
   minutes: 5 | 10 | 20 | 45,
   now = new Date(),
 ) {
+  const referenceNow = validNow(now);
   const target = minutes <= 5 ? 2 : minutes <= 10 ? 4 : minutes <= 20 ? 7 : 12;
-  const recommendations = recommendPractice(courses, graph, mastery, completedLessonIds, now, Math.max(target * 3, 12));
+  const recommendations = recommendPractice(courses, graph, mastery, completedLessonIds, referenceNow, Math.max(target * 3, 12));
   const selected = [] as typeof recommendations;
   const selectedLessonIds = new Set<string>();
   const usedCourses = new Map<string, number>();
