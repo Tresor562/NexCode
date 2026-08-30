@@ -11,7 +11,9 @@ function requirePattern(pattern, message) {
 
 requirePattern(/normalize\('NFKD'\)/, 'Learning search must use compatibility-aware normalization so equivalent text forms rank consistently.');
 requirePattern(/\.replace\(\/\\s\+\/g, ' '\)[\s\S]*\.trim\(\)/, 'Learning search normalization must collapse incidental whitespace so phrase ranking stays stable across pasted or spaced queries.');
-requirePattern(/function tokenizeSearch\([\s\S]*new Set\([\s\S]*split\(\/\[\^\\p\{L\}\\p\{N\}\+#\._-\]\+\/u\)[\s\S]*filter\(Boolean\)/, 'Learning search must tokenize natural multi-term queries, preserve programming tokens, and deduplicate repeated intent terms.');
+requirePattern(/const PROGRAMMING_IDENTITY_ALIASES = new Map\(\[[\s\S]*\['js', 'javascript'\][\s\S]*\['ts', 'typescript'\][\s\S]*\]\);/, 'Common programming-language aliases such as JS and TS must canonicalize to their full language identities.');
+requirePattern(/function canonicalSearchToken\([\s\S]*PROGRAMMING_IDENTITY_ALIASES\.get\(token\) \?\? token/, 'Learning search tokens must pass through the programming-language alias canonicalizer.');
+requirePattern(/function tokenizeSearch\([\s\S]*new Set\([\s\S]*split\(\/\[\^\\p\{L\}\\p\{N\}\+#\._-\]\+\/u\)[\s\S]*canonicalSearchToken\(token\.trim\(\)\)[\s\S]*filter\(Boolean\)/, 'Learning search must tokenize natural multi-term queries, preserve programming tokens, canonicalize aliases, and deduplicate repeated intent terms.');
 
 const identitySetMatch = source.match(/const PROGRAMMING_IDENTITY_TERMS = new Set\(\[([\s\S]*?)\]\);/);
 if (!identitySetMatch) {
@@ -35,4 +37,4 @@ requirePattern(/const completedSet = new Set\(completedLessonIds\);[\s\S]*comple
 requirePattern(/function reviewIsDue\([\s\S]*if \(!nextReviewAt\) return true;/, 'Existing mastery without a scheduled nextReviewAt must stay reviewable instead of disappearing from the due-review path.');
 requirePattern(/const state = mastery\[skillId\];[\s\S]*return state \? reviewIsDue\(state\.nextReviewAt, now\) : false;/, 'Due-review search must distinguish existing mastery with no schedule from completely unseen skills.');
 
-console.log('Learning search audit OK: canonical multi-term intent, programming-language identity isolation, stable phrase ranking, weighted pedagogy fields, compatibility normalization, scalable completion lookup, and due-review mastery semantics are protected.');
+console.log('Learning search audit OK: canonical multi-term intent, language aliases, programming-language identity isolation, stable phrase ranking, weighted pedagogy fields, compatibility normalization, scalable completion lookup, and due-review mastery semantics are protected.');
