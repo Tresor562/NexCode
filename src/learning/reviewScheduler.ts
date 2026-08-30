@@ -17,6 +17,13 @@ function canonicalSkillIds(skillIds: string[] | undefined) {
   return [...new Set((skillIds ?? []).map((id) => id.trim()).filter(Boolean))];
 }
 
+function canonicalErrorTags(errorTags: unknown[]) {
+  return [...new Set(errorTags
+    .filter((tag): tag is string => typeof tag === 'string')
+    .map((tag) => tag.trim().toLocaleLowerCase())
+    .filter(Boolean))];
+}
+
 function validNow(now: Date): Date {
   return now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
 }
@@ -52,7 +59,11 @@ export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = n
       if (!states.length) continue;
       const nextDays = Math.min(...states.map((state) => daysUntil(state.nextReviewAt, referenceNow)));
       const weakest = Math.max(0, Math.min(100, Math.min(...states.map((state) => Number.isFinite(state.score) ? state.score : 0))));
-      const recurringErrors = states.reduce((total, state) => total + new Set(state?.errorTags ?? []).size, 0);
+      // One misconception can be attached to several skills touched by the same
+      // lesson. Count semantic error identity across the whole lesson, not once
+      // per skill, otherwise multi-skill lessons receive artificially inflated
+      // urgency and can crowd genuinely overdue reviews out of a short session.
+      const recurringErrors = canonicalErrorTags(states.flatMap((state) => state.errorTags ?? [])).length;
       const window = windowFor(nextDays);
       const urgency = boundedUrgency((window === 'overdue' ? 100 : window === 'today' ? 80 : window === 'soon' ? 45 : 10) + recurringErrors * 6 + Math.max(0, 55 - weakest));
       if (window === 'later' && weakest >= 70 && recurringErrors === 0) continue;
