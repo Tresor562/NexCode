@@ -39,8 +39,10 @@ function projectReadinessGate(value: unknown): number {
 function canonicalProjectSkills(project: GuidedProject): string[] {
   const seen = new Set<string>();
   const skills: string[] = [];
+  const rawSkills: unknown[] = Array.isArray(project.skills) ? project.skills : [];
 
-  for (const rawSkill of project.skills) {
+  for (const rawSkill of rawSkills) {
+    if (typeof rawSkill !== 'string') continue;
     const skillId = rawSkill.trim();
     if (!skillId || seen.has(skillId)) continue;
     seen.add(skillId);
@@ -55,13 +57,17 @@ export function projectReadiness(project: GuidedProject, mastery: MasteryMap, ga
   // Fall back to the product default rather than coercing invalid input to 0.
   const safeGate = projectReadinessGate(gate);
   const skills = canonicalProjectSkills(project);
+  const hasPrerequisites = skills.length > 0;
   const missingSkills = skills.filter((skillId) => !mastery[skillId]);
   const weakSkills = skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
-  const masteredScore = skills.length
+  const masteredScore = hasPrerequisites
     ? Math.round(skills.reduce((sum, id) => sum + boundedPercent(mastery[id]?.score), 0) / skills.length)
     : 0;
   return {
-    ready: missingSkills.length === 0 && weakSkills.length === 0,
+    // A guided project with no usable skill prerequisites is malformed content.
+    // Fail closed instead of exposing a premium project without evidence that
+    // the learner has acquired the concepts it is supposed to consolidate.
+    ready: hasPrerequisites && missingSkills.length === 0 && weakSkills.length === 0,
     score: masteredScore,
     missingSkills,
     weakSkills,
