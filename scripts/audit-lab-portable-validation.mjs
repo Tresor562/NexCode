@@ -28,8 +28,9 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { validateLabDraft } = module.exports;
+const { validateLabDraft, stampLabValidation } = module.exports;
 assert.equal(typeof validateLabDraft, 'function', 'validateLabDraft must stay exported');
+assert.equal(typeof stampLabValidation, 'function', 'stampLabValidation must stay exported for persisted Lab progress');
 
 const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret réel', 'Travail complet'];
 
@@ -61,6 +62,14 @@ const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret rée
   assert.equal(result.checks.find((check) => check.id === 'structure')?.passed, true, 'HTML/CSS structure validation must resolve case-equivalent entry files');
   assert.equal(result.checks.find((check) => check.id === 'complete')?.passed, true, 'HTML/CSS completeness must accept portable extension casing');
   assert.equal(result.passed, true, 'a valid portable HTML/CSS workspace must be fully accepted');
+
+  const stampedAt = new Date('2026-08-30T12:00:00.000Z');
+  const stamped = stampLabValidation(draft, result, stampedAt);
+  assert.deepEqual(stamped.passedCriteria, criteria, 'persisted Lab progress must count only authored mission criteria, not internal validation checks');
+  assert.equal(stamped.passedCriteria.length, mission.successCriteria.length, 'persisted Lab progress must never exceed the mission criterion denominator');
+  assert.equal(stamped.lastValidatedAt, stampedAt.toISOString(), 'validation stamp must use one stable timestamp');
+  assert.equal(stamped.updatedAt, stampedAt.toISOString(), 'validation persistence timestamp must match lastValidatedAt');
+  assert.notEqual(stamped.passedCriteria, result.passedCriteria, 'persisted criteria must be detached from the validation result array');
 }
 
 {
@@ -88,4 +97,4 @@ const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret rée
   assert.equal(result.passed, true, 'a valid portable Node workspace must be fully accepted');
 }
 
-console.log('Lab portable validation audit OK: validation now follows the same case/Unicode path policy as the workspace and preview.');
+console.log('Lab portable validation audit OK: portable files validate correctly and persisted progress stays scoped to authored mission criteria.');
