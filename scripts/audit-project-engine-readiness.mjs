@@ -87,4 +87,27 @@ const masteryState = (htmlScore, cssScore) => ({
   assert.equal(result.score, 45, 'missing mastery contributes zero to the readiness summary');
 }
 
-console.log('Project engine readiness audit OK: mastery is bounded and malformed gates fall back safely.');
+{
+  const noisyProject = {
+    ...project,
+    skills: [' html ', 'css', 'html', '', '   ', 'css'],
+  };
+  const result = projectReadiness(noisyProject, masteryState(80, 60), 55);
+  assert.equal(result.ready, true, 'whitespace and duplicate prerequisite labels must not create fake readiness gaps');
+  assert.deepEqual(result.missingSkills, []);
+  assert.deepEqual(result.weakSkills, []);
+  assert.equal(result.score, 70, 'duplicate prerequisite labels must not bias the readiness average');
+}
+
+{
+  const duplicatedWeakProject = {
+    ...project,
+    skills: ['html', 'html', 'css'],
+  };
+  const result = projectReadiness(duplicatedWeakProject, masteryState(10, 90), 55);
+  assert.equal(result.ready, false);
+  assert.deepEqual(result.weakSkills, ['html'], 'a weak prerequisite should be reported once even if content data repeats it');
+  assert.equal(result.score, 50, 'repeated weak skills must not overweight the readiness score');
+}
+
+console.log('Project engine readiness audit OK: mastery, gates and prerequisite identities stay canonical and bounded.');
