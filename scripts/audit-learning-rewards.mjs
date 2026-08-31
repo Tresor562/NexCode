@@ -21,8 +21,13 @@ assert.match(source, /const answerIndex = normalizeSelectedIndex\(lesson, select
 assert.match(source, /const correct = answerIndex !== null && answerIndex === lesson\.correctIndex;/, 'only a valid normalized choice may be considered correct');
 assert.match(source, /inferErrorTag\(lesson, answerIndex\)/, 'error evidence must use the normalized answer index');
 assert.match(source, /if \(state\.completedLessons\.includes\(lesson\.id\)\) return state;/, 'lesson completion rewards must be idempotent');
+assert.match(source, /if \(safeAttemptCount\(state\.lessonAttempts\[lesson\.id\]\) < 1\) return state;/, 'lesson completion rewards must require recorded learning evidence');
 assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'learning completion must pass through the shared streak/daily-goal reward engine');
 assert.match(source, /completedLessons: \[\.\.\.rewarded\.completedLessons, lesson\.id\]/, 'rewarded lessons must be persisted as completed atomically with the reward state');
+
+const completionFunction = source.slice(source.indexOf('export function rewardLearningCompletion'), source.indexOf('export function recordLessonOutcome'));
+assert.ok(completionFunction.indexOf('completedLessons.includes(lesson.id)') < completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])'), 'idempotence must be checked before evidence to keep replays side-effect free');
+assert.ok(completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])') < completionFunction.indexOf('rewardProgress(state'), 'attempt evidence must be verified before any XP, NexCoin, streak or minute mutation');
 
 assert.match(localStateSource, /requestedNow instanceof Date && Number\.isFinite\(requestedNow\.getTime\(\)\)/, 'invalid reward timestamps must fall back before streak dates are computed');
 assert.match(localStateSource, /const minutes = finiteNumber\(reward\.minutes, 0, 0, 240\);/, 'reward minutes must reject NaN or Infinity and remain bounded per activity');
@@ -39,4 +44,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, saturating progression totals and idempotent completion are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, evidence-gated completion, saturating progression totals and idempotence are enforced.');
