@@ -5,6 +5,7 @@ import type { PortfolioProof } from './projectPortfolioEngine';
 const PROJECT_STEP_REWARD = Object.freeze({ xp: 15, nexCoins: 3, minutes: 3 });
 const PORTFOLIO_PROOF_REWARD = Object.freeze({ xp: 50, nexCoins: 10, minutes: 5 });
 const PORTFOLIO_PASS_SCORE = 70;
+const MAX_FUTURE_PROOF_SKEW_MS = 5 * 60 * 1000;
 
 function safePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -17,7 +18,11 @@ function completedProjectSteps(project: GuidedProject, progress: number): number
   return Math.min(total, Math.max(0, Math.round((safePercent(progress) / 100) * total)));
 }
 
-function isRewardablePortfolioProof(proof: PortfolioProof): boolean {
+function validRewardTime(value: Date): Date {
+  return value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
+}
+
+function isRewardablePortfolioProof(proof: PortfolioProof, now: Date): boolean {
   const projectId = typeof proof.projectId === 'string' ? proof.projectId.trim() : '';
   const title = typeof proof.title === 'string' ? proof.title.trim() : '';
   const evidenceSummary = typeof proof.evidenceSummary === 'string' ? proof.evidenceSummary.trim() : '';
@@ -35,6 +40,7 @@ function isRewardablePortfolioProof(proof: PortfolioProof): boolean {
     && proof.score >= PORTFOLIO_PASS_SCORE
     && proof.score <= 100
     && Number.isFinite(completedAt)
+    && completedAt <= now.getTime() + MAX_FUTURE_PROOF_SKEW_MS
     && rubricIds.length > 0
     && uniqueRubricIds.size === rubricIds.length;
 }
@@ -79,16 +85,17 @@ export function advanceProjectProgress(
  * This keeps the progression boundary safe even if a stale client, imported
  * local state or future UI accidentally calls the engine with malformed data.
  *
- * The first portfolio proof earns the one-time completion reward. Later valid
- * edits replace the proof in place so learners can improve their evidence
- * without farming XP/NexCoins or being stuck with stale portfolio metadata.
+ * The first portfolio proof earns the one-time completion reward only after the
+ * guided project itself has reached 100%. Later valid edits replace the proof in
+ * place so learners can improve evidence without farming XP/NexCoins.
  */
 export function recordPortfolioProof(
   state: LocalState,
   proof: PortfolioProof,
   now = new Date(),
 ): LocalState {
-  if (!isRewardablePortfolioProof(proof)) return state;
+  const rewardTime = validRewardTime(now);
+  if (!isRewardablePortfolioProof(proof, rewardTime)) return state;
 
   const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId === proof.projectId);
   if (existingIndex >= 0) {
@@ -98,7 +105,12 @@ export function recordPortfolioProof(
     };
   }
 
-  const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now });
+  // A passing rubric alone is not completion evidence. The learner must have
+  // actually crossed the canonical 100% project-progress boundary before the
+  // first proof can mint its one-time portfolio reward.
+  if (safePercent(state.projectProgress[proof.projectId]) < 100) return state;
+
+  const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now: rewardTime });
   return {
     ...rewarded,
     portfolioProofs: [...rewarded.portfolioProofs, proof],
