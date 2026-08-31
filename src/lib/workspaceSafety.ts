@@ -18,6 +18,7 @@ const WINDOWS_INVALID_SEGMENT_CHARS = /[<>:"|?*]/;
 const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
+const MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 function portableWorkspaceSegment(segment: string): boolean {
   return Boolean(segment)
@@ -54,15 +55,20 @@ function validIsoDate(value: unknown): value is string {
   return typeof value === 'string' && Number.isFinite(Date.parse(value));
 }
 
+function plausibleIsoDate(value: unknown, nowMs: number): value is string {
+  if (!validIsoDate(value)) return false;
+  return Date.parse(value) <= nowMs + MAX_FUTURE_CLOCK_SKEW_MS;
+}
+
 function validTextContent(value: string): boolean {
   return !value.includes('\0');
 }
 
-function validValidationMetadata(stored: LabDraft): boolean {
+function validValidationMetadata(stored: LabDraft, nowMs: number): boolean {
   const hasValidationTimestamp = stored.lastValidatedAt !== undefined;
   const hasCriteria = stored.passedCriteria !== undefined;
   if (!hasValidationTimestamp && !hasCriteria) return true;
-  if (!validIsoDate(stored.lastValidatedAt) || !Array.isArray(stored.passedCriteria)) return false;
+  if (!plausibleIsoDate(stored.lastValidatedAt, nowMs) || !Array.isArray(stored.passedCriteria)) return false;
   return stored.passedCriteria.every((criterion) => typeof criterion === 'string' && criterion.trim().length > 0);
 }
 
@@ -77,6 +83,8 @@ export function restoreWorkspaceDraft({
   expectedLanguage: string;
   fallbackFiles: Record<string, string>;
 }): { draft: LabDraft; repaired: boolean } {
+  const now = new Date();
+  const nowMs = now.getTime();
   const fallbackNames = Object.keys(fallbackFiles);
   const fallbackActive = fallbackNames[0] ?? 'main.txt';
   const fresh = (): LabDraft => ({
@@ -84,7 +92,7 @@ export function restoreWorkspaceDraft({
     language: expectedLanguage,
     files: fallbackFiles,
     activeFile: fallbackActive,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now.toISOString(),
   });
 
   if (!stored || (stored.missionId && stored.missionId !== expectedMissionId)) {
@@ -134,8 +142,8 @@ export function restoreWorkspaceDraft({
     : filenames[0]!;
   if (activeFile !== stored.activeFile) repaired = true;
   if (stored.language !== expectedLanguage || stored.missionId !== expectedMissionId) repaired = true;
-  if (!validIsoDate(stored.updatedAt)) repaired = true;
-  if (!validValidationMetadata(stored)) repaired = true;
+  if (!plausibleIsoDate(stored.updatedAt, nowMs)) repaired = true;
+  if (!validValidationMetadata(stored, nowMs)) repaired = true;
 
   return {
     repaired,
@@ -145,7 +153,7 @@ export function restoreWorkspaceDraft({
       language: expectedLanguage,
       files,
       activeFile,
-      updatedAt: repaired || !validIsoDate(stored.updatedAt) ? new Date().toISOString() : stored.updatedAt,
+      updatedAt: repaired || !plausibleIsoDate(stored.updatedAt, nowMs) ? now.toISOString() : stored.updatedAt,
       lastValidatedAt: repaired ? undefined : stored.lastValidatedAt,
       passedCriteria: repaired ? [] : stored.passedCriteria,
     },
