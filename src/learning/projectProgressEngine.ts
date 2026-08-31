@@ -24,7 +24,11 @@ function canonicalProject(projectId: unknown): GuidedProject | undefined {
 function completedProjectSteps(project: GuidedProject, progress: number): number {
   const total = Math.max(0, project.steps.length);
   if (total === 0) return progress >= 100 ? 1 : 0;
-  return Math.min(total, Math.max(0, Math.round((safePercent(progress) / 100) * total)));
+
+  // A construction step is earned only once its full percentage boundary has
+  // been crossed. Rounding would pay a 4-step project at 13% (0.52 -> 1), well
+  // before the first 25% milestone is actually complete.
+  return Math.min(total, Math.max(0, Math.floor((safePercent(progress) / 100) * total)));
 }
 
 function validRewardTime(value: Date): Date {
