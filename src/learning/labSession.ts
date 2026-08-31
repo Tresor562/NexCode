@@ -128,11 +128,31 @@ function resolvePreviewWorkspaceFile(draft: LabDraft, normalizedPath: string) {
   return Object.keys(draft.files).find((filename) => workspaceCollisionKey(filename) === collisionKey);
 }
 
+function svgPreviewDataUri(source: string) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
+}
+
+function inlineLocalPreviewImages(document: string, draft: LabDraft) {
+  return document.replace(/<img\b[^>]*>/gi, (tag) => {
+    const src = previewAttribute(tag, 'src');
+    if (!src) return tag;
+    const normalizedPath = normalizePreviewAssetPath(src);
+    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.svg')) return tag;
+    const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
+    if (!path) return tag;
+    const source = draft.files[path];
+    if (source === undefined) return tag;
+    const dataUri = escapeHtmlAttribute(svgPreviewDataUri(source));
+    return tag.replace(/(\bsrc\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s>]+)/i, `$1"${dataUri}"`);
+  });
+}
+
 function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
   const inlinedStyles = new Set<string>();
   const inlinedScripts = new Set<string>();
 
-  let output = document.replace(/<link\b[^>]*>/gi, (tag) => {
+  let output = inlineLocalPreviewImages(document, draft);
+  output = output.replace(/<link\b[^>]*>/gi, (tag) => {
     const rel = previewAttribute(tag, 'rel')?.toLowerCase().split(/\s+/) ?? [];
     const href = previewAttribute(tag, 'href');
     if (!href || !rel.includes('stylesheet')) return tag;
