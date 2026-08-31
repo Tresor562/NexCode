@@ -17,6 +17,8 @@ const expectations = [
   ['audio supersession', 'const generation = supersedeAudio();'],
   ['cross-player stale audio guard', 'if (sharedAudioRequestGeneration !== generation) return;'],
   ['generation overflow guard', 'sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER'],
+  ['background audio invalidation', 'if (!appActive) {\n        supersedeAudio();\n        return;\n      }'],
+  ['cooldown before supersession', "if (!canTrigger('sound', true)) return;\n      const generation = supersedeAudio();"],
 ];
 
 const missing = expectations.filter(([, marker]) => !source.includes(marker));
@@ -50,6 +52,10 @@ if (/player\.seekTo\(0\)\.then\(\(\) => player\.play\(\)\)/.test(source)) {
   console.error('Global learning feedback audit failed: asynchronous audio seek may not replay without a stale-generation guard.');
   process.exit(1);
 }
+if (/const generation = supersedeAudio\(\);\s*if \(!canTrigger\('sound'/.test(source)) {
+  console.error('Global learning feedback audit failed: a cooldown-rejected tap must not supersede an already accepted lesson cue.');
+  process.exit(1);
+}
 
 const lessonExpectations = [
   ['lesson shared gate import', "createLearningFeedbackGate"],
@@ -74,4 +80,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: cooldowns, lesson-level routing, and cross-player stale-audio supersession are enforced across controls.');
+console.log('Global learning feedback audit passed: cooldowns, foreground invalidation, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
