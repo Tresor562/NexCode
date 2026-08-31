@@ -52,15 +52,23 @@ export function advanceProjectProgress(
 }
 
 /**
- * A portfolio proof is a one-time completion reward per project. Re-submitting
- * or rapidly tapping the publish action cannot mint additional XP/NexCoins.
+ * The first portfolio proof earns the one-time completion reward. Later edits
+ * replace the proof in place so learners can improve a title, description or
+ * evidence URL without farming XP/NexCoins or being stuck with stale evidence.
  */
 export function recordPortfolioProof(
   state: LocalState,
   proof: PortfolioProof,
   now = new Date(),
 ): LocalState {
-  if (state.portfolioProofs.some((item) => item.projectId === proof.projectId)) return state;
+  const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId === proof.projectId);
+  if (existingIndex >= 0) {
+    return {
+      ...state,
+      portfolioProofs: state.portfolioProofs.map((item, index) => index === existingIndex ? proof : item),
+    };
+  }
+
   const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now });
   return {
     ...rewarded,
