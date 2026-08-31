@@ -7,6 +7,7 @@ const launch = read('../src/ui/LaunchScreen.tsx');
 const app = read('../src/ui/NexCodeApp.tsx');
 const hub = read('../src/ui/LearningHub.tsx');
 const lesson = read('../src/ui/LessonFlowScreen.tsx');
+const learningFeedback = read('../src/ui/learningFeedback.ts');
 const lab = read('../src/ui/LabWorkspaceScreen.tsx');
 const imports = read('../src/lib/workspaceImport.ts');
 const projects = read('../src/ui/ProjectPortfolioScreen.tsx');
@@ -26,9 +27,13 @@ for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdapti
 for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Continue ton chemin','LearningPathNode','Progression du parcours','Continuer','checkpoint','lab']) {
   if (!hub.includes(token)) throw new Error(`LearningHub missing ${token}`);
 }
-for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • OBSERVER','RAPPEL ACTIF • SANS REGARDER','À TOI DE JOUER','MISSION FLASH • TRANSFERT','FINAL • CONSTRUIRE','retrievalPrompt','recallConfidence','successCriteria','masterySnapshot','expo-haptics','expo-audio']) {
+for (const token of ['ÉTAPE 1 • COMPRENDRE','ÉTAPE 2 • OBSERVER','RAPPEL ACTIF • SANS REGARDER','À TOI DE JOUER','MISSION FLASH • TRANSFERT','FINAL • CONSTRUIRE','retrievalPrompt','recallConfidence','successCriteria','masterySnapshot','createLearningFeedbackGate','expo-audio']) {
   if (!lesson.includes(token)) throw new Error(`Lesson flow missing ${token}`);
 }
+for (const token of ['expo-haptics','createLearningFeedbackGate','selectionAsync','notificationAsync','impactAsync']) {
+  if (!learningFeedback.includes(token)) throw new Error(`Shared learning feedback controller missing ${token}`);
+}
+if (lesson.includes("from 'expo-haptics'")) throw new Error('Lesson flow must route haptics through the shared learning feedback controller');
 for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Déobfusquer','Console','Preview','importFilesFromPhone','importFolderFromPhone']) {
   if (!lab.includes(token)) throw new Error(`Lab workspace UI missing ${token}`);
 }
@@ -48,4 +53,4 @@ for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','portf
   if (!projectEngine.includes(token)) throw new Error(`Portfolio engine missing ${token}`);
 }
 if (requiredFiles.some((source) => source.includes('TODO UI'))) throw new Error('A product UI contains an unfinished TODO marker');
-console.log('Product readiness audit OK: animated launch, path-first learning, active recall, real XP/NexCoins/streak primitives, step lessons, haptic/audio feedback, bounded phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
+console.log('Product readiness audit OK: animated launch, path-first learning, active recall, real XP/NexCoins/streak primitives, step lessons, centralized haptic/audio feedback, bounded phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
