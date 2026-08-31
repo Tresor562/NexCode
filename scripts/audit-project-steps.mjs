@@ -56,6 +56,22 @@ assert.equal(nextProjectStep(project, 999).completedSteps, 3, 'progress above 10
 assert.equal(nextProjectStep(project, 999).complete, true, 'clamped over-100 progress must remain complete');
 assert.equal(nextProjectStep(project, 999).nextStep, undefined, 'completed projects must not expose a stale next step');
 
+const fourStepProject = {
+  ...project,
+  id: 'four-step-project',
+  title: 'Projet 4 étapes',
+  steps: ['Structure', 'Style', 'Interaction', 'Polish'],
+};
+assert.deepEqual(
+  nextProjectStep(fourStepProject, 13),
+  { completedSteps: 0, nextStep: 'Structure', complete: false },
+  'partial progress must not round up to a completed construction step',
+);
+assert.equal(nextProjectStep(fourStepProject, 24).completedSteps, 0, '24% must remain before the first 25% milestone');
+assert.equal(nextProjectStep(fourStepProject, 25).completedSteps, 1, '25% must cross exactly the first four-step milestone');
+assert.equal(nextProjectStep(fourStepProject, 49).completedSteps, 1, '49% must not expose the second step as completed');
+assert.equal(nextProjectStep(fourStepProject, 50).completedSteps, 2, '50% must cross exactly the second four-step milestone');
+
 const emptyProject = { ...project, id: 'empty-project', steps: [] };
 assert.deepEqual(
   nextProjectStep(emptyProject, 0),
@@ -63,4 +79,4 @@ assert.deepEqual(
   'empty projects must fail safely without indexing a phantom step',
 );
 
-console.log('Project step audit OK: persisted progress restores coherent guided-project steps, near-complete snapshots cannot infer completion, and invalid values fail safely.');
+console.log('Project step audit OK: rounded persisted milestones restore correctly, partial progress never rounds up a guided step, completion stays exact, and invalid values fail safely.');
