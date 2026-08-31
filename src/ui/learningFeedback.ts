@@ -26,7 +26,7 @@ const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 // newer cue has already been requested. The generation is global rather than
 // per-player because success/error/tap cues use different players but still share
 // one audible feedback channel from the learner's perspective. Only the newest
-// requested cue may call play().
+// accepted cue may call play().
 let sharedAudioRequestGeneration = 0;
 
 function supersedeAudio(): number {
@@ -65,11 +65,16 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       Haptics.impactAsync(style).catch(() => undefined);
     },
     sound(appActive: boolean, player: ReplayableAudioPlayer) {
-      // Supersede first, even when this request is rejected by the foreground or
-      // cooldown gate. A later interaction must invalidate any older seek still
-      // resolving, including a seek belonging to a different cue/player.
+      // Moving the app out of the foreground must invalidate any seek that may
+      // still resolve after the transition. A request rejected only by the sound
+      // cooldown is different: it should not silence an already accepted success
+      // or error cue just because the learner taps the next control immediately.
+      if (!appActive) {
+        supersedeAudio();
+        return;
+      }
+      if (!canTrigger('sound', true)) return;
       const generation = supersedeAudio();
-      if (!canTrigger('sound', appActive)) return;
       player.seekTo(0)
         .then(() => {
           if (sharedAudioRequestGeneration !== generation) return;
