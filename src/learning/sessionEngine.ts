@@ -49,6 +49,16 @@ function safeAttemptCount(value: unknown): number {
   return Math.max(0, Math.min(10_000, Math.floor(value)));
 }
 
+function hasCorrectLessonEvidence(state: LocalState, lesson: Lesson): boolean {
+  const skillIds = lesson.skillIds ?? [];
+  if (skillIds.length === 0) return false;
+  return skillIds.some((skillId) =>
+    (state.mastery[skillId]?.evidence ?? []).some((evidence) =>
+      evidence.lessonId === lesson.id && evidence.correct === true,
+    ),
+  );
+}
+
 export function learningCompletionReward(lesson: Lesson): LearningCompletionReward {
   const reward = completionRewards[lesson.activityKind ?? 'learn'];
   return {
@@ -59,10 +69,11 @@ export function learningCompletionReward(lesson: Lesson): LearningCompletionRewa
 
 export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
   if (state.completedLessons.includes(lesson.id)) return state;
-  // Completion rewards require learning evidence produced by recordLessonOutcome.
-  // This keeps the canonical reward boundary safe even if a future UI, deep link
-  // or replay path calls it directly instead of following the current Lab flow.
+  // Completion rewards require both a recorded attempt and correct evidence
+  // produced by recordLessonOutcome. A failed attempt must never become a
+  // reward token merely because a future UI/deep-link path calls this boundary.
   if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
+  if (!hasCorrectLessonEvidence(state, lesson)) return state;
   const reward = learningCompletionReward(lesson);
   const rewarded = rewardProgress(state, { ...reward, now });
   return {
