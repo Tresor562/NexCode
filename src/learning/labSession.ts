@@ -97,7 +97,7 @@ function optionalPreviewAttribute(tag: string, name: 'media' | 'type') {
   return value ? ` ${name}="${escapeHtmlAttribute(value)}"` : '';
 }
 
-function normalizePreviewAssetPath(rawReference: string) {
+function normalizePreviewAssetPath(rawReference: string, sourcePath?: string) {
   const trimmed = rawReference.trim();
   if (!trimmed || /^(?:[a-z][a-z\d+.-]*:|\/\/|\/|#)/i.test(trimmed)) return undefined;
 
@@ -109,8 +109,9 @@ function normalizePreviewAssetPath(rawReference: string) {
     return undefined;
   }
 
+  const sourceSegments = sourcePath?.replace(/\\/g, '/').split('/').slice(0, -1).filter(Boolean) ?? [];
   const segments = decoded.replace(/\\/g, '/').split('/');
-  const normalized: string[] = [];
+  const normalized: string[] = [...sourceSegments];
   for (const segment of segments) {
     if (!segment || segment === '.') continue;
     if (segment === '..') {
@@ -130,6 +131,19 @@ function resolvePreviewWorkspaceFile(draft: LabDraft, normalizedPath: string) {
 
 function svgPreviewDataUri(source: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
+}
+
+function inlineLocalSvgCssUrls(source: string, draft: LabDraft, stylesheetPath: string) {
+  return source.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)'"\s][^)]*))\s*\)/gi, (match, doubleQuoted, singleQuoted, bare) => {
+    const reference = String(doubleQuoted ?? singleQuoted ?? bare ?? '').trim();
+    const normalizedPath = normalizePreviewAssetPath(reference, stylesheetPath);
+    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.svg')) return match;
+    const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
+    if (!path) return match;
+    const svg = draft.files[path];
+    if (svg === undefined) return match;
+    return `url("${svgPreviewDataUri(svg)}")`;
+  });
 }
 
 function inlineLocalPreviewImages(document: string, draft: LabDraft) {
@@ -164,7 +178,8 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
     if (source === undefined) return tag;
     inlinedStyles.add(path);
     const mediaAttribute = optionalPreviewAttribute(tag, 'media');
-    return `<style data-nexcode-source="${escapeHtmlAttribute(path)}"${mediaAttribute}>${escapeInlineClosingTag(source, 'style')}</style>`;
+    const previewCss = inlineLocalSvgCssUrls(source, draft, path);
+    return `<style data-nexcode-source="${escapeHtmlAttribute(path)}"${mediaAttribute}>${escapeInlineClosingTag(previewCss, 'style')}</style>`;
   });
 
   output = output.replace(/<script\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>\s*<\/script>/gi, (tag) => {
@@ -229,7 +244,7 @@ export function webPreviewDocument(draft: LabDraft) {
   const fallbackCss = fallbackCssPath && !inlined.inlinedStyles.has(fallbackCssPath) ? (draft.files[fallbackCssPath] ?? '') : '';
   const fallbackJs = fallbackJsPath && !inlined.inlinedScripts.has(fallbackJsPath) ? (draft.files[fallbackJsPath] ?? '') : '';
   const styleTag = fallbackCssPath && fallbackCss
-    ? `<style data-nexcode-source="${escapeHtmlAttribute(fallbackCssPath)}">${escapeInlineClosingTag(fallbackCss, 'style')}</style>`
+    ? `<style data-nexcode-source="${escapeHtmlAttribute(fallbackCssPath)}">${escapeInlineClosingTag(inlineLocalSvgCssUrls(fallbackCss, draft, fallbackCssPath), 'style')}</style>`
     : '';
   const scriptTag = fallbackJsPath && fallbackJs
     ? `<script data-nexcode-source="${escapeHtmlAttribute(fallbackJsPath)}">${escapeInlineClosingTag(fallbackJs, 'script')}<\/script>`
