@@ -10,5 +10,20 @@ assert.match(source, /Math\.max\(0, Math\.min\(10_000, Math\.floor\(value\)\)\)/
 assert.match(source, /safeAttemptCount\(state\.lessonAttempts\[lesson\.id\]\) \+ 1/, 'new attempts must build from the sanitized persisted counter');
 assert.match(source, /Math\.min\(10_000, safeAttemptCount\(state\.lessonAttempts\[lesson\.id\]\) \+ 1\)/, 'incrementing a saturated counter must stay bounded');
 assert.doesNotMatch(source, /\(state\.lessonAttempts\[lesson\.id\] \?\? 0\) \+ 1/, 'raw persisted attempt counters must not flow directly into pedagogy gating');
+assert.match(source, /export function recordLessonOutcome\(/, 'attempt recording must have a reward-free outcome path shared by UI and indexed answers');
+assert.match(source, /return recordLessonOutcome\(state, lesson, correct, errorTag, now\);/, 'indexed answers must delegate to the shared attempt outcome path');
 
-console.log('Session attempt audit OK: persisted lesson attempt counters are finite, bounded and safe for Lab gating.');
+const attemptStart = source.indexOf('export function recordLessonOutcome(');
+const answerStart = source.indexOf('export function recordLessonAnswer(');
+assert.ok(attemptStart >= 0 && answerStart > attemptStart, 'attempt outcome section must be discoverable');
+const attemptSection = source.slice(attemptStart, answerStart);
+assert.doesNotMatch(attemptSection, /rewardProgress\(/, 'answer attempts must never mint XP, NexCoins, streak progress or learning minutes');
+assert.doesNotMatch(attemptSection, /completedLessons:/, 'answer attempts must not mark lessons complete before the completion boundary');
+
+const rewardStart = source.indexOf('export function rewardLearningCompletion(');
+assert.ok(rewardStart >= 0 && rewardStart < attemptStart, 'completion reward boundary must remain separate from attempt recording');
+const rewardSection = source.slice(rewardStart, attemptStart);
+assert.match(rewardSection, /state\.completedLessons\.includes\(lesson\.id\)/, 'completion rewards must remain idempotent by lesson id');
+assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'only the completion boundary should mint the learning reward');
+
+console.log('Session attempt audit OK: attempts are bounded and reward-free, while completion rewards stay idempotent.');
