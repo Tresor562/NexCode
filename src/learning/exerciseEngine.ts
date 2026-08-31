@@ -45,6 +45,16 @@ export const supportedExerciseKinds: ExerciseKind[] = [
   'mcq', 'predict-output', 'fill-code', 'order-steps', 'debug', 'write-code', 'refactor', 'explain',
 ];
 
+const AUTOMATIC_GATE_REQUIRED_KINDS = new Set<ExerciseKind>([
+  'mcq',
+  'predict-output',
+  'fill-code',
+  'order-steps',
+  'debug',
+  'write-code',
+  'refactor',
+]);
+
 function normalize(value: ExerciseAnswer) {
   return Array.isArray(value) ? value.join('\n').trim() : String(value).trim();
 }
@@ -120,19 +130,22 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
   const hasTestGate = results.length > 0;
   const testPassed = !hasTestGate || results.every((item) => item.passed);
   const hasAutomaticGate = hasDirectGate || hasTestGate;
+  const requiresAutomaticGate = AUTOMATIC_GATE_REQUIRED_KINDS.has(exercise.kind);
   const hasSubstantiveAnswer = hasSubstantiveOpenEndedAnswer(exercise, answerText);
-  const passed = hasAutomaticGate ? directPassed && testPassed : hasSubstantiveAnswer;
+  const evaluable = hasAutomaticGate || !requiresAutomaticGate;
+  const passed = evaluable && (hasAutomaticGate ? directPassed && testPassed : hasSubstantiveAnswer);
 
-  if (!hasAutomaticGate && !hasSubstantiveAnswer) {
+  if (!evaluable) {
+    feedback.push('Cet exercice n’a pas encore de clé de correction fiable. Il ne peut pas valider ta maîtrise tant qu’un résultat attendu ou des tests vérifiables ne sont pas définis.');
+    misconceptionTags.push('evaluation-gate-missing');
+  } else if (!hasAutomaticGate && !hasSubstantiveAnswer) {
     feedback.push(exercise.kind === 'explain'
       ? 'Développe ton explication avec plusieurs mots utiles et une idée complète avant de valider. La longueur seule ne démontre pas encore ton raisonnement.'
-      : exercise.kind === 'write-code' || exercise.kind === 'debug' || exercise.kind === 'refactor'
-        ? 'Écris une vraie tentative de code avant de valider. Des commentaires, espaces ou symboles seuls ne comptent pas comme une solution.'
-        : 'Écris d’abord une réponse exploitable avant de valider. Une tentative trop courte ne compte pas comme un exercice réussi.');
+      : 'Écris d’abord une réponse exploitable avant de valider. Une tentative trop courte ne compte pas comme un exercice réussi.');
     misconceptionTags.push('input-required');
   }
 
-  if (!directPassed) {
+  if (hasAutomaticGate && !directPassed) {
     feedback.push('Le comportement final n’est pas encore celui demandé. Compare ton résultat à l’objectif, sans repartir de zéro.');
     misconceptionTags.push('expected-behavior');
   }
@@ -156,7 +169,11 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
 
   const checks = Math.max(1, (hasDirectGate ? 1 : 0) + results.length);
   const successes = (hasDirectGate ? (directPassed ? 1 : 0) : 0) + results.filter((item) => item.passed).length;
-  const score = !hasAutomaticGate ? (hasSubstantiveAnswer ? 100 : 0) : Math.round((successes / checks) * 100);
+  const score = !evaluable
+    ? 0
+    : !hasAutomaticGate
+      ? (hasSubstantiveAnswer ? 100 : 0)
+      : Math.round((successes / checks) * 100);
 
   return {
     passed,
