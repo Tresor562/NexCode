@@ -32,6 +32,8 @@ assert.equal(canonicalWorkspacePath('src/aux'), null, 'Reserved device basenames
 assert.equal(canonicalWorkspacePath('src/report. '), null, 'Trailing dots or spaces must not create cross-filesystem aliases');
 assert.equal(canonicalWorkspacePath('src/file:name.js'), null, 'Windows-invalid filename characters must be rejected for portable projects');
 assert.equal(canonicalWorkspacePath('src/component?.js'), null, 'Wildcard-like filename characters must not survive canonicalization');
+assert.match(source, /MAX_FUTURE_CLOCK_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Lab restoration must keep a bounded clock-skew tolerance instead of trusting arbitrary future timestamps');
+assert.match(source, /Date\.parse\(value\)\s*<=\s*nowMs\s*\+\s*MAX_FUTURE_CLOCK_SKEW_MS/, 'Persisted Lab timestamps must be bounded against the local clock before they influence restoration');
 assert.match(labEngineSource, /import\s+\{[^}]*restoreWorkspaceDraft[^}]*\}\s+from\s+['"]\.\.\/lib\/workspaceSafety['"]/, 'Lab engine must restore through the shared workspace safety boundary');
 assert.match(labEngineSource, /restoreWorkspaceDraft\s*\(\s*\{[\s\S]*stored,[\s\S]*expectedMissionId:\s*mission\.id,[\s\S]*expectedLanguage:\s*mission\.language,[\s\S]*fallbackFiles:\s*starterFiles/, 'Lab restoration must bind shared safety to the current mission, language and trusted starter files');
 assert.match(labEngineSource, /Object\.keys\(files\)\.some\(isSensitiveWorkspaceFilename\)/, 'Lab secret checks must share the canonical sensitive-filename policy');
@@ -61,6 +63,29 @@ const options = {
   assert.equal(result.repaired, false, 'A clean workspace must not be rewritten');
   assert.equal(result.draft.updatedAt, base.updatedAt, 'A clean workspace must preserve its timestamp');
   assert.deepEqual(result.draft.passedCriteria, ['preview'], 'A clean workspace must preserve valid criteria');
+}
+
+{
+  const impossibleFuture = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: { ...base, updatedAt: impossibleFuture },
+  });
+  assert.equal(result.repaired, true, 'A Lab draft dated far in the future must be repaired before it can win sync/restoration ordering');
+  assert.notEqual(result.draft.updatedAt, impossibleFuture, 'Repair must replace an impossible future updatedAt with the current restoration clock');
+  assert.equal(Date.parse(result.draft.updatedAt) <= Date.now() + 5 * 60 * 1000, true, 'Repaired draft timestamp must stay within the supported clock-skew window');
+  assert.deepEqual(result.draft.passedCriteria, [], 'Timestamp repair must invalidate stale validation evidence');
+}
+
+{
+  const impossibleFuture = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: { ...base, lastValidatedAt: impossibleFuture },
+  });
+  assert.equal(result.repaired, true, 'Future validation evidence must not survive Lab restoration');
+  assert.equal(result.draft.lastValidatedAt, undefined, 'Impossible future validation timestamps must be cleared');
+  assert.deepEqual(result.draft.passedCriteria, [], 'Criteria tied to impossible future validation must be cleared');
 }
 
 {
@@ -220,4 +245,4 @@ const options = {
   assert.deepEqual(result.draft.passedCriteria, []);
 }
 
-console.log('Workspace safety audit OK: shared Lab restoration/import identity, slash/case/Unicode/portable-path collision handling, sensitive/binary filtering, and validation-proof invalidation are protected.');
+console.log('Workspace safety audit OK: shared Lab restoration/import identity, portable path handling, sensitive filtering, validation-proof invalidation, and bounded clock integrity are protected.');
