@@ -36,10 +36,11 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { sanitizeLocalState, rewardProgress, localDateKey } = module.exports;
+const { sanitizeLocalState, rewardProgress, localDateKey, touchDailyActivity } = module.exports;
 assert.equal(typeof sanitizeLocalState, 'function', 'sanitizeLocalState must stay exported');
 assert.equal(typeof rewardProgress, 'function', 'rewardProgress must stay exported');
 assert.equal(typeof localDateKey, 'function', 'localDateKey must stay exported');
+assert.equal(typeof touchDailyActivity, 'function', 'touchDailyActivity must stay exported');
 
 const sanitized = sanitizeLocalState({
   projectProgress: {
@@ -165,4 +166,24 @@ assert.equal(crossedReward.xp, 62, 'normal goal crossing must still grant the le
 assert.equal(crossedReward.nexCoins, 28, 'normal goal crossing must still grant lesson NexCoins plus the daily NexCoins bonus');
 assert.equal(crossedReward.dailyGoalRewardDate, rewardDay);
 
-console.log('Local state sanitization audit OK: persisted learning state stays bounded and daily goal rewards are exactly-once and self-healing after sync.');
+const impossibleFuture = new Date('2099-01-01T12:00:00.000Z');
+const realDay = localDateKey(new Date());
+const futureReward = rewardProgress(sanitizeLocalState({
+  xp: 10,
+  nexCoins: 5,
+  streak: 9,
+  bestStreak: 9,
+  dailyGoal: 20,
+  dailyCompleted: 0,
+}), { xp: 12, nexCoins: 3, minutes: 5, now: impossibleFuture });
+assert.equal(futureReward.lastActiveDate, realDay, 'an impossible future reward clock must fall back to the real local day');
+assert.notEqual(futureReward.lastActiveDate, localDateKey(impossibleFuture), 'future reward clocks must never move the streak into an impossible day');
+
+const futureTouch = touchDailyActivity(sanitizeLocalState({ streak: 3, bestStreak: 5 }), impossibleFuture);
+assert.equal(futureTouch.lastActiveDate, realDay, 'direct daily activity touches must enforce the same clock boundary as rewards');
+assert.notEqual(futureTouch.lastActiveDate, localDateKey(impossibleFuture));
+
+assert.match(source, /MAX_PROGRESS_CLOCK_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'the progression clock skew boundary must remain explicit and reviewable');
+assert.match(source, /value\.getTime\(\)\s*>\s*safeReference\.getTime\(\)\s*\+\s*MAX_PROGRESS_CLOCK_SKEW_MS/, 'future timestamps must be rejected at the shared progression clock boundary');
+
+console.log('Local state sanitization audit OK: persisted learning state stays bounded, daily rewards stay exactly-once, and impossible future clocks cannot forge streak days.');
