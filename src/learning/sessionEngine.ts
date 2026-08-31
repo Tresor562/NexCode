@@ -49,14 +49,24 @@ function safeAttemptCount(value: unknown): number {
   return Math.max(0, Math.min(10_000, Math.floor(value)));
 }
 
-function hasCorrectLessonEvidence(state: LocalState, lesson: Lesson): boolean {
+function hasLatestCorrectLessonEvidence(state: LocalState, lesson: Lesson): boolean {
   const skillIds = lesson.skillIds ?? [];
   if (skillIds.length === 0) return false;
-  return skillIds.some((skillId) =>
-    (state.mastery[skillId]?.evidence ?? []).some((evidence) =>
-      evidence.lessonId === lesson.id && evidence.correct === true,
-    ),
-  );
+
+  // recordSkillAttempt writes the lesson attempt into every declared skill. A
+  // completion therefore requires each skill to agree that the latest evidence
+  // for this lesson is correct. Looking backwards avoids trusting an older win
+  // after the learner has since failed the same activity, and requiring every
+  // declared skill makes partially-corrupted mastery state fail closed.
+  return skillIds.every((skillId) => {
+    const evidence = state.mastery[skillId]?.evidence ?? [];
+    for (let index = evidence.length - 1; index >= 0; index -= 1) {
+      const attempt = evidence[index];
+      if (attempt?.lessonId !== lesson.id) continue;
+      return attempt.correct === true;
+    }
+    return false;
+  });
 }
 
 export function learningCompletionReward(lesson: Lesson): LearningCompletionReward {
@@ -69,11 +79,12 @@ export function learningCompletionReward(lesson: Lesson): LearningCompletionRewa
 
 export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
   if (state.completedLessons.includes(lesson.id)) return state;
-  // Completion rewards require both a recorded attempt and correct evidence
-  // produced by recordLessonOutcome. A failed attempt must never become a
-  // reward token merely because a future UI/deep-link path calls this boundary.
+  // Completion rewards require both a recorded attempt and the latest correct
+  // evidence produced by recordLessonOutcome for every declared lesson skill.
+  // A failed retry must never become rewardable because an older success still
+  // exists deeper in the mastery history.
   if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
-  if (!hasCorrectLessonEvidence(state, lesson)) return state;
+  if (!hasLatestCorrectLessonEvidence(state, lesson)) return state;
   const reward = learningCompletionReward(lesson);
   const rewarded = rewardProgress(state, { ...reward, now });
   return {
