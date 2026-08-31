@@ -234,6 +234,70 @@ function mergeErrorTagRecord(remote: unknown, local: LocalState['lessonErrorTags
   return merged;
 }
 
+function finiteCloudNumber(value: unknown, fallback = 0, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function validIsoTimestamp(value: unknown): number {
+  if (typeof value !== 'string' || !value.trim()) return Number.NEGATIVE_INFINITY;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+}
+
+function mergeMastery(remote: unknown, local: LocalState['mastery']): LocalState['mastery'] {
+  const merged: LocalState['mastery'] = { ...local };
+  if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
+
+  for (const [skillId, raw] of Object.entries(remote as Record<string, unknown>)) {
+    if (!skillId.trim() || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const remoteSkill = raw as Partial<LocalState['mastery'][string]>;
+    const localSkill = local[skillId];
+    if (!localSkill) {
+      merged[skillId] = { ...remoteSkill, skillId } as LocalState['mastery'][string];
+      continue;
+    }
+
+    const remoteAt = validIsoTimestamp(remoteSkill.lastPracticedAt);
+    const localAt = validIsoTimestamp(localSkill.lastPracticedAt);
+    const preferred = remoteAt > localAt ? remoteSkill : localSkill;
+    const remoteEvidence = Array.isArray(remoteSkill.evidence) ? remoteSkill.evidence : [];
+    const localEvidence = Array.isArray(localSkill.evidence) ? localSkill.evidence : [];
+    const evidenceByKey = new Map<string, LocalState['mastery'][string]['evidence'][number]>();
+
+    for (const evidence of [...remoteEvidence, ...localEvidence]) {
+      if (!evidence || typeof evidence !== 'object') continue;
+      const candidate = evidence as LocalState['mastery'][string]['evidence'][number];
+      const key = [candidate.lessonId, candidate.activityKind, candidate.correct, candidate.scoreDelta, candidate.at, candidate.errorTag ?? ''].join('\u0000');
+      evidenceByKey.set(key, candidate);
+    }
+
+    const evidence = [...evidenceByKey.values()]
+      .sort((left, right) => validIsoTimestamp(left.at) - validIsoTimestamp(right.at))
+      .slice(-20);
+    let consecutiveCorrect = 0;
+    for (let index = evidence.length - 1; index >= 0; index -= 1) {
+      if (!evidence[index]?.correct) break;
+      consecutiveCorrect += 1;
+    }
+
+    merged[skillId] = {
+      ...localSkill,
+      ...preferred,
+      skillId,
+      attempts: Math.max(localSkill.attempts, finiteCloudNumber(remoteSkill.attempts)),
+      correctAttempts: Math.max(localSkill.correctAttempts, finiteCloudNumber(remoteSkill.correctAttempts)),
+      consecutiveCorrect,
+      lastPracticedAt: remoteAt > localAt ? remoteSkill.lastPracticedAt : localSkill.lastPracticedAt,
+      nextReviewAt: remoteAt > localAt ? remoteSkill.nextReviewAt : localSkill.nextReviewAt,
+      errorTags: unique([...(localSkill.errorTags ?? []), ...(Array.isArray(remoteSkill.errorTags) ? remoteSkill.errorTags.filter((tag): tag is string => typeof tag === 'string') : [])]).slice(-8),
+      evidence,
+    };
+  }
+
+  return merged;
+}
+
 function mergePortfolioProofs(remote: unknown, local: LocalState['portfolioProofs']): LocalState['portfolioProofs'] {
   const byProject = new Map(local.map((proof) => [proof.projectId, proof]));
   if (!Array.isArray(remote)) return [...byProject.values()];
@@ -321,7 +385,7 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
     lastActiveDate: daily.lastActiveDate,
     recentCourseId: typeof progress?.recent_course_id === 'string' ? progress.recent_course_id : local.recentCourseId,
     completedLessons: unique([...local.completedLessons, ...remoteLessons]),
-    mastery: progress?.mastery && typeof progress.mastery === 'object' ? { ...progress.mastery as LocalState['mastery'], ...local.mastery } : local.mastery,
+    mastery: mergeMastery(progress?.mastery, local.mastery),
     lessonAttempts: mergeMaxNumberRecord(progress?.lesson_attempts, local.lessonAttempts),
     lessonErrorTags: mergeErrorTagRecord(progress?.lesson_error_tags, local.lessonErrorTags),
     projectProgress: mergeMaxNumberRecord(progress?.project_progress, local.projectProgress, 100),
