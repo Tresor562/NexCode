@@ -13,6 +13,7 @@ expect(/guidedProjects\.find\(\(project\)\s*=>\s*project\.id\s*===\s*id\)/, 'Can
 expect(/const registeredProject = canonicalProject\(project\?\.id\);[\s\S]*if \(!registeredProject\) return state;/, 'Unknown or forged project objects must fail closed before progress mutation.');
 expect(/completedProjectSteps\(registeredProject, previousProgress\)/, 'Previous rewarded steps must use the canonical project definition.');
 expect(/completedProjectSteps\(registeredProject, nextProgress\)/, 'New rewarded steps must use the canonical project definition.');
+expect(/Math\.floor\(\(safePercent\(progress\) \/ 100\) \* total\)/, 'Project milestones must reward only fully crossed step boundaries.');
 expect(/Math\.max\(previousProgress,\s*safePercent\(requestedProgress\)\)/, 'Project progress must remain monotonic.');
 expect(/newlyCompletedSteps\s*=\s*Math\.max\(0,\s*nextSteps\s*-\s*previousSteps\)/, 'Project rewards must be derived from newly completed construction steps.');
 expect(/PROJECT_STEP_REWARD\.xp\s*\*\s*newlyCompletedSteps/, 'XP must scale with newly crossed project steps, not button presses.');
@@ -41,6 +42,14 @@ expect(/index\s*===\s*existingIndex\s*\?\s*proof\s*:\s*item/, 'A proof update mu
 expect(/safePercent\(state\.projectProgress\[project\.id\]\)\s*<\s*100/, 'A first portfolio reward must require canonical 100% project completion evidence.');
 expect(/const rewarded = rewardProgress\(state, \{ \.\.\.PORTFOLIO_PROOF_REWARD, now: rewardTime \}\);/, 'Only a first valid proof for a completed canonical project may enter the reward path.');
 expect(/portfolioProofs:\s*\[\.\.\.rewarded\.portfolioProofs,\s*proof\]/, 'A first valid portfolio proof must be persisted after rewarding.');
+
+const completedStepsBody = source.match(/function completedProjectSteps\([\s\S]*?\n\}/)?.[0] ?? '';
+if (!completedStepsBody) {
+  throw new Error('Could not isolate completedProjectSteps reward math.');
+}
+if (/Math\.round\(\(safePercent\(progress\)/.test(completedStepsBody)) {
+  throw new Error('Project milestone accounting must never round partial steps up into rewards.');
+}
 
 if (/completedProjectSteps\(project,/.test(source)) {
   throw new Error('Reward math must never trust the caller supplied project shape once canonical lookup exists.');
