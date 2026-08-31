@@ -1,5 +1,7 @@
 import { GuidedProject } from '../data/curriculumCore';
+import { guidedProjects } from '../data/projects';
 import { LocalState, rewardProgress } from '../lib/localState';
+import { defaultProjectRubric, reviewProject } from './projectEngine';
 import type { PortfolioProof } from './projectPortfolioEngine';
 
 const PROJECT_STEP_REWARD = Object.freeze({ xp: 15, nexCoins: 3, minutes: 3 });
@@ -12,6 +14,13 @@ function safePercent(value: unknown): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function canonicalProject(projectId: unknown): GuidedProject | undefined {
+  if (typeof projectId !== 'string') return undefined;
+  const id = projectId.trim();
+  if (!id) return undefined;
+  return guidedProjects.find((project) => project.id === id);
+}
+
 function completedProjectSteps(project: GuidedProject, progress: number): number {
   const total = Math.max(0, project.steps.length);
   if (total === 0) return progress >= 100 ? 1 : 0;
@@ -22,7 +31,7 @@ function validRewardTime(value: Date): Date {
   return value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
 }
 
-function isRewardablePortfolioProof(proof: PortfolioProof, now: Date): boolean {
+function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProject, now: Date): boolean {
   const projectId = typeof proof.projectId === 'string' ? proof.projectId.trim() : '';
   const title = typeof proof.title === 'string' ? proof.title.trim() : '';
   const evidenceSummary = typeof proof.evidenceSummary === 'string' ? proof.evidenceSummary.trim() : '';
@@ -31,24 +40,33 @@ function isRewardablePortfolioProof(proof: PortfolioProof, now: Date): boolean {
     ? proof.rubricIds.map((id) => typeof id === 'string' ? id.trim() : '').filter(Boolean)
     : [];
   const uniqueRubricIds = new Set(rubricIds);
+  const allowedRubricIds = new Set(defaultProjectRubric(project).map((item) => item.id));
+  const review = reviewProject(project, rubricIds);
 
-  return Boolean(projectId)
-    && Boolean(title)
+  return projectId === project.id
+    && title === project.title.trim()
     && Boolean(evidenceSummary)
     && typeof proof.score === 'number'
     && Number.isFinite(proof.score)
     && proof.score >= PORTFOLIO_PASS_SCORE
     && proof.score <= 100
+    && review.passed
+    && proof.score === review.score
     && Number.isFinite(completedAt)
     && completedAt <= now.getTime() + MAX_FUTURE_PROOF_SKEW_MS
     && rubricIds.length > 0
-    && uniqueRubricIds.size === rubricIds.length;
+    && uniqueRubricIds.size === rubricIds.length
+    && rubricIds.every((id) => allowedRubricIds.has(id));
 }
 
 /**
  * Progress is monotonic by design: stale UI callbacks or manual state tampering
  * can never lower the stored percentage and later re-earn the same step reward.
  * Rewards are derived from newly crossed construction steps, not button presses.
+ *
+ * The caller may pass a project object from the UI, but reward math always uses
+ * the canonical project registered in product data. This prevents a malformed or
+ * stale object from inflating the number of rewarded steps for a known project id.
  */
 export function advanceProjectProgress(
   state: LocalState,
@@ -56,18 +74,21 @@ export function advanceProjectProgress(
   requestedProgress: number,
   now = new Date(),
 ): LocalState {
-  const previousProgress = safePercent(state.projectProgress[project.id]);
+  const registeredProject = canonicalProject(project?.id);
+  if (!registeredProject) return state;
+
+  const previousProgress = safePercent(state.projectProgress[registeredProject.id]);
   const nextProgress = Math.max(previousProgress, safePercent(requestedProgress));
   if (nextProgress === previousProgress) return state;
 
-  const previousSteps = completedProjectSteps(project, previousProgress);
-  const nextSteps = completedProjectSteps(project, nextProgress);
+  const previousSteps = completedProjectSteps(registeredProject, previousProgress);
+  const nextSteps = completedProjectSteps(registeredProject, nextProgress);
   const newlyCompletedSteps = Math.max(0, nextSteps - previousSteps);
   const progressed = {
     ...state,
     projectProgress: {
       ...state.projectProgress,
-      [project.id]: nextProgress,
+      [registeredProject.id]: nextProgress,
     },
   };
 
@@ -81,9 +102,9 @@ export function advanceProjectProgress(
 }
 
 /**
- * Only structurally valid passing evidence can enter the portfolio reward path.
- * This keeps the progression boundary safe even if a stale client, imported
- * local state or future UI accidentally calls the engine with malformed data.
+ * Only canonical, structurally valid passing evidence can enter the portfolio
+ * reward path. Project identity, rubric membership and score are recomputed from
+ * product data rather than trusted from a stale/imported proof object.
  *
  * The first portfolio proof earns the one-time completion reward only after the
  * guided project itself has reached 100%. Later valid edits replace the proof in
@@ -95,9 +116,10 @@ export function recordPortfolioProof(
   now = new Date(),
 ): LocalState {
   const rewardTime = validRewardTime(now);
-  if (!isRewardablePortfolioProof(proof, rewardTime)) return state;
+  const project = canonicalProject(proof?.projectId);
+  if (!project || !isRewardablePortfolioProof(proof, project, rewardTime)) return state;
 
-  const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId === proof.projectId);
+  const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId === project.id);
   if (existingIndex >= 0) {
     return {
       ...state,
@@ -108,7 +130,7 @@ export function recordPortfolioProof(
   // A passing rubric alone is not completion evidence. The learner must have
   // actually crossed the canonical 100% project-progress boundary before the
   // first proof can mint its one-time portfolio reward.
-  if (safePercent(state.projectProgress[proof.projectId]) < 100) return state;
+  if (safePercent(state.projectProgress[project.id]) < 100) return state;
 
   const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now: rewardTime });
   return {
