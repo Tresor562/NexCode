@@ -20,7 +20,12 @@ expect(/portfolioProofs:\s*\[\.\.\.rewarded\.portfolioProofs,\s*proof\]/, 'A fir
 if (/requestedProgress\s*>\s*\(state\.projectProgress/.test(source)) {
   throw new Error('Do not reward raw progress increases without monotonic step accounting.');
 }
-if (/existingIndex\s*>=\s*0[\s\S]{0,500}rewardProgress/.test(source)) {
+
+const existingProofBranch = source.match(/if \(existingIndex\s*>=\s*0\)\s*\{([\s\S]*?)\n\s*\}\n\n\s*const rewarded = rewardProgress/)?.[1];
+if (!existingProofBranch) {
+  throw new Error('Could not isolate the existing-proof update branch from the first-proof reward branch.');
+}
+if (/rewardProgress\s*\(/.test(existingProofBranch)) {
   throw new Error('Updating an existing portfolio proof must never mint XP or NexCoins.');
 }
 
