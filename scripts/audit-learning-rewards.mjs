@@ -43,7 +43,10 @@ assert.ok(completionFunction.indexOf('completedLessons.includes(lesson.id)') < c
 assert.ok(completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])') < completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, now)'), 'attempt existence must be checked before scanning latest mastery evidence');
 assert.ok(completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, now)') < completionFunction.indexOf('rewardProgress(state'), 'context-valid latest correct lesson evidence must be verified before any XP, NexCoin, streak or minute mutation');
 
-assert.match(localStateSource, /requestedNow instanceof Date && Number\.isFinite\(requestedNow\.getTime\(\)\)/, 'invalid reward timestamps must fall back before streak dates are computed');
+assert.match(localStateSource, /function trustedProgressDate\(value\?: Date, reference = new Date\(\)\): Date/, 'reward timestamps must pass through the shared trusted progression clock boundary');
+assert.match(localStateSource, /if \(!\(value instanceof Date\) \|\| !Number\.isFinite\(value\.getTime\(\)\)\) return safeReference;/, 'invalid reward timestamps must fall back before streak dates are computed');
+assert.match(localStateSource, /if \(value\.getTime\(\) > safeReference\.getTime\(\) \+ MAX_PROGRESS_CLOCK_SKEW_MS\) return safeReference;/, 'impossible future reward timestamps must fall back before streak dates are computed');
+assert.match(localStateSource, /const now = trustedProgressDate\(reward\.now\);/, 'reward progress must normalize its clock before any daily or streak mutation');
 assert.match(localStateSource, /const minutes = finiteNumber\(reward\.minutes, 0, 0, 240\);/, 'reward minutes must reject NaN or Infinity and remain bounded per activity');
 assert.match(localStateSource, /const xp = finiteInteger\(reward\.xp, 0, 0, 1_000_000\);/, 'XP rewards must be finite non-negative integers with a corruption ceiling');
 assert.match(localStateSource, /const nexCoins = finiteInteger\(reward\.nexCoins, 0, 0, 1_000_000\);/, 'NexCoin rewards must be finite non-negative integers with a corruption ceiling');
@@ -58,4 +61,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, context-valid latest-correct evidence, saturating progression totals and idempotence are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, context-valid latest-correct evidence, trusted progression clocks, saturating totals and idempotence are enforced.');
