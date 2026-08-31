@@ -92,22 +92,32 @@ export function reviewProject(project: GuidedProject, achievedRubricIds: string[
   return { score, passed: score >= 70 && achieved.has('functionality') && achieved.has('understanding'), rubric, feedback };
 }
 
+function restoredCompletedSteps(progress: number, stepCount: number): number {
+  if (stepCount <= 0) return 0;
+
+  // Guided-project progress is persisted as an integer percentage. A legitimate
+  // milestone such as 1/3 is therefore stored as 33%, while 2/3 is stored as
+  // 67%. Reconstruct completion from those canonical rounded boundaries rather
+  // than rounding the raw ratio itself: Math.round(13% * 4) incorrectly turns
+  // a partial first step into a completed one.
+  let completed = 0;
+  for (let step = 1; step <= stepCount; step += 1) {
+    const boundary = Math.round((step / stepCount) * 100);
+    if (progress < boundary) break;
+    completed = step;
+  }
+  return completed;
+}
+
 export function nextProjectStep(project: GuidedProject, progress: number) {
   const safeProgress = typeof progress === 'number' && Number.isFinite(progress)
     ? Math.max(0, Math.min(100, progress))
     : 0;
   const stepCount = project.steps.length;
   const complete = safeProgress >= 100;
-  // Progress is persisted as a rounded percentage (e.g. 33/67 for 3 steps).
-  // Reconstruct the completed step count with the same rounding semantics, but
-  // never infer the final step from a merely near-complete percentage. This
-  // keeps completedSteps, nextStep and complete logically consistent after
-  // restoring old/local/cloud progress snapshots.
-  const roundedCompleted = stepCount
-    ? Math.max(0, Math.round((safeProgress / 100) * stepCount))
-    : 0;
+  const restoredCompleted = restoredCompletedSteps(safeProgress, stepCount);
   const completed = stepCount
-    ? Math.min(complete ? stepCount : Math.max(0, stepCount - 1), roundedCompleted)
+    ? Math.min(complete ? stepCount : Math.max(0, stepCount - 1), restoredCompleted)
     : 0;
   return {
     completedSteps: completed,
