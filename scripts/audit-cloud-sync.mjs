@@ -102,6 +102,46 @@ requirePattern(
   accountSource,
 );
 requirePattern(
+  /function mergeMastery\(remote: unknown, local: LocalState\['mastery'\]\): LocalState\['mastery'\]/,
+  'Cross-device mastery must use a dedicated reconciliation boundary instead of shallow object overwrite.',
+  accountSource,
+);
+requirePattern(
+  /const preferred = remoteAt > localAt \? remoteSkill : localSkill;/,
+  'Mastery score and review scheduling must prefer the most recently practiced device snapshot.',
+  accountSource,
+);
+requirePattern(
+  /const evidenceByKey = new Map<string, LocalState\['mastery'\]\[string\]\['evidence'\]\[number\]>\(\);[\s\S]*for \(const evidence of \[\.\.\.remoteEvidence, \.\.\.localEvidence\]\)/,
+  'Mastery reconciliation must preserve evidence from both devices and deduplicate it by stable event identity.',
+  accountSource,
+);
+requirePattern(
+  /\.sort\(\(left, right\) => validIsoTimestamp\(left\.at\) - validIsoTimestamp\(right\.at\)\)[\s\S]*\.slice\(-20\);/,
+  'Merged mastery evidence must remain chronological and bounded to the persisted history window.',
+  accountSource,
+);
+requirePattern(
+  /for \(let index = evidence\.length - 1; index >= 0; index -= 1\) \{[\s\S]*if \(!evidence\[index\]\?\.correct\) break;[\s\S]*consecutiveCorrect \+= 1;/,
+  'Consecutive-correct mastery must be recomputed from merged evidence so a newer failure on either device resets the streak.',
+  accountSource,
+);
+requirePattern(
+  /attempts: Math\.max\(localSkill\.attempts, finiteCloudNumber\(remoteSkill\.attempts\)\)/,
+  'Mastery attempt counters must not regress when devices reconcile.',
+  accountSource,
+);
+requirePattern(
+  /errorTags: unique\(\[\.\.\.\(localSkill\.errorTags \?\? \[\]\), \.\.\.\(Array\.isArray\(remoteSkill\.errorTags\)/,
+  'Mastery error tags must preserve diagnostic context from both devices.',
+  accountSource,
+);
+requirePattern(
+  /mastery: mergeMastery\(progress\?\.mastery, local\.mastery\)/,
+  'Supabase state merge must route mastery through cross-device reconciliation.',
+  accountSource,
+);
+requirePattern(
   /portfolioProofs: mergePortfolioProofs\(progress\?\.portfolio_proofs, local\.portfolioProofs\)/,
   'Portfolio proofs must be reconciled by project identity instead of choosing one array only by length.',
   accountSource,
@@ -112,4 +152,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
