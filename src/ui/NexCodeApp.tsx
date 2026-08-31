@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, Pressable, SafeAreaView, ScrollView, StatusBar as RNStatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Course, Lesson, courses, guidedProjects } from '../data/courses';
-import { LabDraft, loadLocalState, LocalState, rewardProgress, saveLocalState } from '../lib/localState';
+import { LabDraft, loadLocalState, LocalState, saveLocalState } from '../lib/localState';
 import { buildAdaptivePool, planPracticeSession } from '../learning/adaptivePractice';
 import { buildChapterOfflinePack, OfflinePackKind } from '../learning/offlineEngine';
 import { courseMasterySnapshot } from '../learning/masteryEngine';
-import { buildSkillGraph, recordSkillAttempt } from '../learning/skillGraph';
+import { advanceProjectProgress, recordPortfolioProof } from '../learning/projectProgressEngine';
+import { recordLessonOutcome, rewardLearningCompletion } from '../learning/sessionEngine';
+import { buildSkillGraph } from '../learning/skillGraph';
 import { LearningHub } from './LearningHub';
 import { LessonFlowScreen } from './LessonFlowScreen';
 import { LabWorkspaceScreen } from './LabWorkspaceScreen';
@@ -47,16 +49,7 @@ export default function NexCodeApp() {
 
   function recordAttempt(correct: boolean, errorTag?: string) {
     if (!activeLesson) return;
-    setState((current) => {
-      const rewarded = rewardProgress(current, { xp: correct ? 12 : 2, nexCoins: correct ? 2 : 0, minutes: 4 });
-      return {
-        ...rewarded,
-        mastery: recordSkillAttempt(rewarded.mastery, activeLesson, correct, new Date(), errorTag),
-        lessonAttempts: { ...rewarded.lessonAttempts, [activeLesson.id]: (rewarded.lessonAttempts[activeLesson.id] ?? 0) + 1 },
-        lessonErrorTags: !correct && errorTag ? { ...rewarded.lessonErrorTags, [activeLesson.id]: [...new Set([...(rewarded.lessonErrorTags[activeLesson.id] ?? []), errorTag])].slice(-8) } : rewarded.lessonErrorTags,
-        completedLessons: correct && !rewarded.completedLessons.includes(activeLesson.id) ? [...rewarded.completedLessons, activeLesson.id] : rewarded.completedLessons,
-      };
-    });
+    setState((current) => recordLessonOutcome(current, activeLesson, correct, errorTag).state);
   }
 
   function saveLabDraft(draft: LabDraft) {
@@ -65,14 +58,13 @@ export default function NexCodeApp() {
 
   function completeLab(draft: LabDraft) {
     if (!labLesson) return;
-    const completed = labLesson;
+    const completed = { ...labLesson, activityKind: 'lab' as const };
     setState((current) => {
-      const rewarded = rewardProgress(current, { xp: 25, nexCoins: 5, minutes: 8 });
+      const attempted = recordLessonOutcome(current, completed, true, undefined).state;
+      const rewarded = rewardLearningCompletion(attempted, completed);
       return {
         ...rewarded,
-        mastery: recordSkillAttempt(rewarded.mastery, { ...completed, activityKind: 'lab' }, true),
         labDrafts: { ...rewarded.labDrafts, [completed.id]: draft },
-        completedLessons: rewarded.completedLessons.includes(completed.id) ? rewarded.completedLessons : [...rewarded.completedLessons, completed.id],
       };
     });
     setActiveLesson(completed); setLabLesson(null);
@@ -99,14 +91,7 @@ export default function NexCodeApp() {
       {tab === 'Accueil' ? <Home state={state} session={quickSession} onOpenLesson={openLesson} onOpenLearn={() => setTab('Apprendre')} onOpenLab={() => setTab('Lab')} /> : null}
       {tab === 'Apprendre' ? <LearningHub courses={courses} state={state} onOpenLesson={openLesson} onToggleChapterOffline={toggleChapterOffline} /> : null}
       {tab === 'Lab' ? <LabLibrary state={state} onOpenLesson={openLesson} /> : null}
-      {tab === 'Projets' ? <ProjectPortfolioScreen projects={guidedProjects} graph={graph} state={state} onProgress={(project, progress) => setState((current) => {
-        const increased = progress > (current.projectProgress[project.id] ?? 0);
-        const rewarded = increased ? rewardProgress(current, { xp: 15, nexCoins: 3, minutes: 3 }) : current;
-        return { ...rewarded, projectProgress: { ...rewarded.projectProgress, [project.id]: progress } };
-      })} onProof={(proof) => setState((current) => {
-        const rewarded = rewardProgress(current, { xp: 50, nexCoins: 10, minutes: 5 });
-        return { ...rewarded, portfolioProofs: [...rewarded.portfolioProofs.filter((item) => item.projectId !== proof.projectId), proof] };
-      })} onSaveProjectDraft={(project, draft) => setState((current) => ({ ...current, projectDrafts: { ...current.projectDrafts, [project.id]: draft } }))} /> : null}
+      {tab === 'Projets' ? <ProjectPortfolioScreen projects={guidedProjects} graph={graph} state={state} onProgress={(project, progress) => setState((current) => advanceProjectProgress(current, project, progress))} onProof={(proof) => setState((current) => recordPortfolioProof(current, proof))} onSaveProjectDraft={(project, draft) => setState((current) => ({ ...current, projectDrafts: { ...current.projectDrafts, [project.id]: draft } }))} /> : null}
       {tab === 'Profil' ? <Profile state={state} /> : null}
     </ScrollView>
     <BottomNav tab={tab} onChange={setTab} />
