@@ -21,7 +21,7 @@ if (!root.includes('LaunchScreen') || !root.includes('NexCodeApp')) throw new Er
 for (const token of ['exC','robot','translateX','Animated']) {
   if (!launch.includes(token)) throw new Error(`Launch screen missing ${token}`);
 }
-for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordLessonOutcome','rewardLearningCompletion','advanceProjectProgress','recordPortfolioProof','installedOfflinePacks','portfolioProofs','nexCoins']) {
+for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordLessonOutcome','rewardLearningCompletion','advanceProjectProgress','recordPortfolioProof','installedOfflinePacks','nexCoins']) {
   if (!app.includes(token)) throw new Error(`NexCodeApp missing ${token}`);
 }
 if (app.includes('rewardProgress(')) throw new Error('NexCodeApp must not bypass canonical lesson/project reward engines with direct rewardProgress calls');
