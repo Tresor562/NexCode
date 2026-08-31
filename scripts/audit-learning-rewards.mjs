@@ -20,22 +20,28 @@ assert.match(source, /selectedIndex as number\) < 0 \|\| \(selectedIndex as numb
 assert.match(source, /const answerIndex = normalizeSelectedIndex\(lesson, selectedIndex\);/, 'lesson answer recording must normalize the UI selection first');
 assert.match(source, /const correct = answerIndex !== null && answerIndex === lesson\.correctIndex;/, 'only a valid normalized choice may be considered correct');
 assert.match(source, /inferErrorTag\(lesson, answerIndex\)/, 'error evidence must use the normalized answer index');
-assert.match(source, /function hasLatestCorrectLessonEvidence\(state: LocalState, lesson: Lesson\): boolean/, 'completion rewards must use a dedicated latest-correct-evidence gate');
+assert.match(source, /const MAX_EVIDENCE_CLOCK_SKEW_MS = 5 \* 60 \* 1000;/, 'completion evidence may tolerate only a small device clock skew');
+assert.match(source, /function validEvidenceTime\(value: unknown, now: Date\): number \| null/, 'completion rewards must validate persisted evidence timestamps');
+assert.match(source, /if \(time > nowMs \+ MAX_EVIDENCE_CLOCK_SKEW_MS\) return null;/, 'future-dated mastery evidence must not become a durable reward token');
+assert.match(source, /function hasLatestCorrectLessonEvidence\(state: LocalState, lesson: Lesson, now: Date\): boolean/, 'completion rewards must use a dedicated contextual latest-correct-evidence gate');
 assert.match(source, /if \(skillIds\.length === 0\) return false;/, 'lessons without skill evidence must not be rewardable through the completion boundary');
+assert.match(source, /const expectedActivityKind = lesson\.activityKind \?\? 'learn';/, 'completion evidence must be bound to the lesson activity kind');
 assert.match(source, /return skillIds\.every\(\(skillId\) => \{/, 'every declared lesson skill must carry matching completion evidence');
 assert.match(source, /for \(let index = evidence\.length - 1; index >= 0; index -= 1\)/, 'completion evidence must be resolved from newest to oldest');
 assert.match(source, /if \(attempt\?\.lessonId !== lesson\.id\) continue;/, 'completion evidence must belong to the exact lesson');
+assert.match(source, /if \(attempt\.activityKind !== expectedActivityKind\) return false;/, 'completion evidence from a migrated or different activity kind must fail closed');
+assert.match(source, /if \(validEvidenceTime\(attempt\.at, now\) === null\) return false;/, 'completion evidence must carry a plausible timestamp');
 assert.match(source, /return attempt\.correct === true;/, 'the latest matching lesson evidence must be correct');
 assert.match(source, /if \(state\.completedLessons\.includes\(lesson\.id\)\) return state;/, 'lesson completion rewards must be idempotent');
 assert.match(source, /if \(safeAttemptCount\(state\.lessonAttempts\[lesson\.id\]\) < 1\) return state;/, 'lesson completion rewards must require a recorded attempt');
-assert.match(source, /if \(!hasLatestCorrectLessonEvidence\(state, lesson\)\) return state;/, 'a failed retry after an older success must not unlock completion XP or NexCoins');
+assert.match(source, /if \(!hasLatestCorrectLessonEvidence\(state, lesson, now\)\) return state;/, 'a failed, mismatched or future-dated retry must not unlock completion XP or NexCoins');
 assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'learning completion must pass through the shared streak/daily-goal reward engine');
 assert.match(source, /completedLessons: \[\.\.\.rewarded\.completedLessons, lesson\.id\]/, 'rewarded lessons must be persisted as completed atomically with the reward state');
 
 const completionFunction = source.slice(source.indexOf('export function rewardLearningCompletion'), source.indexOf('export function recordLessonOutcome'));
 assert.ok(completionFunction.indexOf('completedLessons.includes(lesson.id)') < completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])'), 'idempotence must be checked before attempt evidence to keep replays side-effect free');
-assert.ok(completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])') < completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson)'), 'attempt existence must be checked before scanning latest mastery evidence');
-assert.ok(completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson)') < completionFunction.indexOf('rewardProgress(state'), 'latest correct lesson evidence must be verified before any XP, NexCoin, streak or minute mutation');
+assert.ok(completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])') < completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, now)'), 'attempt existence must be checked before scanning latest mastery evidence');
+assert.ok(completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, now)') < completionFunction.indexOf('rewardProgress(state'), 'context-valid latest correct lesson evidence must be verified before any XP, NexCoin, streak or minute mutation');
 
 assert.match(localStateSource, /requestedNow instanceof Date && Number\.isFinite\(requestedNow\.getTime\(\)\)/, 'invalid reward timestamps must fall back before streak dates are computed');
 assert.match(localStateSource, /const minutes = finiteNumber\(reward\.minutes, 0, 0, 240\);/, 'reward minutes must reject NaN or Infinity and remain bounded per activity');
@@ -52,4 +58,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, latest-correct-evidence completion, saturating progression totals and idempotence are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, context-valid latest-correct evidence, saturating progression totals and idempotence are enforced.');
