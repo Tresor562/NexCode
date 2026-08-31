@@ -67,25 +67,24 @@ export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now 
   };
 }
 
-export function recordLessonAnswer(
+export function recordLessonOutcome(
   state: LocalState,
   lesson: Lesson,
-  selectedIndex: number | null,
+  correct: boolean,
+  errorTag: string | undefined,
   now = new Date(),
 ): AttemptResult {
-  const answerIndex = normalizeSelectedIndex(lesson, selectedIndex);
-  const correct = answerIndex !== null && answerIndex === lesson.correctIndex;
   const attempts = Math.min(10_000, safeAttemptCount(state.lessonAttempts[lesson.id]) + 1);
-  const errorTag = correct ? undefined : inferErrorTag(lesson, answerIndex);
-  const mastery = recordSkillAttempt(state.mastery, lesson, correct, now, errorTag);
+  const normalizedErrorTag = correct ? undefined : errorTag?.trim() || `${lesson.skillIds?.[0] ?? lesson.id}.incorrect`;
+  const mastery = recordSkillAttempt(state.mastery, lesson, correct, now, normalizedErrorTag);
   const previousScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (state.mastery[id]?.score ?? 0), 0);
   const nextScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0);
   const previousErrors = state.lessonErrorTags[lesson.id] ?? [];
-  const lessonErrorTags = {
-    ...state.lessonErrorTags,
-    [lesson.id]: errorTag ? [...new Set([...previousErrors, errorTag])].slice(-6) : previousErrors,
-  };
+  const lessonErrorTags = normalizedErrorTag
+    ? { ...state.lessonErrorTags, [lesson.id]: [...new Set([...previousErrors, normalizedErrorTag])].slice(-6) }
+    : state.lessonErrorTags;
   const shouldOpenLab = lesson.activityKind === 'lab' || attempts >= 2 || (correct && ['practice', 'review'].includes(lesson.activityKind ?? 'learn'));
+
   return {
     correct,
     masteryChanged: nextScore !== previousScore,
@@ -102,6 +101,18 @@ export function recordLessonAnswer(
       lessonErrorTags,
     },
   };
+}
+
+export function recordLessonAnswer(
+  state: LocalState,
+  lesson: Lesson,
+  selectedIndex: number | null,
+  now = new Date(),
+): AttemptResult {
+  const answerIndex = normalizeSelectedIndex(lesson, selectedIndex);
+  const correct = answerIndex !== null && answerIndex === lesson.correctIndex;
+  const errorTag = correct ? undefined : inferErrorTag(lesson, answerIndex);
+  return recordLessonOutcome(state, lesson, correct, errorTag, now);
 }
 
 export function completeLearningActivity(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
