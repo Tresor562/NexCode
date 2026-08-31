@@ -21,9 +21,10 @@ if (!root.includes('LaunchScreen') || !root.includes('NexCodeApp')) throw new Er
 for (const token of ['exC','robot','translateX','Animated']) {
   if (!launch.includes(token)) throw new Error(`Launch screen missing ${token}`);
 }
-for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordSkillAttempt','installedOfflinePacks','portfolioProofs','rewardProgress','nexCoins']) {
+for (const token of ['Accueil','Apprendre','Lab','Projets','Profil','buildAdaptivePool','planPracticeSession','recordLessonOutcome','rewardLearningCompletion','advanceProjectProgress','recordPortfolioProof','installedOfflinePacks','portfolioProofs','nexCoins']) {
   if (!app.includes(token)) throw new Error(`NexCodeApp missing ${token}`);
 }
+if (app.includes('rewardProgress(')) throw new Error('NexCodeApp must not bypass canonical lesson/project reward engines with direct rewardProgress calls');
 for (const token of ['courseNavigationSummary','buildAdaptivePool','planPracticeSession','Continue ton chemin','LearningPathNode','Progression du parcours','Continuer','checkpoint','lab']) {
   if (!hub.includes(token)) throw new Error(`LearningHub missing ${token}`);
 }
@@ -53,4 +54,4 @@ for (const token of ['projectReadinessAgainstGraph','buildPortfolioProof','portf
   if (!projectEngine.includes(token)) throw new Error(`Portfolio engine missing ${token}`);
 }
 if (requiredFiles.some((source) => source.includes('TODO UI'))) throw new Error('A product UI contains an unfinished TODO marker');
-console.log('Product readiness audit OK: animated launch, path-first learning, active recall, real XP/NexCoins/streak primitives, step lessons, centralized haptic/audio feedback, bounded phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
+console.log('Product readiness audit OK: animated launch, path-first learning, active recall, canonical idempotent progression engines, step lessons, centralized haptic/audio feedback, bounded phone file/folder import, multi-file IDE, live preview, console, code tools, projects and mastery are wired.');
