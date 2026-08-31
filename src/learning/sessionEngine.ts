@@ -59,6 +59,10 @@ export function learningCompletionReward(lesson: Lesson): LearningCompletionRewa
 
 export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
   if (state.completedLessons.includes(lesson.id)) return state;
+  // Completion rewards require learning evidence produced by recordLessonOutcome.
+  // This keeps the canonical reward boundary safe even if a future UI, deep link
+  // or replay path calls it directly instead of following the current Lab flow.
+  if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
   const reward = learningCompletionReward(lesson);
   const rewarded = rewardProgress(state, { ...reward, now });
   return {
