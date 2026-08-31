@@ -17,6 +17,8 @@ export type PortfolioProof = {
   evidenceSummary: string;
 };
 
+const MAX_COMPLETION_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
@@ -55,8 +57,10 @@ function readinessGate(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 55;
 }
 
-function validCompletionDate(value: Date): Date {
-  return value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
+function validCompletionDate(value: Date, now = new Date()): Date {
+  const safeNow = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeNow;
+  return value.getTime() <= safeNow.getTime() + MAX_COMPLETION_CLOCK_SKEW_MS ? value : safeNow;
 }
 
 function canonicalAchievedRubricIds(project: GuidedProject, achievedRubricIds: string[]): string[] {
