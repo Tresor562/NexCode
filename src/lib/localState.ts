@@ -67,6 +67,7 @@ const initialState: LocalState = {
 };
 
 const stateFile = new File(Paths.document, 'nexcode-v15-state.json');
+const MAX_PROGRESS_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -76,15 +77,23 @@ export function localDateKey(date = new Date()): string {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
+function trustedProgressDate(value?: Date, reference = new Date()): Date {
+  const safeReference = reference instanceof Date && Number.isFinite(reference.getTime()) ? reference : new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeReference;
+  if (value.getTime() > safeReference.getTime() + MAX_PROGRESS_CLOCK_SKEW_MS) return safeReference;
+  return value;
+}
+
 function previousLocalDateKey(date = new Date()): string {
   const previous = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1, 12, 0, 0, 0);
   return localDateKey(previous);
 }
 
 export function touchDailyActivity(state: LocalState, now = new Date()): LocalState {
-  const today = localDateKey(now);
+  const trustedNow = trustedProgressDate(now);
+  const today = localDateKey(trustedNow);
   if (state.lastActiveDate === today) return state;
-  const streak = state.lastActiveDate === previousLocalDateKey(now) ? state.streak + 1 : 1;
+  const streak = state.lastActiveDate === previousLocalDateKey(trustedNow) ? state.streak + 1 : 1;
   return {
     ...state,
     streak,
@@ -117,8 +126,7 @@ function safeProgressTotal(current: unknown, increment: number): number {
 }
 
 export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
-  const requestedNow = reward.now;
-  const now = requestedNow instanceof Date && Number.isFinite(requestedNow.getTime()) ? requestedNow : new Date();
+  const now = trustedProgressDate(reward.now);
   const active = touchDailyActivity(state, now);
   const minutes = finiteNumber(reward.minutes, 0, 0, 240);
   const xp = finiteInteger(reward.xp, 0, 0, 1_000_000);
