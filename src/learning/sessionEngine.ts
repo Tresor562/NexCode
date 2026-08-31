@@ -27,6 +27,8 @@ const completionRewards: Readonly<Record<ActivityKind, Readonly<Omit<LearningCom
   project: { xp: 40, nexCoins: 8 },
 };
 
+const MAX_EVIDENCE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 function normalizeSelectedIndex(lesson: Lesson, selectedIndex: number | null): number | null {
   if (!Number.isInteger(selectedIndex)) return null;
   if ((selectedIndex as number) < 0 || (selectedIndex as number) >= lesson.choices.length) return null;
@@ -49,20 +51,38 @@ function safeAttemptCount(value: unknown): number {
   return Math.max(0, Math.min(10_000, Math.floor(value)));
 }
 
-function hasLatestCorrectLessonEvidence(state: LocalState, lesson: Lesson): boolean {
-  const skillIds = lesson.skillIds ?? [];
+function validEvidenceTime(value: unknown, now: Date): number | null {
+  if (typeof value !== 'string') return null;
+  const time = Date.parse(value);
+  const nowMs = now.getTime();
+  if (!Number.isFinite(time) || !Number.isFinite(nowMs)) return null;
+  if (time > nowMs + MAX_EVIDENCE_CLOCK_SKEW_MS) return null;
+  return time;
+}
+
+function hasLatestCorrectLessonEvidence(state: LocalState, lesson: Lesson, now: Date): boolean {
+  const skillIds = [...new Set((lesson.skillIds ?? []).map((skillId) => skillId.trim()).filter(Boolean))];
   if (skillIds.length === 0) return false;
+  const expectedActivityKind = lesson.activityKind ?? 'learn';
 
   // recordSkillAttempt writes the lesson attempt into every declared skill. A
   // completion therefore requires each skill to agree that the latest evidence
   // for this lesson is correct. Looking backwards avoids trusting an older win
   // after the learner has since failed the same activity, and requiring every
   // declared skill makes partially-corrupted mastery state fail closed.
+  //
+  // Evidence is also bound to the current activity kind and to a plausible
+  // timestamp. This matters after cloud restores or curriculum migrations: a
+  // stale/forged record with the same lesson id must not unlock XP/NexCoins for
+  // a different activity, and future-dated evidence must never become a durable
+  // reward token simply because it sorts last in persisted mastery history.
   return skillIds.every((skillId) => {
     const evidence = state.mastery[skillId]?.evidence ?? [];
     for (let index = evidence.length - 1; index >= 0; index -= 1) {
       const attempt = evidence[index];
       if (attempt?.lessonId !== lesson.id) continue;
+      if (attempt.activityKind !== expectedActivityKind) return false;
+      if (validEvidenceTime(attempt.at, now) === null) return false;
       return attempt.correct === true;
     }
     return false;
@@ -84,7 +104,7 @@ export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now 
   // A failed retry must never become rewardable because an older success still
   // exists deeper in the mastery history.
   if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
-  if (!hasLatestCorrectLessonEvidence(state, lesson)) return state;
+  if (!hasLatestCorrectLessonEvidence(state, lesson, now)) return state;
   const reward = learningCompletionReward(lesson);
   const rewarded = rewardProgress(state, { ...reward, now });
   return {
