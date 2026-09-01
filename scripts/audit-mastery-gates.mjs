@@ -113,4 +113,26 @@ const mastery = (confidence, overrides = {}) => ({
   assert.equal(snapshot.effectiveScore, 0, 'an invalid runtime clock must fail closed instead of granting fresh retention');
 }
 
-console.log('Mastery gate audit OK: score cannot bypass confidence/evidence gates and corrupted future practice timestamps fail closed.');
+{
+  const result = evaluateSkillGate(['dom'], mastery(90, { score: Number.NaN }), 70, now);
+  assert.equal(result.passed, false, 'a non-finite mastery score must fail closed instead of bypassing the gate');
+  assert.deepEqual(result.missingSkills, ['dom']);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(Number.POSITIVE_INFINITY), 70, now);
+  assert.equal(result.passed, false, 'a non-finite confidence value must fail closed instead of bypassing the gate');
+  assert.deepEqual(result.weakSkills, ['dom']);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(90), Number.NaN, now);
+  assert.equal(result.required, 100, 'a malformed gate threshold must normalize to the strictest supported requirement');
+  assert.equal(result.passed, false, 'a malformed gate threshold must never fail open');
+  assert.deepEqual(result.weakSkills, ['dom']);
+}
+
+assert.match(source, /function boundedPercent\(value: unknown, fallback = 0\)/, 'mastery percentages must share one bounded normalization boundary');
+assert.match(source, /const normalizedRequired = boundedPercent\(required, 100\)/, 'invalid gate thresholds must fall back to the strictest requirement');
+
+console.log('Mastery gate audit OK: score, confidence, thresholds and corrupted clocks all fail closed while valid evidence remains usable.');
