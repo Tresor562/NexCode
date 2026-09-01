@@ -10,9 +10,10 @@ const expectations = [
   ['foreground gate', 'if (!appActive) return false;'],
   ['clock rollback guard', 'if (elapsed < 0) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
   ['selection cooldown', "selection: 45"],
+  ['shared notification cooldown', "notification: 180"],
+  ['shared notification kind', "const SHARED_NOTIFICATION_KIND: LearningFeedbackKind = 'notification';"],
+  ['notification routing through shared kind', 'if (!canTrigger(SHARED_NOTIFICATION_KIND, appActive)) return;'],
   ['impact cooldown', "impact: 120"],
-  ['success cooldown', "success: 180"],
-  ['error cooldown', "error: 180"],
   ['sound cooldown', "sound: 90"],
   ['global audio generation', 'let sharedAudioRequestGeneration = 0;'],
   ['audio supersession', 'const generation = supersedeAudio();'],
@@ -43,6 +44,14 @@ if (sharedAudioStart < 0 || sharedAudioStart > factoryStart) {
 
 if (source.includes('const lastTriggeredAt = new Map<LearningFeedbackKind, number>();')) {
   console.error('Global learning feedback audit failed: per-instance cooldown map was reintroduced.');
+  process.exit(1);
+}
+if (source.includes("success: 180") || source.includes("error: 180")) {
+  console.error('Global learning feedback audit failed: success/error haptics must share one notification cooldown channel.');
+  process.exit(1);
+}
+if (/canTrigger\(tone, appActive\)/.test(source)) {
+  console.error('Global learning feedback audit failed: semantic success/error tones must not create independent haptic cooldowns.');
   process.exit(1);
 }
 if (source.includes('new WeakMap<ReplayableAudioPlayer, number>()')) {
@@ -85,4 +94,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: cooldowns, clock rollback recovery, foreground invalidation, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, clock rollback recovery, foreground invalidation, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
