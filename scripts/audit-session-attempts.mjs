@@ -24,6 +24,8 @@ const rewardStart = source.indexOf('export function rewardLearningCompletion(');
 assert.ok(rewardStart >= 0 && rewardStart < attemptStart, 'completion reward boundary must remain separate from attempt recording');
 const rewardSection = source.slice(rewardStart, attemptStart);
 assert.match(rewardSection, /state\.completedLessons\.includes\(lesson\.id\)/, 'completion rewards must remain idempotent by lesson id');
-assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'only the completion boundary should mint the learning reward');
+assert.match(rewardSection, /const rewardTime = trustedCompletionTime\(now\);/, 'completion rewards must bind caller time to the trusted reward clock before evidence checks');
+assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'only the completion boundary should mint the learning reward through the trusted clock');
+assert.doesNotMatch(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'raw caller time must never reach the progression reward boundary');
 
-console.log('Session attempt audit OK: attempts are bounded and reward-free, while completion rewards stay idempotent.');
+console.log('Session attempt audit OK: attempts are bounded and reward-free, while completion rewards stay idempotent and use the trusted completion clock.');
