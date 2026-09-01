@@ -116,11 +116,12 @@ export function advanceProjectProgress(
   };
 
   if (newlyCompletedSteps === 0) return progressed;
+  const rewardTime = validRewardTime(now);
   return rewardProgress(progressed, {
     xp: PROJECT_STEP_REWARD.xp * newlyCompletedSteps,
     nexCoins: PROJECT_STEP_REWARD.nexCoins * newlyCompletedSteps,
     minutes: PROJECT_STEP_REWARD.minutes * newlyCompletedSteps,
-    now,
+    now: rewardTime,
   });
 }
 
