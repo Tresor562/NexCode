@@ -23,6 +23,8 @@ import {
 import { flushCloudStateNow } from '../lib/cloudSync';
 import { theme } from './theme';
 
+type SyncNotice = { kind: 'offline-fallback'; message: string } | null;
+
 export default function RootApp() {
   const cloudEnabled = isCloudConfigured();
   const [launched, setLaunched] = useState(false);
@@ -33,6 +35,7 @@ export default function RootApp() {
   const [hydrating, setHydrating] = useState(() => cloudEnabled && Boolean(loadCloudSession()));
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | undefined>();
+  const [syncNotice, setSyncNotice] = useState<SyncNotice>(null);
   const finishLaunch = useCallback(() => setLaunched(true), []);
 
   useEffect(() => {
@@ -48,6 +51,7 @@ export default function RootApp() {
         setHydrating(false);
         setAuthError(undefined);
         setRecoveryError(undefined);
+        setSyncNotice(null);
         setRecoverySession(recovered);
       } catch (error) {
         if (!active || generation !== recoveryRequestGeneration) return;
@@ -82,6 +86,7 @@ export default function RootApp() {
     if (!launched || !cloudEnabled || !session || recoverySession) return;
     let active = true;
     setHydrating(true);
+    setSyncNotice(null);
     const scopedLocal = scopeLocalStateForUser(loadLocalState(), session.user.id);
     void pullCloudState(session, scopedLocal)
       .then(({ session: refreshed, state }) => {
@@ -90,11 +95,16 @@ export default function RootApp() {
         bindLocalStateOwner(refreshed.user.id);
         saveLocalState(state);
         setSession(refreshed);
+        setSyncNotice(null);
       })
       .catch(() => {
         if (!active) return;
         bindLocalStateOwner(session.user.id);
         saveLocalState(scopedLocal);
+        setSyncNotice({
+          kind: 'offline-fallback',
+          message: 'Ta progression locale est prête. La copie cloud sera reprise lors de la prochaine synchronisation.',
+        });
       })
       .finally(() => {
         if (active) setHydrating(false);
@@ -105,6 +115,7 @@ export default function RootApp() {
   async function submitAuth(payload: { mode: 'signin' | 'signup'; email: string; password: string; displayName?: string }) {
     setAuthBusy(true);
     setAuthError(undefined);
+    setSyncNotice(null);
     try {
       if (payload.mode === 'signin') {
         const signedIn = await signInWithPassword(payload.email, payload.password);
@@ -137,6 +148,7 @@ export default function RootApp() {
       saveCloudSession(updated);
       setRecoverySession(null);
       setSession(updated);
+      setSyncNotice(null);
     } catch (error) {
       setRecoveryError(error instanceof Error ? error.message : 'Impossible de mettre à jour le mot de passe. Demande un nouveau lien.');
     } finally {
@@ -152,6 +164,7 @@ export default function RootApp() {
     setHydrating(cloudEnabled && Boolean(restored));
     setRecoveryError(undefined);
     setAuthError(undefined);
+    setSyncNotice(null);
   }
 
   if (!launched) return <LaunchScreen onDone={finishLaunch} />;
@@ -194,11 +207,30 @@ export default function RootApp() {
       </SafeAreaView>
     );
   }
-  return <NexCodeApp />;
+  return (
+    <View style={styles.appShell}>
+      <NexCodeApp />
+      {syncNotice ? (
+        <View
+          pointerEvents="none"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+          style={styles.syncNotice}
+        >
+          <View style={styles.syncNoticeIcon}><Text style={styles.syncNoticeIconText}>↻</Text></View>
+          <View style={styles.syncNoticeCopy}>
+            <Text style={styles.syncNoticeTitle}>Mode local sécurisé</Text>
+            <Text style={styles.syncNoticeText}>{syncNotice.message}</Text>
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: theme.colors.background },
+  appShell: { flex: 1, backgroundColor: theme.colors.background },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   loadingIndicatorShell: {
     width: 52,
@@ -212,4 +244,38 @@ const styles = StyleSheet.create({
   },
   loadingTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '900', marginTop: 18, textAlign: 'center' },
   loadingMeta: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 7, textAlign: 'center', maxWidth: 310 },
+  syncNotice: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    top: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 13,
+    borderRadius: 18,
+    backgroundColor: theme.colors.surfaceRaised,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.borderStrong,
+    shadowColor: '#000',
+    shadowOpacity: .26,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
+  },
+  syncNoticeIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryGlass,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: theme.colors.borderGlass,
+  },
+  syncNoticeIconText: { color: theme.colors.primaryBright, fontSize: 17, fontWeight: '900' },
+  syncNoticeCopy: { flex: 1 },
+  syncNoticeTitle: { color: theme.colors.text, fontSize: 12, fontWeight: '900' },
+  syncNoticeText: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 2 },
 });
