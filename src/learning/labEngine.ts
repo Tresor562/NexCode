@@ -199,24 +199,29 @@ function containsLikelySecret(files: Record<string, string>) {
 function meaningfulChange(mission: LabMission, files: Record<string, string>) {
   const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
   const normalized = (value: string) => value.replace(/\s+/g, ' ').trim();
-  const starterByKey = new Map(
-    Object.entries(starterFiles).map(([filename, content]) => [workspaceCollisionKey(filename), content]),
+  const filesByKey = new Map(
+    Object.entries(files).map(([filename, content]) => [workspaceCollisionKey(filename), content]),
   );
-  const seenStarterKeys = new Set<string>();
+
+  // Starter destruction must never satisfy the Lab learning-evidence gate.
+  for (const [filename, starterContent] of Object.entries(starterFiles)) {
+    const content = filesByKey.get(workspaceCollisionKey(filename));
+    if (content === undefined) return false;
+    if (normalized(starterContent).length > 0 && normalized(content).length === 0) return false;
+  }
 
   for (const [filename, content] of Object.entries(files)) {
-    const key = workspaceCollisionKey(filename);
-    const starterContent = starterByKey.get(key);
-    if (starterContent === undefined) {
+    const starterFilename = Object.keys(starterFiles).find(
+      (candidate) => workspaceCollisionKey(candidate) === workspaceCollisionKey(filename),
+    );
+    if (!starterFilename) {
       if (normalized(content).length >= 3) return true;
       continue;
     }
-
-    seenStarterKeys.add(key);
-    if (normalized(content) !== normalized(starterContent)) return true;
+    if (normalized(content) !== normalized(starterFiles[starterFilename] ?? '')) return true;
   }
 
-  return Object.keys(starterFiles).some((filename) => !seenStarterKeys.has(workspaceCollisionKey(filename)));
+  return false;
 }
 
 function languageStructureCheck(language: LabMission['language'], files: Record<string, string>) {
