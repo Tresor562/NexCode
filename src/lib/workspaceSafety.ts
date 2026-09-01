@@ -15,6 +15,9 @@ const SENSITIVE_BASENAMES = new Set([
 
 const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const WINDOWS_INVALID_SEGMENT_CHARS = /[<>:"|?*]/;
+const MAX_WORKSPACE_PATH_CHARS = 240;
+const MAX_WORKSPACE_SEGMENT_CHARS = 120;
+const MAX_WORKSPACE_DEPTH = 12;
 const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
@@ -22,6 +25,7 @@ const MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 function portableWorkspaceSegment(segment: string): boolean {
   return Boolean(segment)
+    && segment.length <= MAX_WORKSPACE_SEGMENT_CHARS
     && segment !== '.'
     && segment !== '..'
     && !/[\u0000-\u001f\u007f]/.test(segment)
@@ -32,9 +36,9 @@ function portableWorkspaceSegment(segment: string): boolean {
 
 export function canonicalWorkspacePath(path: string): string | null {
   const normalized = path.trim().replace(/\\/g, '/').normalize('NFC');
-  if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return null;
+  if (!normalized || normalized.length > MAX_WORKSPACE_PATH_CHARS || normalized.startsWith('/') || normalized.includes('\0')) return null;
   const segments = normalized.split('/');
-  if (segments.some((segment) => !portableWorkspaceSegment(segment))) return null;
+  if (segments.length > MAX_WORKSPACE_DEPTH || segments.some((segment) => !portableWorkspaceSegment(segment))) return null;
   return normalized;
 }
 
