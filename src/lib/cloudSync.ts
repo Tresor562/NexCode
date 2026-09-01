@@ -188,12 +188,18 @@ export async function flushCloudStateNow(): Promise<void> {
   // then immediately drain one newer snapshot that arrived during that request.
   clearPendingPush();
   const completed = await flushLatestState();
-  clearPendingPush();
 
-  // Only perform the second drain after a successful reconciliation. When the
-  // device is offline, the failed snapshot must keep its exponential retry rather
-  // than spin synchronously while the app is transitioning to the background.
-  if (completed && latestState) {
+  // A failed reconciliation schedules its exponential retry from flushLatestState's
+  // finally block. Do not clear that timer here: backgrounding while offline must
+  // never strand unsynced XP, streak, NexCoins or lesson progress until the next
+  // local mutation happens.
+  if (!completed) return;
+
+  // Successful reconciliation can leave a short follow-up timer for a newer local
+  // snapshot that arrived while the first request was running. Cancel only that
+  // successful follow-up because we are about to drain the newest snapshot now.
+  clearPendingPush();
+  if (latestState) {
     await flushLatestState();
   }
 }
