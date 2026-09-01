@@ -22,7 +22,11 @@ assert.match(source, /normalize\('NFC'\)\.toLocaleLowerCase\('en-US'\)/, 'starte
 assert.match(source, /resolvePortableDraftFile\(draft, 'index\.html'\)/, 'HTML behavioral checks must resolve portable workspace paths');
 assert.match(source, /resolvePortableDraftFile\(draft, 'styles\.css'\)/, 'CSS behavioral checks must resolve portable workspace paths');
 assert.match(source, /content === undefined\) return false/, 'missing starter files must fail Lab learning evidence');
-assert.match(source, /normalizeSource\(content\)\.trim\(\)\.length === 0\) return false/, 'emptying non-empty starter files must fail Lab learning evidence');
+assert.match(
+  source,
+  /normalizeSource\(starterContent\)\.trim\(\)\.length > 0\s*&&\s*normalizeSource\(content\)\.trim\(\)\.length === 0\) return false/,
+  'emptying non-empty starter files must fail Lab learning evidence',
+);
 
 const mission = {
   id: 'html-card-lab',
