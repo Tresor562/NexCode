@@ -34,12 +34,24 @@ function hasRequiredStarterFiles(starter: Record<string, string>, files: Record<
 function changedCharacterEvidence(before: string, after: string): number {
   const left = canonicalText(before);
   const right = canonicalText(after);
+  if (left === right) return 0;
+
+  let prefix = 0;
   const shared = Math.min(left.length, right.length);
-  let changed = Math.abs(left.length - right.length);
-  for (let index = 0; index < shared; index += 1) {
-    if (left[index] !== right[index]) changed += 1;
-  }
-  return changed;
+  while (prefix < shared && left[prefix] === right[prefix]) prefix += 1;
+
+  let suffix = 0;
+  const leftRemaining = left.length - prefix;
+  const rightRemaining = right.length - prefix;
+  const maxSuffix = Math.min(leftRemaining, rightRemaining);
+  while (
+    suffix < maxSuffix
+    && left[left.length - 1 - suffix] === right[right.length - 1 - suffix]
+  ) suffix += 1;
+
+  const removed = left.length - prefix - suffix;
+  const added = right.length - prefix - suffix;
+  return Math.max(removed, added);
 }
 
 export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: LabDraft | undefined): number {
