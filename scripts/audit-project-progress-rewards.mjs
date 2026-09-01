@@ -20,7 +20,8 @@ expect(/PROJECT_STEP_REWARD\.xp\s*\*\s*newlyCompletedSteps/, 'XP must scale with
 expect(/PROJECT_STEP_REWARD\.nexCoins\s*\*\s*newlyCompletedSteps/, 'NexCoins must scale with newly crossed project steps.');
 expect(/const PORTFOLIO_PASS_SCORE\s*=\s*70/, 'Portfolio rewards must preserve the project review passing threshold.');
 expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Portfolio evidence timestamps need a small bounded clock-skew tolerance.');
-expect(/function validRewardTime\(value:\s*Date\):\s*Date/, 'Portfolio rewards must sanitize their canonical reward clock.');
+expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Portfolio rewards must sanitize their canonical reward clock against the actual system clock.');
+expect(/value\.getTime\(\)\s*<=\s*trustedSystemNow\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied future clock must not expand the portfolio proof acceptance window.');
 expect(/function isRewardablePortfolioProof\(proof:\s*PortfolioProof,\s*project:\s*GuidedProject,\s*now:\s*Date\):\s*boolean/, 'Portfolio rewards must validate evidence against its canonical project.');
 expect(/defaultProjectRubric\(project\)\.map\(\(item\)\s*=>\s*item\.id\)/, 'Portfolio rubric ids must come from the canonical project rubric.');
 expect(/const review = reviewProject\(project, rubricIds\);/, 'Portfolio score must be recomputed from canonical review logic.');
