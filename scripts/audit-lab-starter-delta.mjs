@@ -21,6 +21,8 @@ assert.equal(typeof runBehavioralSuite, 'function', 'runBehavioralSuite must sta
 assert.match(source, /normalize\('NFC'\)\.toLocaleLowerCase\('en-US'\)/, 'starter delta paths must use the portable case/Unicode identity policy');
 assert.match(source, /resolvePortableDraftFile\(draft, 'index\.html'\)/, 'HTML behavioral checks must resolve portable workspace paths');
 assert.match(source, /resolvePortableDraftFile\(draft, 'styles\.css'\)/, 'CSS behavioral checks must resolve portable workspace paths');
+assert.match(source, /content === undefined\) return false/, 'missing starter files must fail Lab learning evidence');
+assert.match(source, /normalizeSource\(content\)\.trim\(\)\.length === 0\) return false/, 'emptying non-empty starter files must fail Lab learning evidence');
 
 const mission = {
   id: 'html-card-lab',
@@ -65,6 +67,21 @@ const newlineOnly = runBehavioralSuite(mission, draft({
 }));
 assert.equal(newlineOnly.hiddenPassed, 0, 'line-ending or trailing-whitespace churn must not count as real work');
 
+const missingStarter = runBehavioralSuite(mission, draft({
+  'index.html': '<main><h1>Mon portfolio</h1></main>',
+  'script.js': '',
+}));
+assert.equal(missingStarter.hiddenPassed, 0, 'deleting a canonical starter file must never count as learning evidence');
+assert.equal(missingStarter.passed, false, 'a workspace with a deleted starter file must fail the Lab suite');
+
+const emptiedStarter = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'index.html': '<main><h1>Mon portfolio</h1></main>',
+  'styles.css': '   \n\t',
+}));
+assert.equal(emptiedStarter.hiddenPassed, 0, 'emptying required starter content must never count as a meaningful edit');
+assert.equal(emptiedStarter.passed, false, 'a workspace with emptied required starter content must fail the Lab suite');
+
 const edited = runBehavioralSuite(mission, draft({
   ...mission.starterFiles,
   'index.html': '<main>\n  <h1>Mon portfolio</h1>\n</main>\n',
@@ -95,4 +112,4 @@ const singleUnchanged = runBehavioralSuite(singleFileMission, {
 });
 assert.equal(singleUnchanged.hiddenPassed, 0, 'starterCode-only missions must also reject unchanged submissions');
 
-console.log('Lab starter delta audit OK: portable starter renames stay unchanged and structurally valid, while substantive edits are recognized.');
+console.log('Lab starter delta audit OK: starter files stay intact, destructive edits fail, and substantive edits remain valid.');
