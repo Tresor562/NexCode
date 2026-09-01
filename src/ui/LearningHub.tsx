@@ -5,6 +5,7 @@ import { buildSkillGraph } from '../learning/skillGraph';
 import { buildAdaptivePool, planPracticeSession, PracticeMode, recommendedSessionMessage } from '../learning/adaptivePractice';
 import { courseNavigationSummary } from '../learning/learningNavigator';
 import { OfflinePackKind } from '../learning/offlineEngine';
+import { learningCompletionReward } from '../learning/sessionEngine';
 import { LocalState } from '../lib/localState';
 import { Card, GlassCard, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
 import { LearningPathNode, LearningPathNodeState } from './LearningPathNode';
@@ -154,6 +155,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
   const recommended = session.activities[0];
   const recommendedCourse = recommended ? courses.find((course) => course.id === recommended.courseId) : undefined;
   const recommendedLesson = recommendedCourse?.starterLessons.find((lesson) => lesson.id === recommended?.lessonId);
+  const recommendedReward = recommendedLesson ? learningCompletionReward(recommendedLesson) : null;
   const sessionMessage = recommendedSessionMessage(session);
   const recentCourse = courses.find((course) => course.id === state.recentCourseId) ?? courses[0];
 
@@ -177,7 +179,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
       <DailyMomentumCard state={state} />
       <SessionLengthPicker value={sessionMinutes} onChange={setSessionMinutes} />
 
-      {recommendedCourse && recommendedLesson && recommended ? (
+      {recommendedCourse && recommendedLesson && recommended && recommendedReward ? (
         <Card tone="primary" style={styles.recommended}>
           <View style={styles.rowBetween}>
             <View style={styles.recommendationPills}>
@@ -187,7 +189,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
             <Text style={styles.mini}>{session.estimatedMinutes || sessionMinutes} min</Text>
           </View>
           <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
-          <Text style={styles.meta}>{recommendedCourse.title} • +12 XP</Text>
+          <Text style={styles.meta}>{recommendedCourse.title} • +{recommendedReward.xp} XP • +{recommendedReward.nexCoins} NexCoins</Text>
           <View style={styles.whyCard}>
             <Text style={styles.whyKicker}>POURQUOI NEX TE PROPOSE ÇA</Text>
             <Text style={styles.whyText}>{recommended.reason}</Text>
