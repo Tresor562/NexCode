@@ -7,6 +7,35 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function extractFunctionBody(source, signature) {
+  const signatureIndex = source.indexOf(signature);
+  assert(signatureIndex >= 0, `missing function signature: ${signature}`);
+  const bodyStart = source.indexOf('{', signatureIndex);
+  assert(bodyStart >= 0, `missing function body: ${signature}`);
+
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === '{') depth += 1;
+    if (source[index] === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(bodyStart + 1, index);
+    }
+  }
+
+  throw new Error(`unterminated function body: ${signature}`);
+}
+
+const immediateFlush = extractFunctionBody(
+  cloudSync,
+  'export async function flushCloudStateNow(): Promise<void>',
+);
+const initialClearIndex = immediateFlush.indexOf('clearPendingPush();');
+const awaitFlushIndex = immediateFlush.indexOf('const completed = await flushLatestState();');
+const failedReturnIndex = immediateFlush.indexOf('if (!completed) return;');
+const successfulClearIndex = immediateFlush.indexOf('clearPendingPush();', initialClearIndex + 1);
+const drainIndex = immediateFlush.indexOf('if (latestState)');
+const secondFlushIndex = immediateFlush.indexOf('await flushLatestState();', drainIndex);
+
 assert(
   /export\s+async\s+function\s+flushCloudStateNow\s*\(/.test(cloudSync),
   'cloud sync must expose an immediate flush boundary for lifecycle transitions',
@@ -32,19 +61,22 @@ assert(
   'settled reconciliations must honor deferred retry timing before using the normal follow-up delay',
 );
 assert(
-  /clearPendingPush\(\);[\s\S]{0,120}const\s+completed\s*=\s*await\s+flushLatestState\(\);[\s\S]{0,180}if\s*\(!completed\)\s*return;[\s\S]{0,180}clearPendingPush\(\)/.test(cloudSync),
+  initialClearIndex >= 0 &&
+    awaitFlushIndex > initialClearIndex &&
+    failedReturnIndex > awaitFlushIndex &&
+    successfulClearIndex > failedReturnIndex,
   'background flush must preserve a failed reconciliation retry and only cancel successful follow-up timers',
 );
 assert(
-  !/const\s+completed\s*=\s*await\s+flushLatestState\(\);\s*clearPendingPush\(\);/.test(cloudSync),
+  !/const\s+completed\s*=\s*await\s+flushLatestState\(\);\s*clearPendingPush\(\);/.test(immediateFlush),
   'background flush must never clear the retry timer immediately after a failed Supabase reconciliation',
 );
 assert(
-  /if\s*\(latestState\)\s*\{[\s\S]{0,120}await\s+flushLatestState\(\)/.test(cloudSync),
+  drainIndex > successfulClearIndex && secondFlushIndex > drainIndex,
   'background flush must immediately drain a newer snapshot after a successful first reconciliation',
 );
 assert(
-  /if\s*\(!completed\)\s*return;/.test(cloudSync),
+  failedReturnIndex >= 0,
   'background draining must stop after a failed/offline flush so exponential retry remains effective',
 );
 assert(
