@@ -7,12 +7,24 @@ function expect(source, pattern, message) {
   if (!pattern.test(source)) throw new Error(message);
 }
 
+function expectIncludes(source, snippets, message) {
+  if (!snippets.every((snippet) => source.includes(snippet))) throw new Error(message);
+}
+
 expect(engine, /import \{ hasProjectWorkspaceEvidence \} from '\.\/projectWorkspaceEvidence';/, 'Project progression must use the shared workspace-evidence boundary.');
 expect(engine, /newlyCompletedSteps\s*>\s*0\s*&&\s*!hasProjectWorkspaceEvidence\([\s\S]*?state\.projectDrafts\[registeredProject\.id\][\s\S]*?nextSteps[\s\S]*?\)\) return state;/, 'New project steps must fail closed when the workspace lacks enough real code delta.');
 expect(engine, /if \(!hasProjectWorkspaceEvidence\(project, state\.projectDrafts\[project\.id\], finalStepCount\)\) return state;/, 'Portfolio rewards must re-check final workspace evidence instead of trusting stored progress alone.');
 expect(evidence, /const MIN_CHANGED_CHARS_PER_STEP\s*=\s*24/, 'Workspace evidence must grow with every claimed construction step.');
 expect(evidence, /projectStarterFiles\(project: GuidedProject\)/, 'Workspace evidence must compare against the canonical project starter shape.');
-expect(evidence, /function meaningfulEvidenceText\([\s\S]*replace\(\/<!--\[\\s\\S\]\*\?-->\/g, ''\)[\s\S]*replace\(\/\\\/\\\*\[\\s\\S\]\*\?\\\*\\\//g, ''\)[\s\S]*filter\(\(line\) => !\/\^\\s\*\(\?:\\\/\\\/\|#\|--\)/, 'Workspace evidence must strip comment-only filler before measuring meaningful work.');
+expectIncludes(
+  evidence,
+  [
+    ".replace(/<!--[\\s\\S]*?-->/g, '')",
+    ".replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')",
+    ".filter((line) => !/^\\s*(?:\\/\\/|#|--)(?:\\s|$)/.test(line))",
+  ],
+  'Workspace evidence must strip comment-only filler before measuring meaningful work.',
+);
 expect(evidence, /\.replace\(\/\\s\+\/g, ''\)/, 'Whitespace-only formatting must not inflate project evidence.');
 expect(evidence, /function hasRequiredStarterFiles\([\s\S]*Object\.keys\(starter\)\.every\([\s\S]*canonicalText\(files\[filename\]\)\.trim\(\)\.length > 0/, 'Required starter files must remain present and non-empty before edits can count as project evidence.');
 expect(evidence, /if \(!hasRequiredStarterFiles\(starter, draft\.files\)\) return 0;/, 'Deleting or emptying a starter file must fail closed instead of increasing the evidence score.');
