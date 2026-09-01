@@ -43,7 +43,14 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     const previous = sharedLastTriggeredAt.get(kind);
     if (previous !== undefined) {
       const elapsed = current - previous;
-      if (elapsed >= 0 && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
+      // Device clocks can move backwards after time sync, timezone corrections or
+      // test clock replacement. Treat the first regressed timestamp as a new
+      // cooldown baseline instead of allowing a vibration/sound burst.
+      if (elapsed < 0) {
+        sharedLastTriggeredAt.set(kind, current);
+        return false;
+      }
+      if (elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
     }
     sharedLastTriggeredAt.set(kind, current);
     return true;
