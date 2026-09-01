@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 
-export type LearningFeedbackKind = 'selection' | 'success' | 'error' | 'impact' | 'sound';
+export type LearningFeedbackKind = 'selection' | 'notification' | 'impact' | 'sound';
 export type LearningImpactTone = 'light' | 'medium';
 export type LearningNotificationTone = 'success' | 'error';
 
@@ -11,8 +11,7 @@ export type ReplayableAudioPlayer = {
 
 const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
   selection: 45,
-  success: 180,
-  error: 180,
+  notification: 180,
   impact: 120,
   sound: 90,
 };
@@ -21,6 +20,11 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
 // at module scope so quickly moving between controls cannot produce a burst of
 // duplicate vibrations or sounds just because each control owns a different gate.
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
+
+// Success and error are different semantic tones, but they drive the same physical
+// notification channel. Gate them together so a fast correction after a mistake
+// cannot stack two strong haptic notifications back-to-back.
+const SHARED_NOTIFICATION_KIND: LearningFeedbackKind = 'notification';
 
 // Audio seeking is asynchronous. A slower seek from one cue can resolve after a
 // newer cue has already been requested. The generation is global rather than
@@ -62,7 +66,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       Haptics.selectionAsync().catch(() => undefined);
     },
     notification(appActive: boolean, tone: LearningNotificationTone) {
-      if (!canTrigger(tone, appActive)) return;
+      if (!canTrigger(SHARED_NOTIFICATION_KIND, appActive)) return;
       const type = tone === 'error' ? Haptics.NotificationFeedbackType.Error : Haptics.NotificationFeedbackType.Success;
       Haptics.notificationAsync(type).catch(() => undefined);
     },
