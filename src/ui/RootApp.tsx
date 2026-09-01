@@ -99,6 +99,21 @@ export default function RootApp() {
       })
       .catch(() => {
         if (!active) return;
+
+        // refreshCloudSession deliberately removes a persisted session only when
+        // Supabase says the refresh token is terminally invalid. In that case the
+        // in-memory React session must follow the persisted auth boundary instead
+        // of leaving a stale learner apparently signed in. Transient network/server
+        // failures keep the persisted session, so they still use the safe offline
+        // fallback below and never force a logout.
+        const persistedSession = loadCloudSession();
+        if (!persistedSession || persistedSession.user.id !== session.user.id) {
+          setSession(persistedSession);
+          setHydrating(false);
+          setSyncNotice(null);
+          return;
+        }
+
         bindLocalStateOwner(session.user.id);
         saveLocalState(scopedLocal);
         setSyncNotice({
