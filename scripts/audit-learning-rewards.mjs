@@ -21,6 +21,9 @@ assert.match(source, /const answerIndex = normalizeSelectedIndex\(lesson, select
 assert.match(source, /const correct = answerIndex !== null && answerIndex === lesson\.correctIndex;/, 'only a valid normalized choice may be considered correct');
 assert.match(source, /inferErrorTag\(lesson, answerIndex\)/, 'error evidence must use the normalized answer index');
 assert.match(source, /const MAX_EVIDENCE_CLOCK_SKEW_MS = 5 \* 60 \* 1000;/, 'completion evidence may tolerate only a small device clock skew');
+assert.match(source, /function trustedCompletionTime\(value: Date, systemNow = new Date\(\)\): Date/, 'lesson completion must bind caller time to the real system clock');
+assert.match(source, /if \(!\(value instanceof Date\) \|\| !Number\.isFinite\(value\.getTime\(\)\)\) return safeSystemNow;/, 'invalid caller time must fall back to system time before evidence validation');
+assert.match(source, /value\.getTime\(\) <= safeSystemNow\.getTime\(\) \+ MAX_EVIDENCE_CLOCK_SKEW_MS \? value : safeSystemNow/, 'far-future caller time must not widen the mastery evidence trust window');
 assert.match(source, /function validEvidenceTime\(value: unknown, now: Date\): number \| null/, 'completion rewards must validate persisted evidence timestamps');
 assert.match(source, /if \(time > nowMs \+ MAX_EVIDENCE_CLOCK_SKEW_MS\) return null;/, 'future-dated mastery evidence must not become a durable reward token');
 assert.match(source, /function hasLatestCorrectLessonEvidence\(state: LocalState, lesson: Lesson, now: Date\): boolean/, 'completion rewards must use a dedicated contextual latest-correct-evidence gate');
@@ -33,15 +36,19 @@ assert.match(source, /if \(attempt\.activityKind !== expectedActivityKind\) retu
 assert.match(source, /if \(validEvidenceTime\(attempt\.at, now\) === null\) return false;/, 'completion evidence must carry a plausible timestamp');
 assert.match(source, /return attempt\.correct === true;/, 'the latest matching lesson evidence must be correct');
 assert.match(source, /if \(state\.completedLessons\.includes\(lesson\.id\)\) return state;/, 'lesson completion rewards must be idempotent');
+assert.match(source, /const rewardTime = trustedCompletionTime\(now\);/, 'completion must normalize caller time before scanning reward evidence');
 assert.match(source, /if \(safeAttemptCount\(state\.lessonAttempts\[lesson\.id\]\) < 1\) return state;/, 'lesson completion rewards must require a recorded attempt');
-assert.match(source, /if \(!hasLatestCorrectLessonEvidence\(state, lesson, now\)\) return state;/, 'a failed, mismatched or future-dated retry must not unlock completion XP or NexCoins');
-assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'learning completion must pass through the shared streak/daily-goal reward engine');
+assert.match(source, /if \(!hasLatestCorrectLessonEvidence\(state, lesson, rewardTime\)\) return state;/, 'a failed, mismatched or future-dated retry must not unlock completion XP or NexCoins');
+assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'learning completion must pass the same trusted timestamp through the streak/daily-goal reward engine');
 assert.match(source, /completedLessons: \[\.\.\.rewarded\.completedLessons, lesson\.id\]/, 'rewarded lessons must be persisted as completed atomically with the reward state');
 
 const completionFunction = source.slice(source.indexOf('export function rewardLearningCompletion'), source.indexOf('export function recordLessonOutcome'));
-assert.ok(completionFunction.indexOf('completedLessons.includes(lesson.id)') < completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])'), 'idempotence must be checked before attempt evidence to keep replays side-effect free');
-assert.ok(completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])') < completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, now)'), 'attempt existence must be checked before scanning latest mastery evidence');
-assert.ok(completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, now)') < completionFunction.indexOf('rewardProgress(state'), 'context-valid latest correct lesson evidence must be verified before any XP, NexCoin, streak or minute mutation');
+assert.ok(completionFunction.indexOf('completedLessons.includes(lesson.id)') < completionFunction.indexOf('trustedCompletionTime(now)'), 'idempotence must be checked before clock work to keep replays side-effect free');
+assert.ok(completionFunction.indexOf('trustedCompletionTime(now)') < completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])'), 'caller time must be bounded before reward evidence is inspected');
+assert.ok(completionFunction.indexOf('safeAttemptCount(state.lessonAttempts[lesson.id])') < completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, rewardTime)'), 'attempt existence must be checked before scanning latest mastery evidence');
+assert.ok(completionFunction.indexOf('hasLatestCorrectLessonEvidence(state, lesson, rewardTime)') < completionFunction.indexOf('rewardProgress(state'), 'context-valid latest correct lesson evidence must be verified before any XP, NexCoin, streak or minute mutation');
+assert.doesNotMatch(completionFunction, /hasLatestCorrectLessonEvidence\(state, lesson, now\)/, 'raw caller time must never validate mastery evidence directly');
+assert.doesNotMatch(completionFunction, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'raw caller time must never enter progression rewards after completion validation');
 
 assert.match(localStateSource, /function trustedProgressDate\(value\?: Date, reference = new Date\(\)\): Date/, 'reward timestamps must pass through the shared trusted progression clock boundary');
 assert.match(localStateSource, /if \(!\(value instanceof Date\) \|\| !Number\.isFinite\(value\.getTime\(\)\)\) return safeReference;/, 'invalid reward timestamps must fall back before streak dates are computed');
@@ -61,4 +68,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, context-valid latest-correct evidence, trusted progression clocks, saturating totals and idempotence are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, system-bound latest-correct evidence, trusted progression clocks, saturating totals and idempotence are enforced.');
