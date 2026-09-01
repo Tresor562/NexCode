@@ -8,6 +8,16 @@ function canonicalText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : '';
 }
 
+function meaningfulEvidenceText(value: unknown): string {
+  return canonicalText(value)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !/^\s*(?:\/\/|#|--)(?:\s|$)/.test(line))
+    .join('\n')
+    .replace(/\s+/g, '');
+}
+
 function projectStarterFiles(project: GuidedProject): Record<string, string> {
   const tech = `${project.tech} ${project.track}`.toLowerCase();
   if (tech.includes('html') || tech.includes('css') || tech.includes('web')) return {
@@ -32,8 +42,8 @@ function hasRequiredStarterFiles(starter: Record<string, string>, files: Record<
 }
 
 function changedCharacterEvidence(before: string, after: string): number {
-  const left = canonicalText(before);
-  const right = canonicalText(after);
+  const left = meaningfulEvidenceText(before);
+  const right = meaningfulEvidenceText(after);
   if (left === right) return 0;
 
   let prefix = 0;
@@ -66,7 +76,8 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
     const content = canonicalText(rawContent);
     if (!content.trim()) continue;
     if (!(filename in starter)) {
-      score += Math.min(ADDED_FILE_EVIDENCE_CHARS, content.length);
+      const meaningfulContent = meaningfulEvidenceText(content);
+      score += Math.min(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent.length);
       continue;
     }
     score += changedCharacterEvidence(starter[filename] ?? '', content);
