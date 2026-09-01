@@ -32,8 +32,8 @@ const { validateLabDraft, stampLabValidation } = module.exports;
 assert.equal(typeof validateLabDraft, 'function', 'validateLabDraft must stay exported');
 assert.equal(typeof stampLabValidation, 'function', 'stampLabValidation must stay exported for persisted Lab progress');
 assert.match(source, /function meaningfulEvidenceSource\(content: string\)/, 'Lab validation must normalize learning evidence before comparing starter work');
-assert.match(source, /replace\(\/<!--[\\s\\S]\*\?-->\/g, ''\)/, 'HTML comments must not count as Lab learning evidence');
-assert.match(source, /replace\(\/\\\/\\\*[\\s\\S]\*\?\\\*\\\/\/g, ''\)/, 'block comments must not count as Lab learning evidence');
+assert.equal(source.includes(".replace(/<!--[\\s\\S]*?-->/g, '')"), true, 'HTML comments must not count as Lab learning evidence');
+assert.equal(source.includes(".replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')"), true, 'block comments must not count as Lab learning evidence');
 
 const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret réel', 'Travail complet'];
 
