@@ -32,15 +32,19 @@ assert(
   'settled reconciliations must honor deferred retry timing before using the normal follow-up delay',
 );
 assert(
-  /clearPendingPush\(\);[\s\S]*const\s+completed\s*=\s*await\s+flushLatestState\(\);[\s\S]*clearPendingPush\(\)/.test(cloudSync),
-  'immediate cloud flush must cancel timers around the awaited in-flight reconciliation',
+  /clearPendingPush\(\);[\s\S]{0,120}const\s+completed\s*=\s*await\s+flushLatestState\(\);[\s\S]{0,180}if\s*\(!completed\)\s*return;[\s\S]{0,180}clearPendingPush\(\)/.test(cloudSync),
+  'background flush must preserve a failed reconciliation retry and only cancel successful follow-up timers',
 );
 assert(
-  /if\s*\(completed\s*&&\s*latestState\)\s*\{[\s\S]{0,120}await\s+flushLatestState\(\)/.test(cloudSync),
-  'background flush must immediately drain a newer snapshot queued while the first request was running',
+  !/const\s+completed\s*=\s*await\s+flushLatestState\(\);\s*clearPendingPush\(\);/.test(cloudSync),
+  'background flush must never clear the retry timer immediately after a failed Supabase reconciliation',
 );
 assert(
-  /if\s*\(completed\s*&&\s*latestState\)/.test(cloudSync),
+  /if\s*\(latestState\)\s*\{[\s\S]{0,120}await\s+flushLatestState\(\)/.test(cloudSync),
+  'background flush must immediately drain a newer snapshot after a successful first reconciliation',
+);
+assert(
+  /if\s*\(!completed\)\s*return;/.test(cloudSync),
   'background draining must stop after a failed/offline flush so exponential retry remains effective',
 );
 assert(
