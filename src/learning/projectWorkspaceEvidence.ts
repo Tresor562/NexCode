@@ -27,6 +27,10 @@ function projectStarterFiles(project: GuidedProject): Record<string, string> {
   return { 'main.txt': `${project.title}\n\n${project.description}\n` };
 }
 
+function hasRequiredStarterFiles(starter: Record<string, string>, files: Record<string, unknown>): boolean {
+  return Object.keys(starter).every((filename) => canonicalText(files[filename]).trim().length > 0);
+}
+
 function changedCharacterEvidence(before: string, after: string): number {
   const left = canonicalText(before);
   const right = canonicalText(after);
@@ -43,6 +47,8 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
   if (draft.missionId && draft.missionId !== `project:${project.id}`) return 0;
 
   const starter = projectStarterFiles(project);
+  if (!hasRequiredStarterFiles(starter, draft.files)) return 0;
+
   let score = 0;
   for (const [filename, rawContent] of Object.entries(draft.files)) {
     const content = canonicalText(rawContent);
@@ -52,9 +58,6 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
       continue;
     }
     score += changedCharacterEvidence(starter[filename] ?? '', content);
-  }
-  for (const [filename, content] of Object.entries(starter)) {
-    if (!(filename in draft.files)) score += Math.min(ADDED_FILE_EVIDENCE_CHARS, canonicalText(content).length);
   }
   return score;
 }
