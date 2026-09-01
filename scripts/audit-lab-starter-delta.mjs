@@ -27,6 +27,9 @@ assert.match(
   /normalizeSource\(starterContent\)\.trim\(\)\.length > 0\s*&&\s*normalizeSource\(content\)\.trim\(\)\.length === 0\) return false/,
   'emptying non-empty starter files must fail Lab learning evidence',
 );
+assert.match(source, /function meaningfulEvidenceSource\(content: string\)/, 'Lab evidence must normalize filler before comparing learner work');
+assert.match(source, /replace\(\/<!--\[\\s\\S\]\*\?-->\/g, ''\)/, 'HTML-only comments must not earn Lab progress');
+assert.match(source, /replace\(\/\\\/\\\*\[\\s\\S\]\*\?\\\*\\\/\/g, ''\)/, 'block comments must not earn Lab progress');
 
 const mission = {
   id: 'html-card-lab',
@@ -70,6 +73,21 @@ const newlineOnly = runBehavioralSuite(mission, draft({
   'index.html': '<main>\r\n  <h1>NexCode Lab</h1>\r\n</main>\r\n\r\n',
 }));
 assert.equal(newlineOnly.hiddenPassed, 0, 'line-ending or trailing-whitespace churn must not count as real work');
+
+const commentOnly = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'index.html': `${mission.starterFiles['index.html']}<!-- terminé -->`,
+  'styles.css': `${mission.starterFiles['styles.css']}\n/* joli */`,
+  'script.js': '// done',
+}));
+assert.equal(commentOnly.hiddenPassed, 0, 'comment-only edits must not satisfy the hidden Lab progress check');
+assert.equal(commentOnly.passed, false, 'comment-only filler must not pass the Lab suite');
+
+const commentOnlyAddedFile = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'notes.js': '// beaucoup de texte pour contourner une validation de longueur uniquement',
+}));
+assert.equal(commentOnlyAddedFile.hiddenPassed, 0, 'a comment-only learner-created file must not count as substantive work');
 
 const missingStarter = runBehavioralSuite(mission, draft({
   'index.html': '<main><h1>Mon portfolio</h1></main>',
@@ -116,4 +134,13 @@ const singleUnchanged = runBehavioralSuite(singleFileMission, {
 });
 assert.equal(singleUnchanged.hiddenPassed, 0, 'starterCode-only missions must also reject unchanged submissions');
 
-console.log('Lab starter delta audit OK: starter files stay intact, destructive edits fail, and substantive edits remain valid.');
+const singleCommentOnly = runBehavioralSuite(singleFileMission, {
+  missionId: singleFileMission.id,
+  language: singleFileMission.language,
+  files: { 'main.js': 'const count = 0;\n// changed' },
+  activeFile: 'main.js',
+  updatedAt: '2026-08-30T12:00:00.000Z',
+});
+assert.equal(singleCommentOnly.hiddenPassed, 0, 'starterCode-only missions must reject comment-only changes too');
+
+console.log('Lab starter delta audit OK: starter files stay intact, filler is ignored, destructive edits fail, and substantive edits remain valid.');
