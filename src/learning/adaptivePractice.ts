@@ -120,6 +120,12 @@ function maxNewActivitiesForBudget(budgetMinutes: PracticeSession['budgetMinutes
   return 3;
 }
 
+function recoveryQuotaForBudget(budgetMinutes: PracticeSession['budgetMinutes'], pendingRecoveryCount: number) {
+  if (budgetMinutes <= 10) return pendingRecoveryCount;
+  if (budgetMinutes <= 20) return Math.min(2, pendingRecoveryCount);
+  return Math.min(3, pendingRecoveryCount);
+}
+
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
   const usedSkills = new Set<string>();
@@ -128,20 +134,19 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   const recoveredUnscopedKeys = new Set<string>();
   const maxNewActivities = maxNewActivitiesForBudget(budgetMinutes);
   let newActivities = 0;
+  let recoveryActivities = 0;
   let minutes = 0;
 
   const sorted = [...pool].sort(activitySort);
-  const recoverySkills = new Set(
-    sorted
-      .filter((item) => isRecoveryMode(item.mode))
-      .flatMap((item) => item.skillIds),
-  );
+  const recoveryCandidates = sorted.filter((item) => isRecoveryMode(item.mode));
+  const recoverySkills = new Set(recoveryCandidates.flatMap((item) => item.skillIds));
   const unscopedRecoveryKeys = new Set(
-    sorted
-      .filter((item) => isRecoveryMode(item.mode) && item.skillIds.length === 0)
+    recoveryCandidates
+      .filter((item) => item.skillIds.length === 0)
       .map(recoveryActivityKey),
   );
   const hasPendingRecovery = recoverySkills.size > 0 || unscopedRecoveryKeys.size > 0;
+  const recoveryQuota = recoveryQuotaForBudget(budgetMinutes, recoveryCandidates.length);
   const overrunAllowance = Math.max(2, Math.round(budgetMinutes * 0.15));
   const maxMinutes = budgetMinutes + overrunAllowance;
 
@@ -156,10 +161,8 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
     if (recoveryMode && candidate.skillIds.length === 0 && recoveredUnscopedKeys.has(candidateRecoveryKey)) continue;
 
-    const unresolvedRecoverySkills = [...recoverySkills].filter((skill) => !recoveredSkills.has(skill));
-    const unresolvedUnscopedRecovery = [...unscopedRecoveryKeys].some((key) => !recoveredUnscopedKeys.has(key));
-    const unresolvedRecovery = unresolvedRecoverySkills.length > 0 || unresolvedUnscopedRecovery;
-    if (unresolvedRecovery && !recoveryMode) continue;
+    const recoveryQuotaOutstanding = recoveryActivities < recoveryQuota;
+    if (recoveryQuotaOutstanding && !recoveryMode) continue;
     if (candidate.mode === 'learn' && newActivities >= maxNewActivities) continue;
 
     const bringsNewSkill = candidate.skillIds.some((skill) => !usedSkills.has(skill));
@@ -170,6 +173,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     selected.push(candidate);
     minutes += candidate.estimatedMinutes;
     if (candidate.mode === 'learn') newActivities += 1;
+    if (recoveryMode) recoveryActivities += 1;
     candidate.skillIds.forEach((skill) => {
       usedSkills.add(skill);
       if (recoveryMode) recoveredSkills.add(skill);
