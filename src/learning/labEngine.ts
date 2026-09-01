@@ -196,9 +196,19 @@ function containsLikelySecret(files: Record<string, string>) {
   return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test|changeme)[A-Za-z0-9_-]{12,}/i.test(text);
 }
 
+function meaningfulEvidenceSource(content: string) {
+  return content
+    .replace(/\r\n?/g, '\n')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !/^\s*(?:\/\/|#|--)(?:\s|$)/.test(line))
+    .join('\n')
+    .replace(/\s+/g, '');
+}
+
 function meaningfulChange(mission: LabMission, files: Record<string, string>) {
   const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
-  const normalized = (value: string) => value.replace(/\s+/g, ' ').trim();
   const filesByKey = new Map(
     Object.entries(files).map(([filename, content]) => [workspaceCollisionKey(filename), content]),
   );
@@ -207,7 +217,7 @@ function meaningfulChange(mission: LabMission, files: Record<string, string>) {
   for (const [filename, starterContent] of Object.entries(starterFiles)) {
     const content = filesByKey.get(workspaceCollisionKey(filename));
     if (content === undefined) return false;
-    if (normalized(starterContent).length > 0 && normalized(content).length === 0) return false;
+    if (meaningfulEvidenceSource(starterContent).length > 0 && meaningfulEvidenceSource(content).length === 0) return false;
   }
 
   for (const [filename, content] of Object.entries(files)) {
@@ -215,10 +225,10 @@ function meaningfulChange(mission: LabMission, files: Record<string, string>) {
       (candidate) => workspaceCollisionKey(candidate) === workspaceCollisionKey(filename),
     );
     if (!starterFilename) {
-      if (normalized(content).length >= 3) return true;
+      if (meaningfulEvidenceSource(content).length > 0) return true;
       continue;
     }
-    if (normalized(content) !== normalized(starterFiles[starterFilename] ?? '')) return true;
+    if (meaningfulEvidenceSource(content) !== meaningfulEvidenceSource(starterFiles[starterFilename] ?? '')) return true;
   }
 
   return false;
