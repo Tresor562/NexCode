@@ -12,12 +12,15 @@ expect(engine, /newlyCompletedSteps\s*>\s*0\s*&&\s*!hasProjectWorkspaceEvidence\
 expect(engine, /if \(!hasProjectWorkspaceEvidence\(project, state\.projectDrafts\[project\.id\], finalStepCount\)\) return state;/, 'Portfolio rewards must re-check final workspace evidence instead of trusting stored progress alone.');
 expect(evidence, /const MIN_CHANGED_CHARS_PER_STEP\s*=\s*24/, 'Workspace evidence must grow with every claimed construction step.');
 expect(evidence, /projectStarterFiles\(project: GuidedProject\)/, 'Workspace evidence must compare against the canonical project starter shape.');
+expect(evidence, /function meaningfulEvidenceText\([\s\S]*replace\(\/<!--\[\\s\\S\]\*\?-->\/g, ''\)[\s\S]*replace\(\/\\\/\\\*\[\\s\\S\]\*\?\\\*\\\//g, ''\)[\s\S]*filter\(\(line\) => !\/\^\\s\*\(\?:\\\/\\\/\|#\|--\)/, 'Workspace evidence must strip comment-only filler before measuring meaningful work.');
+expect(evidence, /\.replace\(\/\\s\+\/g, ''\)/, 'Whitespace-only formatting must not inflate project evidence.');
 expect(evidence, /function hasRequiredStarterFiles\([\s\S]*Object\.keys\(starter\)\.every\([\s\S]*canonicalText\(files\[filename\]\)\.trim\(\)\.length > 0/, 'Required starter files must remain present and non-empty before edits can count as project evidence.');
 expect(evidence, /if \(!hasRequiredStarterFiles\(starter, draft\.files\)\) return 0;/, 'Deleting or emptying a starter file must fail closed instead of increasing the evidence score.');
-expect(evidence, /if \(left === right\) return 0;/, 'Untouched starter files must earn zero construction evidence.');
+expect(evidence, /const left = meaningfulEvidenceText\(before\);[\s\S]*const right = meaningfulEvidenceText\(after\);[\s\S]*if \(left === right\) return 0;/, 'Starter edits must be compared after filler normalization so comments and formatting alone earn no evidence.');
 expect(evidence, /while \(prefix < shared && left\[prefix\] === right\[prefix\]\) prefix \+= 1;/, 'Workspace evidence must preserve a shared prefix instead of treating an insertion as edits to every shifted character.');
 expect(evidence, /const maxSuffix = Math\.min\(leftRemaining, rightRemaining\);[\s\S]*suffix < maxSuffix[\s\S]*left\[left\.length - 1 - suffix\] === right\[right\.length - 1 - suffix\]/, 'Workspace evidence must preserve a shared suffix so localized edits remain localized.');
 expect(evidence, /const removed = left\.length - prefix - suffix;[\s\S]*const added = right\.length - prefix - suffix;[\s\S]*return Math\.max\(removed, added\);/, 'Evidence must count the localized edit span rather than positional shift noise.');
+expect(evidence, /const meaningfulContent = meaningfulEvidenceText\(content\);[\s\S]*Math\.min\(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent\.length\)/, 'Added files must earn evidence only from meaningful non-filler content.');
 expect(evidence, /changedCharacterEvidence\(starter\[filename\][\s\S]*content\)/, 'Starter edits must pass through the bounded edit-span evidence calculation.');
 expect(evidence, /if \(!Number\.isInteger\(targetCompletedSteps\) \|\| targetCompletedSteps <= 0\) return false;/, 'Invalid target step counts must fail closed.');
 expect(evidence, /targetCompletedSteps \* MIN_CHANGED_CHARS_PER_STEP/, 'Later project milestones must require progressively stronger workspace evidence.');
