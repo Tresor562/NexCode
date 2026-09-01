@@ -31,8 +31,16 @@ function completedProjectSteps(project: GuidedProject, progress: number): number
   return Math.min(total, Math.max(0, Math.floor((safePercent(progress) / 100) * total)));
 }
 
-function validRewardTime(value: Date): Date {
-  return value instanceof Date && Number.isFinite(value.getTime()) ? value : new Date();
+function validRewardTime(value: Date, systemNow = new Date()): Date {
+  const trustedSystemNow = systemNow instanceof Date && Number.isFinite(systemNow.getTime()) ? systemNow : new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return trustedSystemNow;
+
+  // A caller-controlled clock must not expand the proof-validation window. Without
+  // this boundary, passing `now = 2099` would make an equally future-dated proof
+  // look legitimate even though rewardProgress later repairs its own timestamp.
+  return value.getTime() <= trustedSystemNow.getTime() + MAX_FUTURE_PROOF_SKEW_MS
+    ? value
+    : trustedSystemNow;
 }
 
 function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProject, now: Date): boolean {
