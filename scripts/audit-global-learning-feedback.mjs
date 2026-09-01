@@ -8,6 +8,7 @@ const expectations = [
   ['shared map read', 'const previous = sharedLastTriggeredAt.get(kind);'],
   ['shared map write', 'sharedLastTriggeredAt.set(kind, current);'],
   ['foreground gate', 'if (!appActive) return false;'],
+  ['clock rollback guard', 'if (elapsed < 0) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
   ['selection cooldown', "selection: 45"],
   ['impact cooldown', "impact: 120"],
   ['success cooldown', "success: 180"],
@@ -56,6 +57,10 @@ if (/const generation = supersedeAudio\(\);\s*if \(!canTrigger\('sound'/.test(so
   console.error('Global learning feedback audit failed: a cooldown-rejected tap must not supersede an already accepted lesson cue.');
   process.exit(1);
 }
+if (/elapsed < 0\) return false/.test(source)) {
+  console.error('Global learning feedback audit failed: clock rollback must reset the cooldown baseline before rejecting the cue.');
+  process.exit(1);
+}
 
 const lessonExpectations = [
   ['lesson shared gate import', "createLearningFeedbackGate"],
@@ -80,4 +85,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: cooldowns, foreground invalidation, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: cooldowns, clock rollback recovery, foreground invalidation, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
