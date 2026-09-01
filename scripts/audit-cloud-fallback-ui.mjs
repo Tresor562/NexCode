@@ -20,14 +20,16 @@ for (const [label, fragment] of expectations) {
   }
 }
 
-const catchIndex = source.indexOf('.catch(() => {');
-const noticeIndex = source.indexOf("kind: 'offline-fallback'");
-if (catchIndex < 0 || noticeIndex < catchIndex) {
-  console.error('Cloud fallback UI audit failed: fallback notice must originate from cloud pull failure.');
+const catchStart = source.indexOf('.catch(() => {');
+const catchEnd = catchStart >= 0 ? source.indexOf('\n      })\n      .finally(', catchStart) : -1;
+const noticeIndex = source.indexOf("kind: 'offline-fallback'", catchStart);
+if (catchStart < 0 || catchEnd < 0 || noticeIndex < catchStart || noticeIndex > catchEnd) {
+  console.error('Cloud fallback UI audit failed: fallback notice must originate from the cloud pull failure handler.');
   process.exit(1);
 }
 
-if (/catch\(\(\) => \{[\s\S]{0,500}setAuthError\(/.test(source)) {
+const cloudPullCatchBody = source.slice(catchStart, catchEnd);
+if (cloudPullCatchBody.includes('setAuthError(')) {
   console.error('Cloud fallback UI audit failed: recoverable cloud pull failure must not eject the learner into auth error state.');
   process.exit(1);
 }
