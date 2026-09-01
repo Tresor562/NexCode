@@ -59,9 +59,10 @@ function changedCharacterEvidence(before: string, after: string): number {
     && left[left.length - 1 - suffix] === right[right.length - 1 - suffix]
   ) suffix += 1;
 
-  const removed = left.length - prefix - suffix;
   const added = right.length - prefix - suffix;
-  return Math.max(removed, added);
+  // Deleting starter code is not construction evidence. Replacements still earn
+  // credit for the meaningful content actually introduced by the learner.
+  return Math.max(0, added);
 }
 
 export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: LabDraft | undefined): number {
