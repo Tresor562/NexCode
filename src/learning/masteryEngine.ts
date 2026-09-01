@@ -26,6 +26,12 @@ export type GateResult = {
 
 const MAX_FUTURE_PRACTICE_SKEW_MS = 5 * 60 * 1000;
 
+function boundedPercent(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : fallback;
+}
+
 function ageDays(iso: string | undefined, now: Date) {
   if (!iso) return Number.POSITIVE_INFINITY;
   const nowMs = now.getTime();
@@ -92,20 +98,22 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
       independentEvidence: false,
     };
   }
-  const effectiveScore = Math.round(state.score * retentionFactor(state, now));
+  const rawScore = boundedPercent(state.score);
+  const confidence = boundedPercent(state.confidence);
+  const effectiveScore = Math.round(rawScore * retentionFactor(state, now));
   const evidenceKinds = [...new Set(state.evidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
   const recurringErrors = recurringErrorTags(state);
   const independentEvidence = independentEvidenceContextCount(state) >= 2;
   const due = reviewIsDue(state.nextReviewAt, now);
   return {
     skillId,
-    rawScore: state.score,
+    rawScore,
     effectiveScore,
-    confidence: state.confidence,
+    confidence,
     band: masteryBand(effectiveScore),
     evidenceKinds,
     recurringErrors,
-    needsReview: due || effectiveScore < state.score - 5,
+    needsReview: due || effectiveScore < rawScore - 5,
     independentEvidence,
   };
 }
@@ -126,20 +134,21 @@ export function skillIsMastered(skillId: string, mastery: MasteryMap, now = new 
 }
 
 export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, required = 70, now = new Date()): GateResult {
+  const normalizedRequired = boundedPercent(required, 100);
   const snapshots = skillIds.map((id) => masterySnapshot(id, mastery, now));
-  const confidenceRequired = Math.min(70, required);
+  const confidenceRequired = Math.min(70, normalizedRequired);
   const missingSkills = snapshots.filter((item) => item.rawScore === 0).map((item) => item.skillId);
   const weakSkills = snapshots
     .filter(
       (item) =>
         item.rawScore > 0 &&
-        (item.effectiveScore < required || item.confidence < confidenceRequired),
+        (item.effectiveScore < normalizedRequired || item.confidence < confidenceRequired),
     )
     .map((item) => item.skillId);
   const missingIndependentEvidence = snapshots
     .filter(
       (item) =>
-        item.effectiveScore >= required &&
+        item.effectiveScore >= normalizedRequired &&
         item.confidence >= confidenceRequired &&
         !item.independentEvidence,
     )
@@ -150,7 +159,7 @@ export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, requi
   return {
     passed: missingSkills.length === 0 && weakSkills.length === 0 && missingIndependentEvidence.length === 0,
     score,
-    required,
+    required: normalizedRequired,
     missingSkills,
     weakSkills,
     missingIndependentEvidence,
