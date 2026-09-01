@@ -51,6 +51,12 @@ function safeAttemptCount(value: unknown): number {
   return Math.max(0, Math.min(10_000, Math.floor(value)));
 }
 
+function trustedCompletionTime(value: Date, systemNow = new Date()): Date {
+  const safeSystemNow = systemNow instanceof Date && Number.isFinite(systemNow.getTime()) ? systemNow : new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeSystemNow;
+  return value.getTime() <= safeSystemNow.getTime() + MAX_EVIDENCE_CLOCK_SKEW_MS ? value : safeSystemNow;
+}
+
 function validEvidenceTime(value: unknown, now: Date): number | null {
   if (typeof value !== 'string') return null;
   const time = Date.parse(value);
@@ -99,14 +105,17 @@ export function learningCompletionReward(lesson: Lesson): LearningCompletionRewa
 
 export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now = new Date()): LocalState {
   if (state.completedLessons.includes(lesson.id)) return state;
+  const rewardTime = trustedCompletionTime(now);
   // Completion rewards require both a recorded attempt and the latest correct
   // evidence produced by recordLessonOutcome for every declared lesson skill.
   // A failed retry must never become rewardable because an older success still
-  // exists deeper in the mastery history.
+  // exists deeper in the mastery history. The caller-provided clock is bounded
+  // against the real system clock before evidence validation so a future `now`
+  // cannot legitimize equally future-dated mastery evidence.
   if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
-  if (!hasLatestCorrectLessonEvidence(state, lesson, now)) return state;
+  if (!hasLatestCorrectLessonEvidence(state, lesson, rewardTime)) return state;
   const reward = learningCompletionReward(lesson);
-  const rewarded = rewardProgress(state, { ...reward, now });
+  const rewarded = rewardProgress(state, { ...reward, now: rewardTime });
   return {
     ...rewarded,
     completedLessons: [...rewarded.completedLessons, lesson.id],
