@@ -30,6 +30,16 @@ function normalizeSource(content: string): string {
     .replace(/\n+$/g, '');
 }
 
+function meaningfulEvidenceSource(content: string): string {
+  return normalizeSource(content)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !/^\s*(?:\/\/|#|--)(?:\s|$)/.test(line))
+    .join('\n')
+    .replace(/\s+/g, '');
+}
+
 function portableWorkspaceKey(filename: string): string {
   return filename.normalize('NFC').toLocaleLowerCase('en-US');
 }
@@ -61,11 +71,11 @@ function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolea
       const key = portableWorkspaceKey(filename);
       const starterEntry = starterEntries.find(([starterFilename]) => portableWorkspaceKey(starterFilename) === key);
       if (!starterEntry) {
-        if (normalizeSource(content).trim().length > 0) return true;
+        if (meaningfulEvidenceSource(content).length > 0) return true;
         continue;
       }
 
-      if (normalizeSource(content) !== normalizeSource(starterEntry[1])) return true;
+      if (meaningfulEvidenceSource(content) !== meaningfulEvidenceSource(starterEntry[1])) return true;
     }
 
     return false;
@@ -73,16 +83,16 @@ function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolea
 
   const starterCode = mission.starterCode;
   if (typeof starterCode === 'string' && starterCode.length) {
-    const normalizedStarter = normalizeSource(starterCode);
+    const meaningfulStarter = meaningfulEvidenceSource(starterCode);
     const substantiveFiles = Object.values(draft.files)
-      .map(normalizeSource)
-      .filter((content) => content.trim().length > 0);
+      .map(meaningfulEvidenceSource)
+      .filter((content) => content.length > 0);
     if (!substantiveFiles.length) return false;
-    if (substantiveFiles.length === 1) return substantiveFiles[0] !== normalizedStarter;
-    return substantiveFiles.some((content) => content !== normalizedStarter);
+    if (substantiveFiles.length === 1) return substantiveFiles[0] !== meaningfulStarter;
+    return substantiveFiles.some((content) => content !== meaningfulStarter);
   }
 
-  return Object.values(draft.files).join('\n').trim().length >= 60;
+  return Object.values(draft.files).map(meaningfulEvidenceSource).join('').length >= 60;
 }
 
 export function secretSafetyIssues(draft: LabDraft) {
