@@ -86,15 +86,16 @@ const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret rée
     missionId: mission.id,
     language: mission.language,
     files: {
-      'SERVER.TS': 'const http = require("http");\nhttp.createServer((req, res) => res.end("ok")).listen(3000);',
+      'SERVER.JS': 'const http = require("http");\nhttp.createServer((req, res) => res.end("ok")).listen(3000);',
+      'ROUTES.TS': 'export const health = (_req, res) => res.end("healthy");',
     },
-    activeFile: 'SERVER.TS',
+    activeFile: 'ROUTES.TS',
     updatedAt: new Date(0).toISOString(),
   };
 
   const result = validateLabDraft(mission, draft);
   assert.equal(result.checks.find((check) => check.id === 'complete')?.passed, true, 'Node/Bot completeness must accept uppercase .JS/.TS extensions');
-  assert.equal(result.passed, true, 'a valid portable Node workspace must be fully accepted');
+  assert.equal(result.passed, true, 'a valid portable Node workspace must be fully accepted without deleting its canonical starter file');
 }
 
-console.log('Lab portable validation audit OK: portable files validate correctly and persisted progress stays scoped to authored mission criteria.');
+console.log('Lab portable validation audit OK: portable files validate correctly, starter integrity is preserved, and persisted progress stays scoped to authored mission criteria.');
