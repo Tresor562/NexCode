@@ -3,6 +3,7 @@ import { guidedProjects } from '../data/projects';
 import { LocalState, rewardProgress } from '../lib/localState';
 import { defaultProjectRubric, reviewProject } from './projectEngine';
 import type { PortfolioProof } from './projectPortfolioEngine';
+import { hasProjectWorkspaceEvidence } from './projectWorkspaceEvidence';
 
 const PROJECT_STEP_REWARD = Object.freeze({ xp: 15, nexCoins: 3, minutes: 3 });
 const PORTFOLIO_PROOF_REWARD = Object.freeze({ xp: 50, nexCoins: 10, minutes: 5 });
@@ -79,6 +80,10 @@ function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProjec
  * The caller may pass a project object from the UI, but reward math always uses
  * the canonical project registered in product data. This prevents a malformed or
  * stale object from inflating the number of rewarded steps for a known project id.
+ *
+ * A saved workspace is not proof by itself: selecting a file can persist the
+ * untouched starter. Every newly claimed construction step therefore requires a
+ * growing amount of measurable delta from the canonical starter workspace.
  */
 export function advanceProjectProgress(
   state: LocalState,
@@ -96,6 +101,12 @@ export function advanceProjectProgress(
   const previousSteps = completedProjectSteps(registeredProject, previousProgress);
   const nextSteps = completedProjectSteps(registeredProject, nextProgress);
   const newlyCompletedSteps = Math.max(0, nextSteps - previousSteps);
+  if (newlyCompletedSteps > 0 && !hasProjectWorkspaceEvidence(
+    registeredProject,
+    state.projectDrafts[registeredProject.id],
+    nextSteps,
+  )) return state;
+
   const progressed = {
     ...state,
     projectProgress: {
@@ -141,8 +152,12 @@ export function recordPortfolioProof(
 
   // A passing rubric alone is not completion evidence. The learner must have
   // actually crossed the canonical 100% project-progress boundary before the
-  // first proof can mint its one-time portfolio reward.
+  // first proof can mint its one-time portfolio reward. Re-check the full project
+  // workspace delta as a second boundary so imported/tampered progress cannot
+  // mint a portfolio proof without corresponding code evidence.
   if (safePercent(state.projectProgress[project.id]) < 100) return state;
+  const finalStepCount = Math.max(1, project.steps.length);
+  if (!hasProjectWorkspaceEvidence(project, state.projectDrafts[project.id], finalStepCount)) return state;
 
   const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now: rewardTime });
   return {
