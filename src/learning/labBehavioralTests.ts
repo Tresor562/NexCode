@@ -45,22 +45,30 @@ function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolea
   const starterEntries = Object.entries(starterFiles);
 
   if (starterEntries.length) {
-    const starterByKey = new Map(starterEntries.map(([filename, content]) => [portableWorkspaceKey(filename), content]));
-    const seenStarterKeys = new Set<string>();
+    const draftByKey = new Map(
+      Object.entries(draft.files).map(([filename, content]) => [portableWorkspaceKey(filename), content]),
+    );
+
+    // A Lab submission must preserve every canonical starter file. Removing or
+    // emptying required starter content is destructive work, not evidence of learning.
+    for (const [filename, starterContent] of starterEntries) {
+      const content = draftByKey.get(portableWorkspaceKey(filename));
+      if (content === undefined) return false;
+      if (normalizeSource(starterContent).trim().length > 0 && normalizeSource(content).trim().length === 0) return false;
+    }
 
     for (const [filename, content] of Object.entries(draft.files)) {
       const key = portableWorkspaceKey(filename);
-      const starterContent = starterByKey.get(key);
-      if (starterContent === undefined) {
+      const starterEntry = starterEntries.find(([starterFilename]) => portableWorkspaceKey(starterFilename) === key);
+      if (!starterEntry) {
         if (normalizeSource(content).trim().length > 0) return true;
         continue;
       }
 
-      seenStarterKeys.add(key);
-      if (normalizeSource(content) !== normalizeSource(starterContent)) return true;
+      if (normalizeSource(content) !== normalizeSource(starterEntry[1])) return true;
     }
 
-    return starterEntries.some(([filename]) => !seenStarterKeys.has(portableWorkspaceKey(filename)));
+    return false;
   }
 
   const starterCode = mission.starterCode;
