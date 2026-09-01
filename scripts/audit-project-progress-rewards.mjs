@@ -19,9 +19,10 @@ expect(/newlyCompletedSteps\s*=\s*Math\.max\(0,\s*nextSteps\s*-\s*previousSteps\
 expect(/PROJECT_STEP_REWARD\.xp\s*\*\s*newlyCompletedSteps/, 'XP must scale with newly crossed project steps, not button presses.');
 expect(/PROJECT_STEP_REWARD\.nexCoins\s*\*\s*newlyCompletedSteps/, 'NexCoins must scale with newly crossed project steps.');
 expect(/const PORTFOLIO_PASS_SCORE\s*=\s*70/, 'Portfolio rewards must preserve the project review passing threshold.');
-expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Portfolio evidence timestamps need a small bounded clock-skew tolerance.');
-expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Portfolio rewards must sanitize their canonical reward clock against the actual system clock.');
-expect(/value\.getTime\(\)\s*<=\s*trustedSystemNow\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied future clock must not expand the portfolio proof acceptance window.');
+expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Project reward timestamps need a small bounded clock-skew tolerance.');
+expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Project rewards must sanitize their canonical reward clock against the actual system clock.');
+expect(/value\.getTime\(\)\s*<=\s*trustedSystemNow\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied future clock must not expand project reward or portfolio proof windows.');
+expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);\s*return rewardProgress\(progressed, \{[\s\S]*?now:\s*rewardTime,[\s\S]*?\}\);/, 'Project step XP, NexCoins and streak accounting must use the trusted reward clock.');
 expect(/function isRewardablePortfolioProof\(proof:\s*PortfolioProof,\s*project:\s*GuidedProject,\s*now:\s*Date\):\s*boolean/, 'Portfolio rewards must validate evidence against its canonical project.');
 expect(/defaultProjectRubric\(project\)\.map\(\(item\)\s*=>\s*item\.id\)/, 'Portfolio rubric ids must come from the canonical project rubric.');
 expect(/const review = reviewProject\(project, rubricIds\);/, 'Portfolio score must be recomputed from canonical review logic.');
@@ -57,6 +58,14 @@ if (/completedProjectSteps\(project,/.test(source)) {
 }
 if (/requestedProgress\s*>\s*\(state\.projectProgress/.test(source)) {
   throw new Error('Do not reward raw progress increases without monotonic step accounting.');
+}
+
+const progressRewardSection = source.match(/if \(newlyCompletedSteps === 0\) return progressed;([\s\S]*?)\n\}/)?.[1] ?? '';
+if (!progressRewardSection) {
+  throw new Error('Could not isolate project step reward boundary.');
+}
+if (/\bnow,/.test(progressRewardSection)) {
+  throw new Error('Project step rewards must never pass the caller clock directly into rewardProgress.');
 }
 
 const existingProofBranch = source.match(/if \(existingIndex\s*>=\s*0\)\s*\{([\s\S]*?)\n\s*\}\n\n\s*\/\/ A passing rubric/)?.[1];
