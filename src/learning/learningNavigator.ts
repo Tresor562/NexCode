@@ -140,13 +140,17 @@ export function searchLearningActivities(
   const terms = tokenizeSearch(query);
   const phrase = terms.join(' ');
   const completed = new Set(completedLessonIds);
-  const results: LearningSearchResult[] = [];
+  const results: Array<LearningSearchResult & { curriculumOrder: number }> = [];
+  let curriculumOrder = 0;
+
   for (const course of courses) {
     if (filter.courseIds?.length && !filter.courseIds.includes(course.id)) continue;
+    const lessonsById = new Map(course.starterLessons.map((lesson) => [lesson.id, lesson]));
     for (const chapter of course.chapters) {
       for (const unit of chapter.units) {
         for (const lessonId of unit.lessonIds) {
-          const lesson = course.starterLessons.find((item) => item.id === lessonId);
+          const lessonOrder = curriculumOrder++;
+          const lesson = lessonsById.get(lessonId);
           if (!lesson) continue;
           if (filter.onlyIncomplete && completed.has(lesson.id)) continue;
           if (filter.kinds?.length && !filter.kinds.includes(lesson.activityKind ?? 'learn')) continue;
@@ -172,12 +176,15 @@ export function searchLearningActivities(
           const score = terms.length
             ? searchScore
             : learningPriorityScore(lesson, completed, mastery, now);
-          results.push({ course, lesson, chapterId: chapter.id, unitId: unit.id, score });
+          results.push({ course, lesson, chapterId: chapter.id, unitId: unit.id, score, curriculumOrder: lessonOrder });
         }
       }
     }
   }
-  return results.sort((a, b) => b.score - a.score || a.lesson.title.localeCompare(b.lesson.title));
+
+  return results
+    .sort((a, b) => b.score - a.score || a.curriculumOrder - b.curriculumOrder)
+    .map(({ curriculumOrder: _curriculumOrder, ...result }) => result);
 }
 
 export function courseNavigationSummary(course: Course, completedLessonIds: string[], mastery: MasteryMap) {
