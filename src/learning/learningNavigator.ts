@@ -42,6 +42,8 @@ const PROGRAMMING_IDENTITY_TERMS = new Set([
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_REVIEW_URGENCY_BONUS = 35;
+const RECOMMENDATION_PREREQUISITE_GATE = 55;
+const MAX_PREREQUISITE_PENALTY = 90;
 
 function normalize(value: string) {
   return value
@@ -95,6 +97,28 @@ function boundedMasteryScore(value: unknown) {
     : 0;
 }
 
+function prerequisiteReadinessPenalty(lesson: Lesson, mastery: MasteryMap) {
+  const prerequisites = [...new Set(lesson.prerequisiteSkillIds ?? [])].filter(Boolean);
+  if (!prerequisites.length) return 0;
+
+  let penalty = 0;
+  for (const skillId of prerequisites) {
+    const state = mastery[skillId];
+    if (!state) {
+      penalty += 40;
+      continue;
+    }
+
+    const score = boundedMasteryScore(state.score);
+    if (score < RECOMMENDATION_PREREQUISITE_GATE) {
+      const readinessGap = RECOMMENDATION_PREREQUISITE_GATE - score;
+      penalty += 20 + Math.ceil((readinessGap / RECOMMENDATION_PREREQUISITE_GATE) * 25);
+    }
+  }
+
+  return Math.min(MAX_PREREQUISITE_PENALTY, penalty);
+}
+
 function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: MasteryMap, now: Date) {
   const skillStates = (lesson.skillIds ?? [])
     .map((skillId) => mastery[skillId])
@@ -119,6 +143,7 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
   else if (kind === 'lab') score += 8;
   else if (kind === 'checkpoint' || kind === 'boss') score += 5;
 
+  score -= prerequisiteReadinessPenalty(lesson, mastery);
   return score;
 }
 
