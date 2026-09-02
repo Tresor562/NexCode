@@ -96,6 +96,21 @@ function nextReviewDays(score: number, consecutiveCorrect: number, correct: bool
   return 1;
 }
 
+function boundedCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(maximum, Math.floor(value)));
+}
+
+function boundedScore(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : 0;
+}
+
+function usableAttemptTime(now: Date) {
+  return Number.isFinite(now.getTime()) ? now : new Date();
+}
+
 export function masteryConfidence(attempts: number, correctAttempts: number) {
   if (!Number.isFinite(attempts) || !Number.isFinite(correctAttempts) || attempts <= 0 || correctAttempts <= 0) return 0;
   const boundedAttempts = Math.max(0, Math.floor(attempts));
@@ -123,6 +138,8 @@ export function recordSkillAttempt(
   errorTag?: string,
 ): MasteryMap {
   const next = { ...map };
+  const attemptTime = usableAttemptTime(now);
+  const attemptIso = attemptTime.toISOString();
   for (const skillId of lesson.skillIds ?? []) {
     const previous = next[skillId] ?? {
       skillId,
@@ -135,21 +152,27 @@ export function recordSkillAttempt(
       errorTags: [],
       evidence: [],
     };
-    const attempts = previous.attempts + 1;
-    const correctAttempts = previous.correctAttempts + (correct ? 1 : 0);
-    const consecutiveCorrect = correct ? previous.consecutiveCorrect + 1 : 0;
+    const previousAttempts = boundedCount(previous.attempts);
+    const previousCorrectAttempts = boundedCount(previous.correctAttempts, previousAttempts);
+    const previousConsecutiveCorrect = boundedCount(previous.consecutiveCorrect, previousAttempts);
+    const previousScore = boundedScore(previous.score);
+    const previousErrorTags = Array.isArray(previous.errorTags) ? previous.errorTags.filter((tag) => typeof tag === 'string') : [];
+    const previousEvidence = Array.isArray(previous.evidence) ? previous.evidence : [];
+    const attempts = previousAttempts + 1;
+    const correctAttempts = Math.min(attempts, previousCorrectAttempts + (correct ? 1 : 0));
+    const consecutiveCorrect = correct ? Math.min(attempts, previousConsecutiveCorrect + 1) : 0;
     const delta = qualityWeight(lesson, correct);
-    const score = Math.max(0, Math.min(100, previous.score + delta));
+    const score = Math.max(0, Math.min(100, previousScore + delta));
     const confidence = masteryConfidence(attempts, correctAttempts);
     const reviewDays = nextReviewDays(score, consecutiveCorrect, correct);
-    const nextReview = new Date(now);
+    const nextReview = new Date(attemptTime);
     nextReview.setDate(nextReview.getDate() + reviewDays);
     const evidence: AttemptEvidence = {
       lessonId: lesson.id,
       activityKind: lesson.activityKind ?? 'learn',
       correct,
       scoreDelta: delta,
-      at: now.toISOString(),
+      at: attemptIso,
       errorTag: !correct ? errorTag : undefined,
     };
     next[skillId] = {
@@ -160,10 +183,10 @@ export function recordSkillAttempt(
       attempts,
       correctAttempts,
       consecutiveCorrect,
-      lastPracticedAt: now.toISOString(),
+      lastPracticedAt: attemptIso,
       nextReviewAt: nextReview.toISOString(),
-      errorTags: errorTag && !correct ? [...new Set([...previous.errorTags, errorTag])].slice(-8) : previous.errorTags,
-      evidence: [...previous.evidence, evidence].slice(-20),
+      errorTags: errorTag && !correct ? [...new Set([...previousErrorTags, errorTag])].slice(-8) : previousErrorTags,
+      evidence: [...previousEvidence, evidence].slice(-20),
     };
   }
   return next;
