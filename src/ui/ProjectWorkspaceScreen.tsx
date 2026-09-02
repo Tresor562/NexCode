@@ -10,6 +10,7 @@ import { Pill, PrimaryButton } from './components';
 import { theme } from './theme';
 
 type Panel = 'files' | 'code' | 'preview' | 'console';
+type EditorSelection = { start: number; end: number };
 const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
 
 const PREVIEW_SECURITY_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; media-src data: blob:; form-action 'none'; base-uri 'none';">`;
@@ -55,7 +56,9 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
     expectedLanguage: project.tech,
     fallbackFiles: starterFiles(project),
   }), [project.id]);
+  const initialContent = initial.draft.files[initial.draft.activeFile] ?? '';
   const [draft, setDraft] = useState(initial.draft);
+  const [selection, setSelection] = useState<EditorSelection>({ start: initialContent.length, end: initialContent.length });
   const [panel, setPanel] = useState<Panel>('code');
   const [consoleText, setConsoleText] = useState(initial.repaired
     ? 'Workspace restauré en mode sûr. Les fichiers sensibles, invalides ou incompatibles ont été retirés.'
@@ -72,7 +75,9 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   }
 
   function selectFile(filename: string) {
+    const nextContent = draft.files[filename] ?? '';
     save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });
+    setSelection({ start: nextContent.length, end: nextContent.length });
     setPanel('code');
     Haptics.selectionAsync().catch(() => undefined);
   }
@@ -82,7 +87,13 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   }
 
   function insertSymbol(value: string) {
-    changeContent(`${content}${value === 'Tab' ? '  ' : value}`);
+    const token = value === 'Tab' ? '  ' : value;
+    const start = Math.max(0, Math.min(selection.start, content.length));
+    const end = Math.max(start, Math.min(selection.end, content.length));
+    const nextContent = `${content.slice(0, start)}${token}${content.slice(end)}`;
+    const caret = start + token.length;
+    changeContent(nextContent);
+    setSelection({ start: caret, end: caret });
     Haptics.selectionAsync().catch(() => undefined);
   }
 
@@ -104,7 +115,10 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
       }
       const before = new Set(Object.keys(draft.files));
       const firstNew = Object.keys(result.files).find((name) => !before.has(name));
-      save({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() });
+      const nextActiveFile = firstNew ?? draft.activeFile;
+      save({ ...draft, files: result.files, activeFile: nextActiveFile, updatedAt: new Date().toISOString() });
+      const nextContent = result.files[nextActiveFile] ?? '';
+      setSelection({ start: nextContent.length, end: nextContent.length });
       setConsoleText(`${result.imported} fichier(s) importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     } catch {
@@ -126,7 +140,10 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
       }
       const before = new Set(Object.keys(draft.files));
       const firstNew = Object.keys(result.files).find((name) => !before.has(name));
-      save({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() });
+      const nextActiveFile = firstNew ?? draft.activeFile;
+      save({ ...draft, files: result.files, activeFile: nextActiveFile, updatedAt: new Date().toISOString() });
+      const nextContent = result.files[nextActiveFile] ?? '';
+      setSelection({ start: nextContent.length, end: nextContent.length });
       setConsoleText(`${result.imported} fichier(s) du projet importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     } catch {
@@ -175,7 +192,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
 
       {panel === 'code' ? <View style={styles.panel}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>{files.map((filename) => <Pressable key={filename} onPress={() => selectFile(filename)} style={[styles.tab, draft.activeFile === filename && styles.tabActive]}><Text style={[styles.tabText, draft.activeFile === filename && styles.tabTextActive]}>{filename}</Text></Pressable>)}</ScrollView>
-        <View style={styles.editor}><View style={styles.editorTop}><Text style={styles.editorName}>{draft.activeFile}</Text><Text style={styles.saved}>● sauvegardé</Text></View><TextInput multiline value={content} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.symbols}>{symbols.map((item) => <Pressable key={item} onPress={() => insertSymbol(item)} style={styles.symbol}><Text style={styles.symbolText}>{item}</Text></Pressable>)}</ScrollView></View>
+        <View style={styles.editor}><View style={styles.editorTop}><Text style={styles.editorName}>{draft.activeFile}</Text><Text style={styles.saved}>● sauvegardé</Text></View><TextInput multiline value={content} selection={selection} onSelectionChange={(event) => setSelection(event.nativeEvent.selection)} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} accessibilityLabel={`Éditeur projet ${draft.activeFile}`} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.symbols}>{symbols.map((item) => <Pressable key={item} onPress={() => insertSymbol(item)} style={styles.symbol}><Text style={styles.symbolText}>{item}</Text></Pressable>)}</ScrollView></View>
       </View> : null}
 
       {panel === 'preview' ? <View style={styles.panel}><View style={styles.previewHeader}><Text style={styles.panelTitle}>Preview</Text><Pill label={preview ? 'Sandbox + console live' : 'Non disponible'} tone={preview ? 'success' : 'warning'} /></View>{preview ? <View style={styles.webWrap}><WebView key={`preview-${previewRunId}`} originWhitelist={['about:blank']} source={{ html: preview, baseUrl: 'about:blank' }} javaScriptEnabled domStorageEnabled={false} setSupportMultipleWindows={false} allowsFullscreenVideo={false} onMessage={(event) => handlePreviewMessage(event.nativeEvent.data)} onShouldStartLoadWithRequest={(request) => request.url === 'about:blank' || request.url.startsWith('data:')} style={styles.web} /></View> : <View style={styles.empty}><Text style={styles.emptyTitle}>Pas de rendu visuel pour cette technologie.</Text><Text style={styles.emptyText}>Utilise la console pour vérifier le projet. Les projets Web disposent d’un aperçu local sans accès réseau.</Text></View>}</View> : null}
