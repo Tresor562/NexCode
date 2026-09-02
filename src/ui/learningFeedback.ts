@@ -44,8 +44,19 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
   function canTrigger(kind: LearningFeedbackKind, appActive: boolean) {
     if (!appActive) return false;
     const current = now();
+    // A mocked or platform clock returning NaN/Infinity must never poison the
+    // shared cooldown map. Once NaN is stored, every elapsed comparison becomes
+    // false and rapid feedback can bypass throttling indefinitely.
+    if (!Number.isFinite(current)) return false;
+
     const previous = sharedLastTriggeredAt.get(kind);
     if (previous !== undefined) {
+      // Recover defensively from any legacy/corrupted module state without
+      // allowing the first valid sample to fire immediately.
+      if (!Number.isFinite(previous)) {
+        sharedLastTriggeredAt.set(kind, current);
+        return false;
+      }
       const elapsed = current - previous;
       // Device clocks can move backwards after time sync, timezone corrections or
       // test clock replacement. Treat the first regressed timestamp as a new
@@ -86,7 +97,10 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       }
       if (!canTrigger('sound', true)) return;
       const generation = supersedeAudio();
-      player.seekTo(0)
+      // Start from a resolved promise so a native/player implementation that
+      // throws synchronously from seekTo is handled exactly like a rejected seek.
+      Promise.resolve()
+        .then(() => player.seekTo(0))
         .then(() => {
           if (sharedAudioRequestGeneration !== generation) return;
           player.play();
