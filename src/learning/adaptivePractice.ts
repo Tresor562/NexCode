@@ -92,6 +92,42 @@ export function buildAdaptivePool(
 }
 
 const modeOrder: PracticeMode[] = ['repair', 'review', 'checkpoint', 'lab', 'learn', 'interleave'];
+const practiceModes = new Set<PracticeMode>(modeOrder);
+const MAX_RUNTIME_ACTIVITY_MINUTES = 240;
+const MAX_RUNTIME_ACTIVITY_PRIORITY = 1000;
+const MAX_RUNTIME_ACTIVITY_SKILLS = 24;
+const MAX_RUNTIME_ID_LENGTH = 128;
+const MAX_RUNTIME_REASON_LENGTH = 400;
+
+function normalizeRuntimeActivity(candidate: PlannedActivity): PlannedActivity | undefined {
+  if (!candidate || typeof candidate !== 'object') return undefined;
+  if (!practiceModes.has(candidate.mode)) return undefined;
+  if (!Number.isFinite(candidate.estimatedMinutes) || candidate.estimatedMinutes <= 0 || candidate.estimatedMinutes > MAX_RUNTIME_ACTIVITY_MINUTES) return undefined;
+  if (!Number.isFinite(candidate.priority) || Math.abs(candidate.priority) > MAX_RUNTIME_ACTIVITY_PRIORITY) return undefined;
+  if (typeof candidate.courseId !== 'string' || typeof candidate.lessonId !== 'string') return undefined;
+  const courseId = candidate.courseId.trim();
+  const lessonId = candidate.lessonId.trim();
+  if (!courseId || !lessonId || courseId.length > MAX_RUNTIME_ID_LENGTH || lessonId.length > MAX_RUNTIME_ID_LENGTH) return undefined;
+  if (!Array.isArray(candidate.skillIds) || candidate.skillIds.length > MAX_RUNTIME_ACTIVITY_SKILLS) return undefined;
+
+  const skillIds = [...new Set(candidate.skillIds
+    .filter((skill): skill is string => typeof skill === 'string')
+    .map((skill) => skill.trim())
+    .filter((skill) => skill.length > 0 && skill.length <= MAX_RUNTIME_ID_LENGTH))];
+  const reason = typeof candidate.reason === 'string'
+    ? candidate.reason.trim().slice(0, MAX_RUNTIME_REASON_LENGTH)
+    : '';
+
+  return {
+    courseId,
+    lessonId,
+    mode: candidate.mode,
+    priority: candidate.priority,
+    reason,
+    estimatedMinutes: Math.ceil(candidate.estimatedMinutes),
+    skillIds,
+  };
+}
 
 function activitySort(a: PlannedActivity, b: PlannedActivity) {
   const modeDelta = modeOrder.indexOf(a.mode) - modeOrder.indexOf(b.mode);
@@ -137,7 +173,10 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   let recoveryActivities = 0;
   let minutes = 0;
 
-  const sorted = [...pool].sort(activitySort);
+  const sorted = pool
+    .map(normalizeRuntimeActivity)
+    .filter((item): item is PlannedActivity => Boolean(item))
+    .sort(activitySort);
   const recoveryCandidates = sorted.filter((item) => isRecoveryMode(item.mode));
   const recoverySkills = new Set(recoveryCandidates.flatMap((item) => item.skillIds));
   const unscopedRecoveryKeys = new Set(
