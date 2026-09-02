@@ -43,12 +43,22 @@ function consumeRetryDelay(userId: string): number {
   return delay;
 }
 
-function snapshotCloudState(state: LocalState): LocalState {
+function snapshotCloudState(state: LocalState): LocalState | null {
   // LocalState is intentionally JSON-serializable because the same shape is
   // persisted to disk and Supabase. Clone it when queueing so later in-memory
   // mutations cannot silently rewrite a snapshot that is already waiting for
-  // upload or currently being retried.
-  return JSON.parse(JSON.stringify(state)) as LocalState;
+  // upload or currently being retried. Treat serialization as an untrusted
+  // persistence boundary: a circular or otherwise non-JSON runtime mutation
+  // must never crash a learning interaction just because cloud sync is enabled.
+  try {
+    const serialized = JSON.stringify(state);
+    if (!serialized) return null;
+    const snapshot = JSON.parse(serialized) as unknown;
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return null;
+    return snapshot as LocalState;
+  } catch {
+    return null;
+  }
 }
 
 function clearPendingPush(): void {
@@ -173,7 +183,9 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = DEFAULT_PUSH
   if (!isCloudConfigured()) return;
   const session = loadCloudSession();
   if (!session) return;
-  latestState = { userId: session.user.id, state: snapshotCloudState(state) };
+  const snapshot = snapshotCloudState(state);
+  if (!snapshot) return;
+  latestState = { userId: session.user.id, state: snapshot };
 
   // Debounce rapid local mutations, but never start a second request while one
   // is in flight. The completed request immediately flushes any newer snapshot.
