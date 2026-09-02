@@ -1,5 +1,5 @@
 import { ActivityKind, Course, Lesson } from '../data/curriculumCore';
-import { MasteryMap } from './skillGraph';
+import { MasteryMap, SkillMastery } from './skillGraph';
 import { courseMasterySnapshot } from './masteryEngine';
 
 export type LearningFilter = {
@@ -122,7 +122,7 @@ function prerequisiteReadinessPenalty(lesson: Lesson, mastery: MasteryMap) {
 function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: MasteryMap, now: Date) {
   const skillStates = (lesson.skillIds ?? [])
     .map((skillId) => mastery[skillId])
-    .filter(Boolean);
+    .filter((state): state is SkillMastery => Boolean(state));
   const dueStates = skillStates.filter((state) => reviewIsDue(state.nextReviewAt, now));
   const dueReview = dueStates.length > 0;
   const weakestSkill = skillStates.length
