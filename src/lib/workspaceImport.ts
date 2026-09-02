@@ -94,6 +94,18 @@ function workspaceUsage(existing: Record<string, string>) {
   };
 }
 
+function safeDirectoryEntries(directory: Directory): Array<Directory | File> | null {
+  try {
+    return directory.list();
+  } catch {
+    // Android document providers can revoke access or fail on a single nested
+    // directory while the rest of the selected project remains readable. Treat
+    // that subtree as skipped instead of rejecting the entire project import and
+    // discarding files that were already read successfully.
+    return null;
+  }
+}
+
 export async function importFilesFromPhone(existing: Record<string, string>): Promise<WorkspaceImportResult> {
   const picked = await File.pickFileAsync({ multipleFiles: true });
   if (picked.canceled) return { files: existing, imported: 0, skipped: 0, renamed: 0 };
@@ -149,7 +161,11 @@ export async function importFolderFromPhone(existing: Record<string, string>): P
 
   async function walk(directory: Directory, prefix: string, depth: number): Promise<void> {
     if (depth > MAX_DEPTH || workspaceFiles >= MAX_FILES_PER_WORKSPACE || workspaceChars >= MAX_TOTAL_TEXT_CHARS) return;
-    const entries = directory.list();
+    const entries = safeDirectoryEntries(directory);
+    if (!entries) {
+      skipped += 1;
+      return;
+    }
     for (const entry of entries) {
       if (workspaceFiles >= MAX_FILES_PER_WORKSPACE || workspaceChars >= MAX_TOTAL_TEXT_CHARS) break;
       if (entry instanceof Directory) {
