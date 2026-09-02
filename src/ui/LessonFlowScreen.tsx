@@ -39,6 +39,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const [recallDraft, setRecallDraft] = useState('');
   const [recallRevealed, setRecallRevealed] = useState(false);
   const [recallConfidence, setRecallConfidence] = useState<RecallConfidence | null>(null);
+  const [quizReflection, setQuizReflection] = useState('');
   const [transferDraft, setTransferDraft] = useState('');
   const { reduceMotion, appActive } = useMotionPreferences();
   const scale = useRef(new Animated.Value(1)).current;
@@ -49,6 +50,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const step = steps[stepIndex];
   const correct = answer === lesson.correctIndex;
   const recallAttemptReady = recallDraft.trim().length >= 3;
+  const quizReflectionReady = quizReflection.trim().length >= 12;
   const transferAttemptReady = transferDraft.trim().length >= 12;
   const snapshots = useMemo(() => (lesson.skillIds ?? []).map((id) => masterySnapshot(id, state.mastery)), [lesson.id, state.mastery]);
   const mastery = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
@@ -70,6 +72,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
     setRecallDraft('');
     setRecallRevealed(false);
     setRecallConfidence(null);
+    setQuizReflection('');
     setTransferDraft('');
   }, [lesson.id, scale]);
 
@@ -147,6 +150,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
     setAnswer(null);
     setSubmitted(false);
     setRecorded(false);
+    setQuizReflection('');
   }
 
   const mentorMood = submitted ? (correct ? '✓' : '?') : step === 'recall' ? '…' : '';
@@ -287,7 +291,28 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
             <View style={[styles.feedback, correct ? styles.feedbackGood : styles.feedbackBad]} accessibilityLiveRegion="polite">
               <Text style={styles.feedbackTitle}>{correct ? 'Excellent !' : 'Presque.'}</Text>
               <Text style={styles.feedbackText}>{lesson.explanation}</Text>
-              {correct ? <PrimaryButton label="Étape suivante" icon="→" onPress={next} /> : <PrimaryButton label="Réessayer" onPress={retry} />}
+              {correct ? (
+                <>
+                  <View style={styles.quizReflection}>
+                    <Text style={styles.quizReflectionLabel}>POURQUOI ÇA MARCHE ?</Text>
+                    <Text style={styles.quizReflectionHint}>Explique l’idée avec tes mots. Ce mini-rappel transforme une bonne réponse en compréhension plus durable.</Text>
+                    <TextInput
+                      value={quizReflection}
+                      onChangeText={setQuizReflection}
+                      multiline
+                      maxLength={400}
+                      textAlignVertical="top"
+                      placeholder="Parce que…"
+                      placeholderTextColor={theme.colors.textMuted}
+                      accessibilityLabel="Explication de ta bonne réponse"
+                      accessibilityHint="Explique pourquoi la réponse est correcte avant de continuer"
+                      style={styles.quizReflectionInput}
+                    />
+                    <Text style={styles.quizReflectionCounter}>{quizReflection.trim().length}/400 • {quizReflectionReady ? 'explication prête' : 'explique en au moins 12 caractères'}</Text>
+                  </View>
+                  <PrimaryButton label="Étape suivante" icon="→" disabled={!quizReflectionReady} onPress={next} />
+                </>
+              ) : <PrimaryButton label="Réessayer" onPress={retry} />}
             </View>
           ) : null}
         </View>
@@ -353,5 +378,5 @@ const styles = StyleSheet.create({
   codeBlock:{backgroundColor:'#070B13',borderWidth:1,borderColor:'#222A3D',borderRadius:20,overflow:'hidden'},codeTop:{height:42,paddingHorizontal:14,flexDirection:'row',alignItems:'center',justifyContent:'space-between',borderBottomWidth:1,borderBottomColor:'#1C2435'},codeFile:{color:'#AEB8D5',fontFamily:'monospace',fontSize:11},runBadge:{color:'#7EE6B0',fontSize:9,fontWeight:'900'},code:{color:'#EAF0FF',fontFamily:'monospace',fontSize:13,lineHeight:21,padding:16,minHeight:190},
   recallQuestion:{color:theme.colors.text,fontSize:20,lineHeight:29,fontWeight:'900'},recallChallenge:{marginTop:18,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},recallChallengeTitle:{color:'#AEB8FF',fontSize:12,fontWeight:'900'},recallChallengeText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:6},recallInput:{minHeight:112,marginTop:14,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},recallCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},recallAttempt:{marginTop:18,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},recallAttemptText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:22,marginTop:6},recallReveal:{marginTop:10,padding:14,borderRadius:16,backgroundColor:'rgba(100,118,255,0.12)',borderWidth:1,borderColor:'rgba(100,118,255,0.28)'},recallRevealLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},recallRevealText:{color:theme.colors.text,fontSize:14,lineHeight:22,fontWeight:'700',marginTop:6},confidenceTitle:{color:theme.colors.textSecondary,fontSize:12,fontWeight:'800'},confidenceRow:{flexDirection:'row',gap:8},confidence:{flex:1,minHeight:68,paddingVertical:10,paddingHorizontal:7,borderRadius:15,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.035)',alignItems:'center',justifyContent:'center',gap:5},confidenceActive:{borderColor:'#6677FF',backgroundColor:'rgba(102,119,255,0.16)'},confidenceEmoji:{color:'#AAB4FF',fontSize:15,fontWeight:'900'},confidenceText:{color:theme.colors.text,fontSize:10,fontWeight:'800',textAlign:'center'},
   question:{color:theme.colors.text,fontSize:23,fontWeight:'900',lineHeight:30},choices:{gap:10},choice:{minHeight:58,flexDirection:'row',alignItems:'center',gap:12,padding:12,borderRadius:16,borderWidth:1,borderColor:theme.colors.border,backgroundColor:'rgba(255,255,255,0.045)'},choiceSelected:{borderColor:'#6476FF',backgroundColor:'rgba(100,118,255,0.15)'},choiceCorrect:{borderColor:'#2E9A69',backgroundColor:'rgba(46,154,105,0.14)'},choiceWrong:{borderColor:'#B94B57',backgroundColor:'rgba(185,75,87,0.13)'},pressed:{transform:[{scale:.985}]},pressedReducedMotion:{opacity:.78},choiceLetter:{width:34,height:34,borderRadius:11,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(255,255,255,0.07)'},choiceLetterText:{color:theme.colors.text,fontSize:11,fontWeight:'900'},choiceText:{flex:1,color:theme.colors.text,fontSize:14,lineHeight:20,fontWeight:'700'},
-  feedback:{padding:16,borderRadius:18,borderWidth:1},feedbackGood:{borderColor:'#2D7655',backgroundColor:'rgba(34,116,79,0.16)'},feedbackBad:{borderColor:'#7A4148',backgroundColor:'rgba(122,65,72,0.16)'},feedbackTitle:{color:theme.colors.text,fontSize:18,fontWeight:'900'},feedbackText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginVertical:8},transfer:{color:theme.colors.text,fontSize:18,fontWeight:'800',lineHeight:27},tip:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:12},transferAttempt:{marginTop:16,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},transferAttemptLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},transferInput:{minHeight:118,marginTop:10,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},transferCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},labTitle:{color:theme.colors.text,fontSize:23,fontWeight:'900'},labText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:8},criteria:{gap:8,marginTop:14},criterionRow:{flexDirection:'row',alignItems:'flex-start',gap:8},criterionDot:{color:'#70DEA8',fontSize:12,fontWeight:'900',marginTop:1},criterionText:{flex:1,color:theme.colors.textSecondary,fontSize:12,lineHeight:18},flags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:14},backButton:{alignSelf:'center',padding:12,marginTop:14},backText:{color:theme.colors.textMuted,fontSize:12,fontWeight:'800'},
+  feedback:{padding:16,borderRadius:18,borderWidth:1},feedbackGood:{borderColor:'#2D7655',backgroundColor:'rgba(34,116,79,0.16)'},feedbackBad:{borderColor:'#7A4148',backgroundColor:'rgba(122,65,72,0.16)'},feedbackTitle:{color:theme.colors.text,fontSize:18,fontWeight:'900'},feedbackText:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginVertical:8},quizReflection:{marginTop:6,marginBottom:12,padding:13,borderRadius:15,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(112,222,168,0.2)'},quizReflectionLabel:{color:'#7EE6B0',fontSize:9,fontWeight:'900',letterSpacing:1.05},quizReflectionHint:{color:theme.colors.textSecondary,fontSize:12,lineHeight:18,marginTop:6},quizReflectionInput:{minHeight:92,marginTop:10,padding:12,borderRadius:13,borderWidth:1,borderColor:'rgba(112,222,168,0.25)',backgroundColor:'rgba(5,8,16,0.4)',color:theme.colors.text,fontSize:13,lineHeight:20},quizReflectionCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},transfer:{color:theme.colors.text,fontSize:18,fontWeight:'800',lineHeight:27},tip:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:12},transferAttempt:{marginTop:16,padding:14,borderRadius:16,backgroundColor:'rgba(255,255,255,0.045)',borderWidth:1,borderColor:'rgba(255,255,255,0.08)'},transferAttemptLabel:{color:'#9BA6FF',fontSize:9,fontWeight:'900',letterSpacing:1.1},transferInput:{minHeight:118,marginTop:10,padding:13,borderRadius:14,borderWidth:1,borderColor:'rgba(142,154,255,0.34)',backgroundColor:'rgba(5,8,16,0.42)',color:theme.colors.text,fontSize:14,lineHeight:21},transferCounter:{color:theme.colors.textMuted,fontSize:10,lineHeight:14,marginTop:7,textAlign:'right'},labTitle:{color:theme.colors.text,fontSize:23,fontWeight:'900'},labText:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:8},criteria:{gap:8,marginTop:14},criterionRow:{flexDirection:'row',alignItems:'flex-start',gap:8},criterionDot:{color:'#70DEA8',fontSize:12,fontWeight:'900',marginTop:1},criterionText:{flex:1,color:theme.colors.textSecondary,fontSize:12,lineHeight:18},flags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:14},backButton:{alignSelf:'center',padding:12,marginTop:14},backText:{color:theme.colors.textMuted,fontSize:12,fontWeight:'800'},
 });
