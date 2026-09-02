@@ -75,6 +75,35 @@ function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   return Number.isFinite(nowMs) ? nextReviewMs <= nowMs : true;
 }
 
+function boundedMasteryScore(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : 0;
+}
+
+function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: MasteryMap, now: Date) {
+  const skillStates = (lesson.skillIds ?? [])
+    .map((skillId) => mastery[skillId])
+    .filter(Boolean);
+  const dueReview = skillStates.some((state) => reviewIsDue(state.nextReviewAt, now));
+  const weakestSkill = skillStates.length
+    ? Math.min(...skillStates.map((state) => boundedMasteryScore(state.score)))
+    : 0;
+
+  let score = 1;
+  if (!completed.has(lesson.id)) score += 45;
+  if (dueReview) score += 90;
+  score += Math.round((100 - weakestSkill) * 0.2);
+
+  const kind = lesson.activityKind ?? 'learn';
+  if (kind === 'review') score += dueReview ? 18 : 0;
+  else if (kind === 'practice') score += 10;
+  else if (kind === 'lab') score += 8;
+  else if (kind === 'checkpoint' || kind === 'boss') score += 5;
+
+  return score;
+}
+
 function weightedSearchScore(
   terms: string[],
   phrase: string,
@@ -130,7 +159,7 @@ export function searchLearningActivities(
             if (!due) continue;
           }
 
-          const score = weightedSearchScore(terms, phrase, [
+          const searchScore = weightedSearchScore(terms, phrase, [
             { value: lesson.title, weight: 60 },
             { value: lesson.concept, weight: 45 },
             { value: (lesson.skillIds ?? []).join(' '), weight: 40 },
@@ -139,7 +168,10 @@ export function searchLearningActivities(
             { value: course.title, weight: 16 },
             { value: course.language, weight: 12 },
           ]);
-          if (terms.length && score <= 0) continue;
+          if (terms.length && searchScore <= 0) continue;
+          const score = terms.length
+            ? searchScore
+            : learningPriorityScore(lesson, completed, mastery, now);
           results.push({ course, lesson, chapterId: chapter.id, unitId: unit.id, score });
         }
       }
