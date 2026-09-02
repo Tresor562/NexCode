@@ -7,6 +7,7 @@ import { LabDraft } from '../lib/localState';
 import { importFilesFromPhone, importFolderFromPhone } from '../lib/workspaceImport';
 import { invalidateLabValidation, openLabWorkspace, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
 import { runBehavioralSuite, secretSafetyIssues } from '../learning/labBehavioralTests';
+import { webPreviewDocument } from '../learning/labSession';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
 import { theme } from './theme';
 
@@ -40,7 +41,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   const content = draft.files[draft.activeFile] ?? '';
   const secrets = secretSafetyIssues(draft);
   const progress = Math.round(((draft.passedCriteria?.length ?? 0) / Math.max(1, mission.successCriteria.length)) * 100);
-  const htmlPreview = useMemo(() => buildPreview(draft.files), [draft.files]);
+  const htmlPreview = useMemo(() => webPreviewDocument(draft), [draft.files]);
 
   function save(next: LabDraft) {
     setDraft(next);
@@ -197,8 +198,8 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
 
       {panel === 'preview' ? (
         <View style={styles.panel}>
-          <View style={styles.previewTop}><Text style={styles.panelTitle}>Aperçu</Text><Pill label="Live" tone="success" /></View>
-          {htmlPreview ? <View style={styles.webWrap}><WebView originWhitelist={['*']} source={{ html: htmlPreview }} style={styles.web} javaScriptEnabled /></View> : <Card><Text style={styles.emptyTitle}>Aucun aperçu visuel pour ce projet.</Text><Text style={styles.helper}>Le preview Web s’active quand le workspace contient un fichier HTML.</Text></Card>}
+          <View style={styles.previewTop}><Text style={styles.panelTitle}>Aperçu</Text><Pill label="Sandbox locale" tone="success" /></View>
+          {htmlPreview ? <View style={styles.webWrap}><WebView originWhitelist={['about:blank']} source={{ html: htmlPreview, baseUrl: 'about:blank' }} style={styles.web} javaScriptEnabled domStorageEnabled={false} setSupportMultipleWindows={false} allowsFullscreenVideo={false} onShouldStartLoadWithRequest={(request) => request.url === 'about:blank' || request.url.startsWith('data:')} /></View> : <Card><Text style={styles.emptyTitle}>Aucun aperçu visuel pour ce projet.</Text><Text style={styles.helper}>Le preview Web s’active quand le workspace contient un fichier HTML.</Text></Card>}
         </View>
       ) : null}
 
@@ -233,17 +234,6 @@ function NavItem({ active, label, icon, onPress }: { active: boolean; label: str
 function fileBadge(filename: string) {
   const ext = filename.split('.').pop()?.toUpperCase() ?? 'TXT';
   return ext.slice(0, 3);
-}
-
-function buildPreview(files: Record<string, string>) {
-  const htmlName = Object.keys(files).find((name) => name.endsWith('.html'));
-  if (!htmlName) return '';
-  const css = Object.entries(files).filter(([name]) => name.endsWith('.css')).map(([,value]) => value).join('\n');
-  const js = Object.entries(files).filter(([name]) => name.endsWith('.js')).map(([,value]) => value).join('\n');
-  let html = files[htmlName] ?? '';
-  if (css) html = html.includes('</head>') ? html.replace('</head>', `<style>${css}</style></head>`) : `<style>${css}</style>${html}`;
-  if (js) html = html.includes('</body>') ? html.replace('</body>', `<script>${js}<\/script></body>`) : `${html}<script>${js}<\/script>`;
-  return html;
 }
 
 function toolLabel(tool: Tool) {
