@@ -40,6 +40,9 @@ const PROGRAMMING_IDENTITY_TERMS = new Set([
   'typescript',
 ]);
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_REVIEW_URGENCY_BONUS = 35;
+
 function normalize(value: string) {
   return value
     .normalize('NFKD')
@@ -75,6 +78,17 @@ function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   return Number.isFinite(nowMs) ? nextReviewMs <= nowMs : true;
 }
 
+function reviewUrgencyBonus(nextReviewAt: string | undefined, now: Date) {
+  if (!nextReviewAt) return 12;
+  const nextReviewMs = Date.parse(nextReviewAt);
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nextReviewMs) || !Number.isFinite(nowMs)) return 12;
+  if (nextReviewMs > nowMs) return 0;
+
+  const overdueDays = Math.max(0, Math.floor((nowMs - nextReviewMs) / DAY_MS));
+  return Math.min(MAX_REVIEW_URGENCY_BONUS, 12 + Math.floor(Math.log2(overdueDays + 1) * 6));
+}
+
 function boundedMasteryScore(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(100, value))
@@ -85,14 +99,18 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
   const skillStates = (lesson.skillIds ?? [])
     .map((skillId) => mastery[skillId])
     .filter(Boolean);
-  const dueReview = skillStates.some((state) => reviewIsDue(state.nextReviewAt, now));
+  const dueStates = skillStates.filter((state) => reviewIsDue(state.nextReviewAt, now));
+  const dueReview = dueStates.length > 0;
   const weakestSkill = skillStates.length
     ? Math.min(...skillStates.map((state) => boundedMasteryScore(state.score)))
+    : 0;
+  const reviewUrgency = dueStates.length
+    ? Math.max(...dueStates.map((state) => reviewUrgencyBonus(state.nextReviewAt, now)))
     : 0;
 
   let score = 1;
   if (!completed.has(lesson.id)) score += 45;
-  if (dueReview) score += 90;
+  if (dueReview) score += 70 + reviewUrgency;
   score += Math.round((100 - weakestSkill) * 0.2);
 
   const kind = lesson.activityKind ?? 'learn';
