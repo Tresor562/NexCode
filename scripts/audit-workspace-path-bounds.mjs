@@ -4,6 +4,7 @@ import ts from 'typescript';
 
 const sourceUrl = new URL('../src/lib/workspaceSafety.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
+const importSource = fs.readFileSync(new URL('../src/lib/workspaceImport.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -32,5 +33,9 @@ assert.equal(canonicalWorkspacePath('src/name. /file.js'), null, 'segments endin
 assert.match(source, /MAX_WORKSPACE_PATH_CHARS\s*=\s*240/, 'workspace path cap must remain explicit');
 assert.match(source, /MAX_WORKSPACE_SEGMENT_CHARS\s*=\s*120/, 'workspace segment cap must remain explicit');
 assert.match(source, /MAX_WORKSPACE_DEPTH\s*=\s*12/, 'workspace depth cap must remain explicit');
+assert.match(importSource, /MAX_COLLISION_RENAMES\s*=\s*10_000/, 'collision rename search must stay bounded');
+assert.match(importSource, /candidate\s*=\s*canonicalWorkspacePath\(`\$\{folder\}\$\{candidateStem\}\$\{suffix\}\$\{ext\}`\)/, 'collision-renamed imports must pass through the canonical path policy');
+assert.match(importSource, /while\s*\(!candidate\s*&&\s*candidateStem\.length\s*>\s*1\)/, 'boundary-length filenames must trim their stem before being accepted');
+assert.doesNotMatch(importSource, /return\s*\{\s*path:\s*`\$\{folder\}\$\{stem\}\s*\(\$\{counter\}\)\$\{ext\}`/, 'collision renames must never bypass canonical validation');
 
-console.log('Workspace path bounds audit OK: portable project paths are normalized and pathological names/depths are rejected before storage or rendering.');
+console.log('Workspace path bounds audit OK: portable project paths and collision-renamed imports stay canonical, bounded and restorable.');
