@@ -29,6 +29,14 @@ const immediateFlush = extractFunctionBody(
   cloudSync,
   'export async function flushCloudStateNow(): Promise<void>',
 );
+const snapshotBody = extractFunctionBody(
+  cloudSync,
+  'function snapshotCloudState(state: LocalState): LocalState | null',
+);
+const scheduleBody = extractFunctionBody(
+  cloudSync,
+  'export function scheduleCloudStatePush(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS): void',
+);
 const initialClearIndex = immediateFlush.indexOf('clearPendingPush();');
 const awaitFlushIndex = immediateFlush.indexOf('const completed = await flushLatestState();');
 const failedReturnIndex = immediateFlush.indexOf('if (!completed) return;');
@@ -78,6 +86,18 @@ assert(
 assert(
   failedReturnIndex >= 0,
   'background draining must stop after a failed/offline flush so exponential retry remains effective',
+);
+assert(
+  /try\s*\{[\s\S]*JSON\.stringify\(state\)[\s\S]*JSON\.parse\(serialized\)[\s\S]*\}\s*catch\s*\{[\s\S]*return\s+null;/.test(snapshotBody),
+  'cloud snapshot creation must contain JSON serialization failures instead of crashing learning interactions',
+);
+assert(
+  /!snapshot\s*\|\|\s*typeof\s+snapshot\s*!==\s*['"]object['"]\s*\|\|\s*Array\.isArray\(snapshot\)/.test(snapshotBody),
+  'cloud snapshots must reject non-object JSON roots before queueing',
+);
+assert(
+  /const\s+snapshot\s*=\s*snapshotCloudState\(state\);[\s\S]{0,80}if\s*\(!snapshot\)\s*return;[\s\S]{0,120}latestState\s*=/.test(scheduleBody),
+  'failed cloud snapshots must be dropped before mutating the pending queue',
 );
 assert(
   /AppState\.addEventListener\(['"]change['"]/.test(rootApp),
