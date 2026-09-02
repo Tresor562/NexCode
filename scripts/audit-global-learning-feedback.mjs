@@ -8,6 +8,8 @@ const expectations = [
   ['shared map read', 'const previous = sharedLastTriggeredAt.get(kind);'],
   ['shared map write', 'sharedLastTriggeredAt.set(kind, current);'],
   ['foreground gate', 'if (!appActive) return false;'],
+  ['non-finite current clock guard', 'if (!Number.isFinite(current)) return false;'],
+  ['non-finite previous clock recovery', 'if (!Number.isFinite(previous)) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
   ['clock rollback guard', 'if (elapsed < 0) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
   ['selection cooldown', "selection: 45"],
   ['shared notification cooldown', "notification: 180"],
@@ -21,6 +23,7 @@ const expectations = [
   ['generation overflow guard', 'sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER'],
   ['background audio invalidation', 'if (!appActive) {\n        supersedeAudio();\n        return;\n      }'],
   ['cooldown before supersession', "if (!canTrigger('sound', true)) return;\n      const generation = supersedeAudio();"],
+  ['sync-safe audio seek boundary', 'Promise.resolve()\n        .then(() => player.seekTo(0))'],
 ];
 
 const missing = expectations.filter(([, marker]) => !source.includes(marker));
@@ -70,6 +73,14 @@ if (/elapsed < 0\) return false/.test(source)) {
   console.error('Global learning feedback audit failed: clock rollback must reset the cooldown baseline before rejecting the cue.');
   process.exit(1);
 }
+if (/sharedLastTriggeredAt\.set\(kind, current\);\s*return true;/.test(source) && !source.includes('if (!Number.isFinite(current)) return false;')) {
+  console.error('Global learning feedback audit failed: invalid timestamps must be rejected before they can poison the shared cooldown state.');
+  process.exit(1);
+}
+if (/const generation = supersedeAudio\(\);\s*player\.seekTo\(0\)/.test(source)) {
+  console.error('Global learning feedback audit failed: seekTo must be entered through a promise boundary so synchronous native throws are contained.');
+  process.exit(1);
+}
 
 const lessonExpectations = [
   ['lesson shared gate import', "createLearningFeedbackGate"],
@@ -94,4 +105,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, clock rollback recovery, foreground invalidation, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, finite-clock recovery, clock rollback recovery, foreground invalidation, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
