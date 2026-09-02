@@ -159,4 +159,28 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
   assert.equal(session.deferredRecoveryCount, 0);
 }
 
-console.log('Adaptive practice audit OK: mastery prerequisite gates, mandatory targeted recovery, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing and skill diversification are protected.');
+{
+  const session = planPracticeSession([
+    activity({ courseId: 'bad', lessonId: 'nan-duration', mode: 'learn', minutes: Number.NaN, skills: ['bad'], priority: 999 }),
+    activity({ courseId: 'bad', lessonId: 'negative-duration', mode: 'repair', minutes: -4, skills: ['bad'], priority: 999 }),
+    activity({ courseId: 'bad', lessonId: 'infinite-priority', mode: 'review', minutes: 3, skills: ['bad'], priority: Number.POSITIVE_INFINITY }),
+    activity({ courseId: 'bad', lessonId: 'unknown-mode', mode: 'surprise', minutes: 1, skills: ['bad'], priority: 999 }),
+    activity({ courseId: ' js ', lessonId: ' arrays-safe ', mode: 'learn', minutes: 3.2, skills: [' arrays ', 'arrays', '', 42], priority: 60 }),
+  ], 5);
+  assert.deepEqual(session.activities.map((item) => item.lessonId), ['arrays-safe'], 'malformed restored activities must be discarded instead of poisoning the plan');
+  assert.equal(session.estimatedMinutes, 4, 'fractional runtime durations must be rounded up to an honest whole-minute estimate');
+  assert.deepEqual(session.skillCoverage, ['arrays'], 'runtime skill identifiers must be normalized and deduplicated');
+  assert.deepEqual(session.courseCoverage, ['js'], 'runtime course identifiers must be normalized before coverage accounting');
+  assert.equal(Number.isFinite(session.estimatedMinutes), true, 'a malformed runtime activity must never produce NaN or Infinity session totals');
+}
+
+{
+  const excessiveSkills = Array.from({ length: 25 }, (_, index) => `skill-${index}`);
+  const session = planPracticeSession([
+    activity({ courseId: 'bad', lessonId: 'overscoped', mode: 'learn', minutes: 3, skills: excessiveSkills, priority: 100 }),
+    activity({ courseId: 'js', lessonId: 'bounded', mode: 'learn', minutes: 3, skills: ['arrays'], priority: 60 }),
+  ], 5);
+  assert.deepEqual(session.activities.map((item) => item.lessonId), ['bounded'], 'overscoped runtime activities must be rejected instead of expanding planning state without bound');
+}
+
+console.log('Adaptive practice audit OK: mastery prerequisite gates, mandatory targeted recovery, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing, skill diversification and malformed runtime activity containment are protected.');
