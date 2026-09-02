@@ -12,6 +12,7 @@ import { theme } from './theme';
 
 type Panel = 'files' | 'code' | 'preview' | 'console' | 'tools';
 type Tool = 'format' | 'minify' | 'obfuscate' | 'deobfuscate';
+type EditorSelection = { start: number; end: number };
 
 const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
 
@@ -23,7 +24,9 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   onBack: () => void;
 }) {
   const initial = useMemo(() => openLabWorkspace(lesson, stored), [lesson.id]);
+  const initialContent = initial.draft.files[initial.draft.activeFile] ?? '';
   const [draft, setDraft] = useState(initial.draft);
+  const [selection, setSelection] = useState<EditorSelection>({ start: initialContent.length, end: initialContent.length });
   const [attempts, setAttempts] = useState(0);
   const [feedback, setFeedback] = useState('Prêt. Modifie le code puis lance les tests.');
   const [validated, setValidated] = useState(false);
@@ -45,7 +48,9 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   }
 
   function changeFile(filename: string) {
+    const nextContent = draft.files[filename] ?? '';
     save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });
+    setSelection({ start: nextContent.length, end: nextContent.length });
     setPanel('code');
     Haptics.selectionAsync().catch(() => undefined);
   }
@@ -56,7 +61,13 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   }
 
   function insertSymbol(value: string) {
-    changeContent(`${content}${value === 'Tab' ? '  ' : value}`);
+    const token = value === 'Tab' ? '  ' : value;
+    const start = Math.max(0, Math.min(selection.start, content.length));
+    const end = Math.max(start, Math.min(selection.end, content.length));
+    const nextContent = `${content.slice(0, start)}${token}${content.slice(end)}`;
+    const caret = start + token.length;
+    changeContent(nextContent);
+    setSelection({ start: caret, end: caret });
     Haptics.selectionAsync().catch(() => undefined);
   }
 
@@ -71,7 +82,10 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
       }
       const before = new Set(Object.keys(draft.files));
       const firstNew = Object.keys(result.files).find((name) => !before.has(name));
-      save(invalidateLabValidation({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() }));
+      const nextActiveFile = firstNew ?? draft.activeFile;
+      save(invalidateLabValidation({ ...draft, files: result.files, activeFile: nextActiveFile, updatedAt: new Date().toISOString() }));
+      const nextContent = result.files[nextActiveFile] ?? '';
+      setSelection({ start: nextContent.length, end: nextContent.length });
       setValidated(false);
       setFeedback(`${result.imported} fichier(s) importé(s)${result.renamed ? ` • ${result.renamed} renommé(s) pour éviter un écrasement` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -93,7 +107,10 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
       }
       const before = new Set(Object.keys(draft.files));
       const firstNew = Object.keys(result.files).find((name) => !before.has(name));
-      save(invalidateLabValidation({ ...draft, files: result.files, activeFile: firstNew ?? draft.activeFile, updatedAt: new Date().toISOString() }));
+      const nextActiveFile = firstNew ?? draft.activeFile;
+      save(invalidateLabValidation({ ...draft, files: result.files, activeFile: nextActiveFile, updatedAt: new Date().toISOString() }));
+      const nextContent = result.files[nextActiveFile] ?? '';
+      setSelection({ start: nextContent.length, end: nextContent.length });
       setValidated(false);
       setFeedback(`${result.imported} fichier(s) du dossier importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
@@ -130,6 +147,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   function applyToolResult() {
     if (!toolOutput) return;
     changeContent(toolOutput);
+    setSelection({ start: toolOutput.length, end: toolOutput.length });
     setPanel('code');
   }
 
@@ -171,7 +189,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>{files.map((filename) => <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileTab, draft.activeFile === filename && styles.fileTabActive]}><Text style={[styles.fileTabText, draft.activeFile === filename && styles.fileTabTextActive]}>{filename}</Text></Pressable>)}</ScrollView>
           <View style={styles.editor}>
             <View style={styles.editorBar}><Text style={styles.editorFile}>{draft.activeFile}</Text><Text style={styles.saved}>● sauvegardé</Text></View>
-            <TextInput multiline value={content} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} accessibilityLabel={`Éditeur ${draft.activeFile}`} />
+            <TextInput multiline value={content} selection={selection} onSelectionChange={(event) => setSelection(event.nativeEvent.selection)} onChangeText={changeContent} autoCapitalize="none" autoCorrect={false} spellCheck={false} textAlignVertical="top" style={styles.code} accessibilityLabel={`Éditeur ${draft.activeFile}`} />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.symbolBar}>{symbols.map((item) => <Pressable key={item} onPress={() => insertSymbol(item)} style={styles.symbol}><Text style={styles.symbolText}>{item}</Text></Pressable>)}</ScrollView>
           </View>
         </View>
