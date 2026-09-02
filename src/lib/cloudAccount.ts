@@ -160,6 +160,8 @@ export async function signUpWithPassword(email: string, password: string, displa
 }
 
 function shouldDiscardSessionAfterRefreshFailure(status: number): boolean {
+  // A rejected refresh token is terminal. Throttling and server/network failures
+  // are transient and must not log the learner out or destroy offline continuity.
   return status === 400 || status === 401 || status === 403;
 }
 
@@ -172,19 +174,30 @@ async function performCloudSessionRefresh(session: CloudSession): Promise<CloudS
     body: JSON.stringify({ refresh_token: session.refreshToken }),
   });
   if (!response.ok) {
+    // A refresh can finish after the learner has already switched accounts. Never
+    // let a stale request sign the newly active learner out.
     if (shouldDiscardSessionAfterRefreshFailure(response.status) && sessionIsStillCurrent(session)) {
       saveCloudSession(null);
     }
     throw await parseError(response);
   }
   const refreshed = toSession(await response.json());
+
+  // Supabase refresh tokens rotate, but an old account refresh may resolve after
+  // another account has signed in. Persist only when the same session is still
+  // active so an in-flight request cannot resurrect the previous account.
   if (sessionIsStillCurrent(session)) saveCloudSession(refreshed);
   return refreshed;
 }
 
 export async function refreshCloudSession(session: CloudSession): Promise<CloudSession> {
   if (session.expiresAt - Date.now() > SESSION_REFRESH_WINDOW_MS) return session;
+
+  // Supabase refresh tokens rotate. Two concurrent refresh calls using the same
+  // token can invalidate one another and produce random sign-outs. Share one
+  // request per refresh token and let all callers reuse the resulting session.
   if (refreshFlight?.refreshToken === session.refreshToken) return refreshFlight.promise;
+
   const promise = performCloudSessionRefresh(session);
   const flight: RefreshFlight = { refreshToken: session.refreshToken, promise };
   refreshFlight = flight;
@@ -235,6 +248,7 @@ function validIsoTimestamp(value: unknown): number {
 function mergeMastery(remote: unknown, local: LocalState['mastery']): LocalState['mastery'] {
   const merged: LocalState['mastery'] = { ...local };
   if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
+
   for (const [skillId, raw] of Object.entries(remote as Record<string, unknown>)) {
     if (!skillId.trim() || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
     const remoteSkill = raw as Partial<LocalState['mastery'][string]>;
@@ -243,18 +257,21 @@ function mergeMastery(remote: unknown, local: LocalState['mastery']): LocalState
       merged[skillId] = { ...remoteSkill, skillId } as LocalState['mastery'][string];
       continue;
     }
+
     const remoteAt = validIsoTimestamp(remoteSkill.lastPracticedAt);
     const localAt = validIsoTimestamp(localSkill.lastPracticedAt);
     const preferred = remoteAt > localAt ? remoteSkill : localSkill;
     const remoteEvidence = Array.isArray(remoteSkill.evidence) ? remoteSkill.evidence : [];
     const localEvidence = Array.isArray(localSkill.evidence) ? localSkill.evidence : [];
     const evidenceByKey = new Map<string, LocalState['mastery'][string]['evidence'][number]>();
+
     for (const evidence of [...remoteEvidence, ...localEvidence]) {
       if (!evidence || typeof evidence !== 'object') continue;
       const candidate = evidence as LocalState['mastery'][string]['evidence'][number];
       const key = [candidate.lessonId, candidate.activityKind, candidate.correct, candidate.scoreDelta, candidate.at, candidate.errorTag ?? ''].join('\u0000');
       evidenceByKey.set(key, candidate);
     }
+
     const evidence = [...evidenceByKey.values()]
       .sort((left, right) => validIsoTimestamp(left.at) - validIsoTimestamp(right.at))
       .slice(-20);
@@ -263,6 +280,7 @@ function mergeMastery(remote: unknown, local: LocalState['mastery']): LocalState
       if (!evidence[index]?.correct) break;
       consecutiveCorrect += 1;
     }
+
     merged[skillId] = {
       ...localSkill,
       ...preferred,
@@ -276,6 +294,7 @@ function mergeMastery(remote: unknown, local: LocalState['mastery']): LocalState
       evidence,
     };
   }
+
   return merged;
 }
 
@@ -327,6 +346,10 @@ function mergeDailyProgress(local: LocalState, progress: Record<string, unknown>
   const remoteCompleted = finiteCloudNumber(progress?.daily_completed, 0, 0, 240);
   const remoteStreak = finiteCloudNumber(progress?.streak, 0, 0, 100_000);
   const lastActiveDate = laterDateKey(localDate, remoteDate);
+
+  // Daily counters and the current streak describe a specific activity day. A
+  // stale cloud snapshot must never revive yesterday's completed goal or streak
+  // after this device has already moved to a newer local day.
   if (localDate && (!remoteDate || localDate > remoteDate)) {
     return { lastActiveDate: localDate, dailyCompleted: local.dailyCompleted, streak: local.streak };
   }
@@ -369,6 +392,12 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
     portfolioProofs: mergePortfolioProofs(progress?.portfolio_proofs, local.portfolioProofs),
     onboardingComplete: local.onboardingComplete || Boolean(profile?.display_name),
   };
+
+  // Supabase JSON is an external persistence boundary. Run the merged snapshot
+  // through the same fail-safe normalizer used for local disk restores before it
+  // can reach mastery, streak, projects or UI state. This prevents malformed or
+  // stale cloud JSON from reintroducing NaN, impossible dates or invalid evidence
+  // that local storage already knows how to reject.
   return sanitizeLocalState(merged);
 }
 
