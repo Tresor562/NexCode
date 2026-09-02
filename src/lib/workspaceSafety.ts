@@ -21,6 +21,8 @@ const MAX_WORKSPACE_DEPTH = 12;
 const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
+const MAX_VALIDATION_CRITERIA = 100;
+const MAX_VALIDATION_CRITERION_CHARS = 240;
 const MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 function portableWorkspaceSegment(segment: string): boolean {
@@ -73,7 +75,12 @@ function validValidationMetadata(stored: LabDraft, nowMs: number): boolean {
   const hasCriteria = stored.passedCriteria !== undefined;
   if (!hasValidationTimestamp && !hasCriteria) return true;
   if (!plausibleIsoDate(stored.lastValidatedAt, nowMs) || !Array.isArray(stored.passedCriteria)) return false;
-  return stored.passedCriteria.every((criterion) => typeof criterion === 'string' && criterion.trim().length > 0);
+  if (stored.passedCriteria.length > MAX_VALIDATION_CRITERIA) return false;
+  return stored.passedCriteria.every((criterion) => {
+    if (typeof criterion !== 'string') return false;
+    const normalized = criterion.trim();
+    return normalized.length > 0 && normalized.length <= MAX_VALIDATION_CRITERION_CHARS;
+  });
 }
 
 export function restoreWorkspaceDraft({
