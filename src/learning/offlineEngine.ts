@@ -12,6 +12,9 @@ export type OfflinePack = {
   curriculumVersion: number;
 };
 
+const VALID_PACK_KINDS: OfflinePackKind[] = ['lite', 'standard', 'full'];
+const VALID_INCLUDES = new Set<OfflinePack['includes'][number]>(['content', 'examples', 'exercise-assets', 'lab-starters', 'media']);
+
 function chapterWeight(course: Course, chapter: Chapter) {
   const fraction = course.starterLessons.length ? chapter.lessonIds.length / course.starterLessons.length : 0;
   return Math.max(1, Math.round(course.offlineSizeMb * fraction));
@@ -63,14 +66,30 @@ export function buildStageOfflinePack(course: Course, stageId: string, kind: Off
   };
 }
 
+export function offlinePackIntegrityIssue(pack: OfflinePack): string | undefined {
+  if (!pack.id || !pack.courseId) return 'Identité du pack invalide.';
+  if (!VALID_PACK_KINDS.includes(pack.kind)) return 'Variante de pack inconnue.';
+  if (!Number.isInteger(pack.curriculumVersion) || pack.curriculumVersion < 1) return 'Version de curriculum invalide.';
+  if (!Number.isFinite(pack.estimatedMb) || pack.estimatedMb <= 0) return 'Taille du pack invalide.';
+  if (!Array.isArray(pack.chapterIds) || !pack.chapterIds.length) return 'Pack sans chapitre.';
+  if (pack.chapterIds.some((chapterId) => !chapterId || typeof chapterId !== 'string')) return 'Identifiant de chapitre invalide.';
+  if (new Set(pack.chapterIds).size !== pack.chapterIds.length) return 'Pack avec chapitres dupliqués.';
+  if (!Array.isArray(pack.includes) || !pack.includes.length) return 'Pack sans contenu exploitable.';
+  if (pack.includes.some((entry) => !VALID_INCLUDES.has(entry))) return 'Type de contenu hors-ligne inconnu.';
+  return undefined;
+}
+
 export function offlineUpdatePlan(installed: OfflinePack[], courses: Course[]) {
   const byCourse = new Map(courses.map((course) => [course.id, course]));
   return installed.map((pack) => {
+    const integrityIssue = offlinePackIntegrityIssue(pack);
+    if (integrityIssue) return { packId: pack.id, action: 'remove' as const, reason: integrityIssue };
+
     const course = byCourse.get(pack.courseId);
     if (!course) return { packId: pack.id, action: 'remove' as const, reason: 'Parcours introuvable dans ce curriculum.' };
 
     const knownChapterIds = new Set(course.chapters.map((chapter) => chapter.id));
-    const hasUnknownChapter = !pack.chapterIds.length || pack.chapterIds.some((chapterId) => !knownChapterIds.has(chapterId));
+    const hasUnknownChapter = pack.chapterIds.some((chapterId) => !knownChapterIds.has(chapterId));
     if (hasUnknownChapter) {
       return { packId: pack.id, action: 'update' as const, reason: 'Structure du parcours modifiée : reconstruction du pack requise.' };
     }
@@ -90,7 +109,7 @@ export function offlineUpdatePlan(installed: OfflinePack[], courses: Course[]) {
 export function estimateOfflineStorage(packs: OfflinePack[]) {
   const unique = new Map(packs.map((pack) => [pack.id, pack]));
   return [...unique.values()].reduce((sum, pack) => {
-    const estimatedMb = Number.isFinite(pack.estimatedMb) && pack.estimatedMb > 0 ? pack.estimatedMb : 0;
-    return sum + estimatedMb;
+    if (offlinePackIntegrityIssue(pack)) return sum;
+    return sum + pack.estimatedMb;
   }, 0);
 }
