@@ -37,13 +37,13 @@ function scoreLesson(
   course: Course,
   lesson: Lesson,
   mastery: MasteryMap,
-  completedIds: string[],
+  completedIds: Set<string>,
   graphById: Map<string, SkillNode>,
   now: Date,
 ): PlannedActivity | undefined {
   const skills = lesson.skillIds ?? [];
   const snapshots = skills.map((id) => masterySnapshot(id, mastery, now));
-  const completed = completedIds.includes(lesson.id);
+  const completed = completedIds.has(lesson.id);
   const weakest = snapshots.length ? Math.min(...snapshots.map((item) => item.effectiveScore)) : 0;
   const due = snapshots.some((item) => item.needsReview);
   const recurringErrors = snapshots.reduce((sum, item) => sum + item.recurringErrors.length, 0);
@@ -80,9 +80,10 @@ export function buildAdaptivePool(
   now = new Date(),
 ) {
   const graphById = new Map(graph.map((node) => [node.id, node]));
+  const completed = new Set(completedIds);
   const repairSkills = new Set(remediationTargets(mastery, now).slice(0, 12).map((item) => item.skillId));
   return courses
-    .flatMap((course) => course.starterLessons.map((lesson) => scoreLesson(course, lesson, mastery, completedIds, graphById, now)))
+    .flatMap((course) => course.starterLessons.map((lesson) => scoreLesson(course, lesson, mastery, completed, graphById, now)))
     .filter((item): item is PlannedActivity => Boolean(item))
     .map((item) => ({
       ...item,
