@@ -3,12 +3,20 @@ import type { LocalState } from './localState';
 
 const ownerFile = new File(Paths.document, 'nexcode-local-owner.txt');
 const ownerBoundMarker = new File(Paths.document, 'nexcode-local-owner-bound-v1');
+const MAX_ACCOUNT_ID_CHARS = 160;
+
+function normalizeAccountId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!normalized || normalized.length > MAX_ACCOUNT_ID_CHARS) return null;
+  if (/[\u0000-\u001f\u007f]/.test(normalized)) return null;
+  return normalized;
+}
 
 function readOwnerId(): string | null {
   try {
     if (!ownerFile.exists) return null;
-    const value = ownerFile.textSync().trim();
-    return value || null;
+    return normalizeAccountId(ownerFile.textSync());
   } catch {
     return null;
   }
@@ -25,7 +33,7 @@ function ownerBindingWasInitialized(): boolean {
 }
 
 export function bindLocalStateOwner(userId: string): void {
-  const normalized = userId.trim();
+  const normalized = normalizeAccountId(userId);
   if (!normalized) return;
   try {
     if (!ownerFile.exists) ownerFile.create();
@@ -70,7 +78,7 @@ function freshState(): LocalState {
 }
 
 export function scopeLocalStateForUser(local: LocalState, userId: string): LocalState {
-  const normalized = userId.trim();
+  const normalized = normalizeAccountId(userId);
   if (!normalized) return freshState();
   const ownerId = readOwnerId();
 
