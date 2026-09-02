@@ -37,5 +37,9 @@ assert.match(importSource, /MAX_COLLISION_RENAMES\s*=\s*10_000/, 'collision rena
 assert.match(importSource, /candidate\s*=\s*canonicalWorkspacePath\(`\$\{folder\}\$\{candidateStem\}\$\{suffix\}\$\{ext\}`\)/, 'collision-renamed imports must pass through the canonical path policy');
 assert.match(importSource, /while\s*\(!candidate\s*&&\s*candidateStem\.length\s*>\s*1\)/, 'boundary-length filenames must trim their stem before being accepted');
 assert.doesNotMatch(importSource, /return\s*\{\s*path:\s*`\$\{folder\}\$\{stem\}\s*\(\$\{counter\}\)\$\{ext\}`/, 'collision renames must never bypass canonical validation');
+assert.match(importSource, /function safeDirectoryEntries\(directory: Directory\)/, 'folder imports must isolate provider read failures behind a safe directory-list boundary');
+assert.match(importSource, /try\s*\{\s*return directory\.list\(\);\s*\}\s*catch\s*\{[\s\S]*?return null;/, 'unreadable provider subtrees must not reject the whole folder import');
+assert.match(importSource, /const entries = safeDirectoryEntries\(directory\);\s*if \(!entries\) \{\s*skipped \+= 1;\s*return;/, 'failed subtrees must be counted and skipped while preserving already imported files');
+assert.doesNotMatch(importSource, /const entries = directory\.list\(\);/, 'recursive folder walking must never call the provider directly without recovery');
 
-console.log('Workspace path bounds audit OK: portable project paths and collision-renamed imports stay canonical, bounded and restorable.');
+console.log('Workspace path bounds audit OK: portable project paths, collision-renamed imports and partial folder-provider failures stay bounded, canonical and recoverable.');
