@@ -17,12 +17,12 @@ requirePattern(
   'Cloud sync must keep every queued snapshot scoped to a user id.',
 );
 requirePattern(
-  /function snapshotCloudState\(state: LocalState\): LocalState \{[\s\S]*JSON\.parse\(JSON\.stringify\(state\)\) as LocalState;/,
-  'Queued cloud progress must be cloned at scheduling time so later in-memory mutations cannot rewrite an existing snapshot.',
+  /function snapshotCloudState\(state: LocalState\): LocalState \| null \{[\s\S]*JSON\.stringify\(state\)[\s\S]*JSON\.parse\(serialized\) as unknown[\s\S]*typeof snapshot !== 'object'[\s\S]*Array\.isArray\(snapshot\)[\s\S]*catch \{[\s\S]*return null;/,
+  'Queued cloud progress must be cloned through a fail-safe JSON boundary so invalid runtime state cannot crash learning interactions.',
 );
 requirePattern(
-  /latestState = \{ userId: session\.user\.id, state: snapshotCloudState\(state\) \};/,
-  'Cloud scheduling must enqueue the immutable state snapshot rather than the caller-owned object reference.',
+  /const snapshot = snapshotCloudState\(state\);[\s\S]{0,80}if \(!snapshot\) return;[\s\S]{0,120}latestState = \{ userId: session\.user\.id, state: snapshot \};/,
+  'Cloud scheduling must reject invalid snapshots before mutating the pending queue and enqueue only the immutable clone.',
 );
 requirePattern(
   /const MAX_PUSH_DELAY_MS = 60_000;[\s\S]*function normalizeFlushDelay\(value: unknown, fallback = DEFAULT_PUSH_DELAY_MS\): number \{[\s\S]*Number\.isFinite\(value\)[\s\S]*Math\.min\(MAX_PUSH_DELAY_MS, Math\.floor\(value\)\)/,
@@ -172,4 +172,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable snapshots, bounded scheduling delays, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
