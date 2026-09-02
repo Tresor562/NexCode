@@ -14,6 +14,11 @@ export type OfflinePack = {
 
 const VALID_PACK_KINDS: OfflinePackKind[] = ['lite', 'standard', 'full'];
 const VALID_INCLUDES = new Set<OfflinePack['includes'][number]>(['content', 'examples', 'exercise-assets', 'lab-starters', 'media']);
+const MAX_PACK_ID_CHARS = 240;
+const MAX_COURSE_ID_CHARS = 160;
+const MAX_CHAPTER_ID_CHARS = 160;
+const MAX_PACK_CHAPTERS = 200;
+const MAX_ESTIMATED_MB = 100_000;
 
 function chapterWeight(course: Course, chapter: Chapter) {
   const fraction = course.starterLessons.length ? chapter.lessonIds.length / course.starterLessons.length : 0;
@@ -68,14 +73,25 @@ export function buildStageOfflinePack(course: Course, stageId: string, kind: Off
 
 export function offlinePackIntegrityIssue(pack: OfflinePack): string | undefined {
   if (!pack.id || !pack.courseId) return 'Identité du pack invalide.';
+  if (pack.id.trim() !== pack.id || pack.id.length > MAX_PACK_ID_CHARS) return 'Identifiant du pack invalide.';
+  if (pack.courseId.trim() !== pack.courseId || pack.courseId.length > MAX_COURSE_ID_CHARS) return 'Identifiant de parcours invalide.';
   if (!VALID_PACK_KINDS.includes(pack.kind)) return 'Variante de pack inconnue.';
   if (!Number.isInteger(pack.curriculumVersion) || pack.curriculumVersion < 1) return 'Version de curriculum invalide.';
-  if (!Number.isFinite(pack.estimatedMb) || pack.estimatedMb <= 0) return 'Taille du pack invalide.';
+  if (!Number.isFinite(pack.estimatedMb) || pack.estimatedMb <= 0 || pack.estimatedMb > MAX_ESTIMATED_MB) return 'Taille du pack invalide.';
   if (!Array.isArray(pack.chapterIds) || !pack.chapterIds.length) return 'Pack sans chapitre.';
-  if (pack.chapterIds.some((chapterId) => !chapterId || typeof chapterId !== 'string')) return 'Identifiant de chapitre invalide.';
+  if (pack.chapterIds.length > MAX_PACK_CHAPTERS) return 'Pack avec trop de chapitres.';
+  if (pack.chapterIds.some((chapterId) => typeof chapterId !== 'string' || !chapterId || chapterId.trim() !== chapterId || chapterId.length > MAX_CHAPTER_ID_CHARS)) {
+    return 'Identifiant de chapitre invalide.';
+  }
   if (new Set(pack.chapterIds).size !== pack.chapterIds.length) return 'Pack avec chapitres dupliqués.';
   if (!Array.isArray(pack.includes) || !pack.includes.length) return 'Pack sans contenu exploitable.';
   if (pack.includes.some((entry) => !VALID_INCLUDES.has(entry))) return 'Type de contenu hors-ligne inconnu.';
+  const includeSet = new Set(pack.includes);
+  if (includeSet.size !== pack.includes.length) return 'Pack avec types de contenu dupliqués.';
+  const expectedIncludes = packIncludes(pack.kind);
+  if (includeSet.size !== expectedIncludes.length || expectedIncludes.some((entry) => !includeSet.has(entry))) {
+    return 'Contenu du pack incompatible avec sa variante.';
+  }
   return undefined;
 }
 
