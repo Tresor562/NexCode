@@ -14,11 +14,17 @@ assert.match(source, /setRecorded\(false\)/, 'lesson switch must clear per-attem
 assert.match(source, /setRecallDraft\(''\)/, 'lesson switch must clear active-recall drafts');
 assert.match(source, /setRecallRevealed\(false\)/, 'lesson switch must hide old active-recall hints');
 assert.match(source, /setRecallConfidence\(null\)/, 'lesson switch must clear recall confidence');
+assert.match(source, /setQuizReflection\(''\)/, 'lesson switch and retry flow must clear stale quiz reflections');
 assert.match(source, /setTransferDraft\(''\)/, 'lesson switch must clear transfer drafts');
 
 assert.match(source, /recallDraft\.trim\(\)\.length >= 3/, 'active recall must require a real written attempt');
 assert.match(source, /disabled=\{!recallAttemptReady\}/, 'recall hint reveal must stay gated by the written attempt');
 assert.match(source, /disabled=\{recallConfidence === null\}/, 'quiz continuation must require recall self-assessment');
+assert.match(source, /quizReflection\.trim\(\)\.length >= 12/, 'a correct quiz answer must require a substantive retrieval reflection');
+assert.match(source, /value=\{quizReflection\}/, 'the post-quiz reflection must be an actual learner input, not decorative copy');
+assert.match(source, /onChangeText=\{setQuizReflection\}/, 'the post-quiz reflection must remain interactive');
+assert.match(source, /disabled=\{!quizReflectionReady\}/, 'correct-answer continuation must stay gated until the learner explains why');
+assert.match(source, /accessibilityLabel="Explication de ta bonne réponse"/, 'post-quiz retrieval must remain accessible to screen-reader users');
 assert.match(source, /transferDraft\.trim\(\)\.length >= 12/, 'transfer must require a substantive strategy');
 assert.match(source, /disabled=\{!transferAttemptReady\}/, 'Lab transition must stay gated by the transfer attempt');
 
@@ -40,4 +46,4 @@ assert.match(feedbackSource, /sharedAudioRequestGeneration !== generation/, 'sha
 assert.doesNotMatch(source, /from 'expo-haptics'/, 'lesson flow must not bypass the shared haptic controller');
 assert.doesNotMatch(source, /player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/, 'lesson flow must not bypass shared stale-audio protection');
 
-console.log('Lesson flow audit OK: lesson-switch reset, active recall, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
+console.log('Lesson flow audit OK: lesson-switch reset, active recall, post-quiz retrieval reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
