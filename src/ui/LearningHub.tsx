@@ -133,7 +133,7 @@ function SessionLengthPicker({ value, onChange }: { value: SessionMinutes; onCha
   );
 }
 
-export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) {
+export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffline }: LearningHubProps) {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(state.recentCourseId ?? null);
   const [sessionMinutes, setSessionMinutes] = useState<SessionMinutes>(10);
   const graph = useMemo(() => buildSkillGraph(courses), [courses]);
@@ -148,6 +148,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
         state={state}
         onBack={() => setSelectedCourseId(null)}
         onOpenLesson={(lesson) => onOpenLesson(selected, lesson)}
+        onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)}
       />
     );
   }
@@ -256,7 +257,7 @@ export function LearningHub({ courses, state, onOpenLesson }: LearningHubProps) 
   );
 }
 
-function CourseJourney({ course, state, onBack, onOpenLesson }: { course: Course; state: LocalState; onBack: () => void; onOpenLesson: (lesson: Lesson) => void }) {
+function CourseJourney({ course, state, onBack, onOpenLesson, onToggleChapterOffline }: { course: Course; state: LocalState; onBack: () => void; onOpenLesson: (lesson: Lesson) => void; onToggleChapterOffline: (chapterId: string, kind: OfflinePackKind) => void }) {
   const summary = courseNavigationSummary(course, state.completedLessons, state.mastery);
   const ordered = course.chapters.flatMap((chapter) => chapter.lessonIds.map((id) => course.starterLessons.find((lesson) => lesson.id === id)).filter((lesson): lesson is Lesson => Boolean(lesson)));
   const fallback = course.starterLessons.filter((lesson) => !ordered.some((item) => item.id === lesson.id));
@@ -289,6 +290,44 @@ function CourseJourney({ course, state, onBack, onOpenLesson }: { course: Course
         </View>
         <ProgressBar value={summary.progress} />
       </GlassCard>
+
+      <SectionHeader title="Disponible hors ligne" action={`${state.downloadedChapters.filter((chapterId) => course.chapters.some((chapter) => chapter.id === chapterId)).length}/${course.chapters.length}`} />
+      <View style={styles.offlineList}>
+        {course.chapters.slice(0, 4).map((chapter) => {
+          const installedPack = state.installedOfflinePacks.find((pack) => pack.courseId === course.id && pack.chapterIds.includes(chapter.id));
+          const installed = Boolean(installedPack);
+          const installedKind = installedPack?.kind;
+          return (
+            <Card key={chapter.id} style={styles.offlineCard}>
+              <View style={styles.rowBetween}>
+                <View style={styles.offlineCopy}>
+                  <Text style={styles.offlineTitle} numberOfLines={1}>{chapter.title}</Text>
+                  <Text style={styles.offlineMeta}>{chapter.estimatedMinutes} min • {chapter.lessonIds.length} étapes</Text>
+                </View>
+                <Pill label={installed ? 'Hors ligne' : 'En ligne'} tone={installed ? 'success' : 'primary'} />
+              </View>
+              <View style={styles.offlineActions}>
+                {(['lite', 'standard', 'full'] as OfflinePackKind[]).map((kind) => {
+                  const active = installedKind === kind;
+                  const label = kind === 'lite' ? 'Essentiel' : kind === 'standard' ? 'Standard' : 'Complet';
+                  return (
+                    <Pressable
+                      key={kind}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${active ? 'Retirer' : 'Télécharger'} ${chapter.title}, pack ${label}`}
+                      accessibilityState={{ selected: active }}
+                      onPress={() => onToggleChapterOffline(chapter.id, kind)}
+                      style={({ pressed }) => [styles.offlineAction, active && styles.offlineActionActive, pressed && styles.pressed]}
+                    >
+                      <Text style={[styles.offlineActionText, active && styles.offlineActionTextActive]}>{active ? `✓ ${label}` : label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Card>
+          );
+        })}
+      </View>
 
       <View style={styles.pathIntro}>
         <View style={styles.pathIntroLine} />
@@ -403,6 +442,16 @@ const styles = StyleSheet.create({
   progressLabel: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 3 },
   progressHint: { color: theme.colors.textMuted, fontSize: 9.5, fontWeight: '700', marginBottom: 10 },
   progressValue: { color: '#B7C0FF', fontSize: 18, fontWeight: '900', marginBottom: 9 },
+  offlineList: { gap: 8, marginTop: -4 },
+  offlineCard: { marginBottom: 0 },
+  offlineCopy: { flex: 1, paddingRight: 8 },
+  offlineTitle: { color: theme.colors.text, fontSize: 13, fontWeight: '900' },
+  offlineMeta: { color: theme.colors.textMuted, fontSize: 9.5, fontWeight: '700', marginTop: 3 },
+  offlineActions: { flexDirection: 'row', gap: 7, marginTop: 12 },
+  offlineAction: { flex: 1, minHeight: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,.08)', backgroundColor: 'rgba(255,255,255,.025)' },
+  offlineActionActive: { borderColor: 'rgba(127,229,190,.42)', backgroundColor: 'rgba(84,207,159,.1)' },
+  offlineActionText: { color: theme.colors.textMuted, fontSize: 9, fontWeight: '900' },
+  offlineActionTextActive: { color: '#93F1C8' },
   pathIntro: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24, marginBottom: 18 },
   pathIntroLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,.07)' },
   pathHint: { color: theme.colors.textMuted, fontSize: 8.5, fontWeight: '900', letterSpacing: 1.2 },
