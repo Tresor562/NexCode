@@ -12,6 +12,7 @@ const MAX_TEXT_CHARS = 1_500_000;
 const MAX_TOTAL_TEXT_CHARS = 5_000_000;
 const MAX_FILES_PER_WORKSPACE = 300;
 const MAX_DEPTH = 10;
+const MAX_COLLISION_RENAMES = 10_000;
 
 export type WorkspaceImportResult = {
   files: Record<string, string>;
@@ -57,9 +58,26 @@ function uniquePath(path: string, occupied: Set<string>) {
   const dot = name.lastIndexOf('.');
   const stem = dot > 0 ? name.slice(0, dot) : name;
   const ext = dot > 0 ? name.slice(dot) : '';
-  let counter = 2;
-  while (occupied.has(workspaceCollisionKey(`${folder}${stem} (${counter})${ext}`))) counter += 1;
-  return { path: `${folder}${stem} (${counter})${ext}`, renamed: true };
+
+  for (let counter = 2; counter <= MAX_COLLISION_RENAMES; counter += 1) {
+    const suffix = ` (${counter})`;
+    let candidateStem = stem;
+    let candidate = canonicalWorkspacePath(`${folder}${candidateStem}${suffix}${ext}`);
+
+    // A source path can sit exactly on the portable path/segment boundary. Adding
+    // a collision suffix must never create a filename that the workspace would
+    // later reject on restore. Trim only the stem, preserving folder and extension,
+    // until the canonical policy accepts the renamed import.
+    while (!candidate && candidateStem.length > 1) {
+      candidateStem = candidateStem.slice(0, -1);
+      candidate = canonicalWorkspacePath(`${folder}${candidateStem}${suffix}${ext}`);
+    }
+
+    if (!candidate) return null;
+    if (!occupied.has(workspaceCollisionKey(candidate))) return { path: candidate, renamed: true };
+  }
+
+  return null;
 }
 
 async function readTextFile(file: File) {
