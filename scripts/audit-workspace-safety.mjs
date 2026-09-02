@@ -40,7 +40,8 @@ assert.match(labEngineSource, /Object\.keys\(files\)\.some\(isSensitiveWorkspace
 assert.doesNotMatch(labEngineSource, /function\s+isSensitiveLabFilename\s*\(/, 'Lab engine must not drift back to a duplicate sensitive-filename policy');
 assert.match(workspaceImportSource, /import\s+\{[^}]*canonicalWorkspacePath[^}]*workspaceCollisionKey[^}]*\}\s+from\s+['"]\.\/workspaceSafety['"]/, 'Phone imports must share the same canonical path identity as restored workspaces');
 assert.match(workspaceImportSource, /function occupiedWorkspaceKeys\([\s\S]*canonicalWorkspacePath\(rawPath\)[\s\S]*workspaceCollisionKey\(canonical\)/, 'Existing Lab files must be indexed by canonical collision identity before imports');
-assert.match(workspaceImportSource, /while \(occupied\.has\(workspaceCollisionKey\(`\$\{folder\}\$\{stem\} \(\$\{counter\}\)\$\{ext\}`\)\)\)/, 'Import renaming must test generated paths through the cross-filesystem collision key');
+assert.match(workspaceImportSource, /candidate\s*=\s*canonicalWorkspacePath\(`\$\{folder\}\$\{candidateStem\}\$\{suffix\}\$\{ext\}`\)/, 'Generated collision names must pass through the canonical portable-path policy before identity checks');
+assert.match(workspaceImportSource, /if \(!occupied\.has\(workspaceCollisionKey\(candidate\)\)\) return \{ path: candidate, renamed: true \}/, 'Import renaming must test each accepted generated path through the cross-filesystem collision key');
 assert.match(workspaceImportSource, /occupied\.add\(workspaceCollisionKey\(resolved\.path\)\)/g, 'Every imported file must reserve its canonical collision identity immediately');
 
 const base = {
