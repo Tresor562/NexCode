@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { AppState } from 'react-native';
 
 export type LearningFeedbackKind = 'selection' | 'notification' | 'impact' | 'sound';
 export type LearningImpactTone = 'light' | 'medium';
@@ -38,6 +39,10 @@ function supersedeAudio(): number {
     ? 1
     : sharedAudioRequestGeneration + 1;
   return sharedAudioRequestGeneration;
+}
+
+function nativeAppIsActive(): boolean {
+  return AppState.currentState === 'active';
 }
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
@@ -99,10 +104,19 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       const generation = supersedeAudio();
       // Start from a resolved promise so a native/player implementation that
       // throws synchronously from seekTo is handled exactly like a rejected seek.
+      // Re-check the native AppState both before and after the asynchronous seek:
+      // React state can still say "active" for a render while the OS has already
+      // backgrounded the app, and an accepted cue must never leak across that
+      // lifecycle boundary.
       Promise.resolve()
-        .then(() => player.seekTo(0))
         .then(() => {
+          if (!nativeAppIsActive()) return false;
+          return Promise.resolve(player.seekTo(0)).then(() => true);
+        })
+        .then((ready) => {
+          if (!ready) return;
           if (sharedAudioRequestGeneration !== generation) return;
+          if (!nativeAppIsActive()) return;
           player.play();
         })
         .catch(() => undefined);
