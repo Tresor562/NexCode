@@ -163,6 +163,10 @@ function recoveryQuotaForBudget(budgetMinutes: PracticeSession['budgetMinutes'],
   return Math.min(3, pendingRecoveryCount);
 }
 
+function recoveredUnitCount(recoveredSkills: Set<string>, recoveredUnscopedKeys: Set<string>) {
+  return recoveredSkills.size + recoveredUnscopedKeys.size;
+}
+
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
   const usedSkills = new Set<string>();
@@ -171,7 +175,6 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   const recoveredUnscopedKeys = new Set<string>();
   const maxNewActivities = maxNewActivitiesForBudget(budgetMinutes);
   let newActivities = 0;
-  let recoveryActivities = 0;
   let minutes = 0;
 
   const sorted = pool
@@ -202,7 +205,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
     if (recoveryMode && candidate.skillIds.length === 0 && recoveredUnscopedKeys.has(candidateRecoveryKey)) continue;
 
-    const recoveryQuotaOutstanding = recoveryActivities < recoveryQuota;
+    const recoveryQuotaOutstanding = recoveredUnitCount(recoveredSkills, recoveredUnscopedKeys) < recoveryQuota;
     if (recoveryQuotaOutstanding && !recoveryMode) continue;
     if (candidate.mode === 'learn' && newActivities >= maxNewActivities) continue;
 
@@ -214,7 +217,6 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     selected.push(candidate);
     minutes += candidate.estimatedMinutes;
     if (candidate.mode === 'learn') newActivities += 1;
-    if (recoveryMode) recoveryActivities += 1;
     candidate.skillIds.forEach((skill) => {
       usedSkills.add(skill);
       if (recoveryMode) recoveredSkills.add(skill);
