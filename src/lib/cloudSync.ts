@@ -73,12 +73,13 @@ function queueFlush(delayMs: number): void {
 
   if (activeFlush) {
     // A retry or account handoff may be requested while the current request is
-    // still unwinding. Preserve the requested delay and schedule it only after
-    // the active promise has settled; otherwise the fallback follow-up delay can
-    // accidentally erase exponential backoff while offline.
+    // still unwinding. Never shorten an already-requested deferred delay: a
+    // shorter follow-up request must not erase exponential backoff and hammer
+    // Supabase while the device is offline. Account handoffs reset backoff before
+    // they enqueue their own follow-up, so retaining the longer delay here is safe.
     deferredFlushDelayMs = deferredFlushDelayMs === null
       ? safeDelay
-      : Math.min(deferredFlushDelayMs, safeDelay);
+      : Math.max(deferredFlushDelayMs, safeDelay);
     return;
   }
 
