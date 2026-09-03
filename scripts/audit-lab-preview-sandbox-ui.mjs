@@ -10,6 +10,7 @@ assert.match(source, /originWhitelist=\{\['about:blank'\]\}/, 'Lab WebView must 
 assert.match(source, /baseUrl:\s*['"]about:blank['"]/, 'Lab HTML preview must run from an inert local base URL.');
 assert.match(source, /domStorageEnabled=\{false\}/, 'Lab preview must keep DOM storage disabled.');
 assert.match(source, /setSupportMultipleWindows=\{false\}/, 'Lab preview must prevent popup windows.');
-assert.match(source, /onShouldStartLoadWithRequest=\{\(request\)\s*=>\s*request\.url\s*===\s*['"]about:blank['"]\s*\|\|\s*request\.url\.startsWith\(['"]data:['"]\)\}/, 'Lab preview navigation must stay inside about:blank/data resources.');
+assert.match(source, /onShouldStartLoadWithRequest=\{\(request\)\s*=>\s*request\.url\s*===\s*['"]about:blank['"]\}/, 'Lab preview navigation must remain on the CSP-protected about:blank document.');
+assert.doesNotMatch(source, /request\.url\.startsWith\(['"]data:['"]\)/, 'Lab preview must not allow top-level data URL navigation because it can replace the CSP-protected document.');
 
-console.log('Lab preview UI audit OK: canonical preview engine and local WebView sandbox remain wired together.');
+console.log('Lab preview UI audit OK: canonical preview engine and local WebView sandbox remain wired together without data URL navigation escapes.');
