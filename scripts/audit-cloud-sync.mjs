@@ -33,6 +33,10 @@ requirePattern(
   'Every queued cloud flush, including retry and handoff paths, must use a sanitized finite delay.',
 );
 requirePattern(
+  /deferredFlushDelayMs = deferredFlushDelayMs === null[\s\S]{0,120}\? safeDelay[\s\S]{0,120}: Math\.max\(deferredFlushDelayMs, safeDelay\);/,
+  'Deferred cloud scheduling must retain the longest requested delay so a shorter follow-up cannot erase exponential retry backoff while offline.',
+);
+requirePattern(
   /export function scheduleCloudStatePush\(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS\): void \{[\s\S]*queueFlush\(normalizeFlushDelay\(delayMs\)\);/,
   'Caller-provided debounce delays must be normalized before scheduling cloud state.',
 );
@@ -172,4 +176,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, preserved deferred retry backoff, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
