@@ -39,7 +39,7 @@ for (const token of requiredTokens) {
 
 requireSnippet(components, "import { createLearningFeedbackGate, LearningImpactTone } from './learningFeedback';", 'Shared tactile controls must route feedback through the centralized learning feedback boundary.');
 requireSnippet(feedback, "import * as Haptics from 'expo-haptics';", 'Centralized learning feedback must keep native haptic feedback wired through expo-haptics.');
-requireSnippet(feedback, 'if (!appActive) return false;', 'Centralized haptic feedback must remain foreground-only.');
+requireSnippet(feedback, 'if (!appActive || !nativeAppIsActive()) return false;', 'Centralized haptic feedback must remain gated by both React and native foreground state.');
 requireSnippet(feedback, "Haptics.impactAsync(style).catch(() => undefined);", 'Centralized impact haptics must fail softly when the native API is unavailable.');
 requireSnippet(components, "import { shadows, theme } from './theme';", 'Shared components must use the central theme.');
 requireSnippet(components, "import { useMotionPreferences } from './motionPreferences';", 'Shared controls must retain the shared motion lifecycle.');
