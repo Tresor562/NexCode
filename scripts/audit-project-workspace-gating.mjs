@@ -12,28 +12,46 @@ function assert(condition, message) {
 }
 
 assert(
-  source.includes("const hasWorkspace = Boolean(state.projectDrafts[project.id]);"),
-  'project detail derives progression eligibility from a persisted workspace',
+  source.includes('const projectDraft = state.projectDrafts[project.id];') &&
+    source.includes('const hasWorkspace = Boolean(projectDraft);'),
+  'project detail derives progression eligibility from the persisted project workspace',
 );
 
 assert(
-  source.includes("disabled={progress>=100 || !hasWorkspace}"),
-  'project steps cannot advance before a workspace has been saved',
+  source.includes('function hasFreshProjectWork(draft?: LabDraft): boolean') &&
+    source.includes('updatedAt > lastValidatedAt'),
+  'project progression requires workspace work newer than the last validated milestone',
 );
 
 assert(
-  source.includes("label={progress>=100?'Construction terminée ✓':hasWorkspace?'Étape terminée':'Coder avant de valider'}"),
+  source.includes('if (!projectDraft || progress >= 100 || !hasFreshWork) return;'),
+  'project step mutation fails closed without fresh persisted workspace work',
+);
+
+assert(
+  source.includes('onSaveProjectDraft(project, { ...projectDraft, lastValidatedAt: validatedAt });') &&
+    source.includes('onProgress(project, nextProgress);'),
+  'successful milestone validation consumes the current workspace evidence before advancing progress',
+);
+
+assert(
+  source.includes('disabled={progress>=100 || !hasFreshWork}'),
+  'project steps cannot advance before fresh workspace work has been saved',
+);
+
+assert(
+  source.includes("label={progress>=100?'Construction terminée ✓':hasFreshWork?'Étape terminée':hasWorkspace?'Modifie le code pour continuer':'Coder avant de valider'}"),
   'the blocked progression state gives the learner an explicit next action',
+);
+
+assert(
+  source.includes('Une même sauvegarde ne peut plus débloquer plusieurs étapes.'),
+  'the project flow explains why every milestone needs fresh workspace evidence',
 );
 
 assert(
   source.includes('La progression et les récompenses doivent correspondre à du travail réel.'),
   'the project flow explains why progression is evidence-gated',
-);
-
-assert(
-  source.includes('onPress={() => onProgress(project, nextProgress)}'),
-  'workspace gating preserves the existing step progression callback',
 );
 
 assert(
