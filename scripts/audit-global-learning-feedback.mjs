@@ -95,8 +95,19 @@ if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\
   console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
   process.exit(1);
 }
-if (!/sound\(appActive: boolean, player: ReplayableAudioPlayer\)[\s\S]{0,800}if \(!appActive \|\| !nativeAppIsActive\(\)\) \{[\s\S]{0,120}supersedeAudio\(\);[\s\S]{0,80}return;/.test(source)) {
-  console.error('Global learning feedback audit failed: a sound request observed outside native foreground must invalidate any older pending cue.');
+
+const soundStart = source.indexOf('sound(appActive: boolean, player: ReplayableAudioPlayer)');
+const soundCancellationStart = source.indexOf('if (!appActive || !nativeAppIsActive()) {', soundStart);
+const soundCooldownStart = source.indexOf("if (!canTrigger('sound', true)) return;", soundStart);
+const soundGenerationStart = source.indexOf('const generation = supersedeAudio();', soundStart);
+if (
+  soundStart < 0 ||
+  soundCancellationStart < soundStart ||
+  soundCooldownStart < soundCancellationStart ||
+  soundGenerationStart < soundCooldownStart ||
+  !source.slice(soundCancellationStart, soundCooldownStart).includes('supersedeAudio();')
+) {
+  console.error('Global learning feedback audit failed: a sound request observed outside native foreground must invalidate older pending cues before the cooldown gate.');
   process.exit(1);
 }
 if (!/if \(!nativeAppIsActive\(\)\) return false;[\s\S]{0,180}seekTo\(0\)/.test(source)) {
