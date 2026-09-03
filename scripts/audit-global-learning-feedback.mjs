@@ -24,7 +24,7 @@ const expectations = [
   ['audio supersession', 'const generation = supersedeAudio();'],
   ['cross-player stale audio guard', 'if (sharedAudioRequestGeneration !== generation) return;'],
   ['generation overflow guard', 'sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER'],
-  ['background audio invalidation', 'if (!appActive) {\n        supersedeAudio();\n        return;\n      }'],
+  ['background audio invalidation', 'if (!appActive || !nativeAppIsActive()) {\n        supersedeAudio();\n        return;\n      }'],
   ['cooldown before supersession', "if (!canTrigger('sound', true)) return;\n      const generation = supersedeAudio();"],
   ['sync-safe audio seek boundary', 'Promise.resolve()\n        .then(() => {'],
   ['foreground recheck before async seek', 'if (!nativeAppIsActive()) return false;'],
@@ -91,8 +91,12 @@ if (/const generation = supersedeAudio\(\);\s*player\.seekTo\(0\)/.test(source))
   console.error('Global learning feedback audit failed: seekTo must be entered through a promise boundary so synchronous native throws are contained.');
   process.exit(1);
 }
-if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,500}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
+if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,900}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
   console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
+  process.exit(1);
+}
+if (!/sound\(appActive: boolean, player: ReplayableAudioPlayer\)[\s\S]{0,800}if \(!appActive \|\| !nativeAppIsActive\(\)\) \{[\s\S]{0,120}supersedeAudio\(\);[\s\S]{0,80}return;/.test(source)) {
+  console.error('Global learning feedback audit failed: a sound request observed outside native foreground must invalidate any older pending cue.');
   process.exit(1);
 }
 if (!/if \(!nativeAppIsActive\(\)\) return false;[\s\S]{0,180}seekTo\(0\)/.test(source)) {
@@ -131,4 +135,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
