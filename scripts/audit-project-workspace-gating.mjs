@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 const source = fs.readFileSync('src/ui/ProjectPortfolioScreen.tsx', 'utf8');
+const workspaceSource = fs.readFileSync('src/ui/ProjectWorkspaceScreen.tsx', 'utf8');
 
 function assert(condition, message) {
   if (!condition) {
@@ -52,6 +53,17 @@ assert(
 assert(
   source.includes('La progression et les récompenses doivent correspondre à du travail réel.'),
   'the project flow explains why progression is evidence-gated',
+);
+
+assert(
+  workspaceSource.includes('save({ ...draft, activeFile: filename });') &&
+    !workspaceSource.includes('save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });'),
+  'switching project files preserves the evidence timestamp instead of faking fresh learner work',
+);
+
+assert(
+  workspaceSource.includes('files: { ...draft.files, [draft.activeFile]: value }, updatedAt: new Date().toISOString()'),
+  'editing project content still records fresh workspace evidence',
 );
 
 assert(

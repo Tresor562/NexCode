@@ -77,7 +77,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
 
   function selectFile(filename: string) {
     const nextContent = draft.files[filename] ?? '';
-    save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });
+    save({ ...draft, activeFile: filename });
     setSelection({ start: nextContent.length, end: nextContent.length });
     setPanel('code');
     projectFeedback.selection(true);
