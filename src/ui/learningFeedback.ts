@@ -41,6 +41,15 @@ function supersedeAudio(): number {
   return sharedAudioRequestGeneration;
 }
 
+// Invalidate accepted cues as soon as the native app leaves the foreground. A
+// foreground check alone is not enough: an asynchronous seek may start while the
+// app is active, remain pending through background, then resolve after the user
+// returns. Without a lifecycle generation bump that stale cue would look active
+// again and could play late on resume.
+AppState.addEventListener('change', (nextState) => {
+  if (nextState !== 'active') supersedeAudio();
+});
+
 function nativeAppIsActive(): boolean {
   return AppState.currentState === 'active';
 }
