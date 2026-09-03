@@ -1,17 +1,18 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
 import { GuidedProject } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
 import { importFilesFromPhone, importFolderFromPhone } from '../lib/workspaceImport';
 import { restoreWorkspaceDraft } from '../lib/workspaceSafety';
 import { Pill, PrimaryButton } from './components';
+import { createLearningFeedbackGate } from './learningFeedback';
 import { theme } from './theme';
 
 type Panel = 'files' | 'code' | 'preview' | 'console';
 type EditorSelection = { start: number; end: number };
 const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
+const projectFeedback = createLearningFeedbackGate();
 
 const PREVIEW_SECURITY_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:; connect-src 'none'; frame-src 'none'; child-src 'none'; object-src 'none'; media-src data: blob:; form-action 'none'; base-uri 'none';">`;
 const PREVIEW_VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">';
@@ -79,7 +80,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
     save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });
     setSelection({ start: nextContent.length, end: nextContent.length });
     setPanel('code');
-    Haptics.selectionAsync().catch(() => undefined);
+    projectFeedback.selection(true);
   }
 
   function changeContent(value: string) {
@@ -94,7 +95,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
     const caret = start + token.length;
     changeContent(nextContent);
     setSelection({ start: caret, end: caret });
-    Haptics.selectionAsync().catch(() => undefined);
+    projectFeedback.selection(true);
   }
 
   function handlePreviewMessage(raw: string) {
@@ -120,7 +121,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
       const nextContent = result.files[nextActiveFile] ?? '';
       setSelection({ start: nextContent.length, end: nextContent.length });
       setConsoleText(`${result.imported} fichier(s) importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      projectFeedback.notification(true, 'success');
     } catch {
       setConsoleText('Import annulé ou fichier inaccessible.');
     } finally {
@@ -145,7 +146,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
       const nextContent = result.files[nextActiveFile] ?? '';
       setSelection({ start: nextContent.length, end: nextContent.length });
       setConsoleText(`${result.imported} fichier(s) du projet importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      projectFeedback.notification(true, 'success');
     } catch {
       setConsoleText('Import du dossier annulé ou accès refusé.');
     } finally {
@@ -162,7 +163,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
       setPanel('console');
       setConsoleText(runtimeMessage(project, draft));
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+    projectFeedback.impact(true, 'medium');
   }
 
   return (
@@ -203,7 +204,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
 }
 
 function Nav({ active, label, icon, onPress }: { active: boolean; label: string; icon: string; onPress: () => void }) {
-  return <Pressable onPress={() => { onPress(); Haptics.selectionAsync().catch(() => undefined); }} style={[styles.navItem, active && styles.navActive]}><Text style={[styles.navIcon, active && styles.navIconActive]}>{icon}</Text><Text style={[styles.navLabel, active && styles.navIconActive]}>{label}</Text></Pressable>;
+  return <Pressable onPress={() => { onPress(); projectFeedback.selection(true); }} style={[styles.navItem, active && styles.navActive]}><Text style={[styles.navIcon, active && styles.navIconActive]}>{icon}</Text><Text style={[styles.navLabel, active && styles.navIconActive]}>{label}</Text></Pressable>;
 }
 
 function fileBadge(filename: string) {
