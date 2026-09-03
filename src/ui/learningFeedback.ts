@@ -105,14 +105,17 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       Haptics.impactAsync(style).catch(() => undefined);
     },
     sound(appActive: boolean, player: ReplayableAudioPlayer) {
-      // Moving the app out of the foreground must invalidate any seek that may
-      // still resolve after the transition. A request rejected only by the sound
-      // cooldown is different: it should not silence an already accepted success
-      // or error cue just because the learner taps the next control immediately.
-      if (!appActive) {
+      // Treat both React and native lifecycle state as authoritative cancellation
+      // signals. The module-wide AppState listener normally invalidates pending
+      // audio first, but checking here as well closes the race where React still
+      // reports active while the native app is already backgrounded.
+      if (!appActive || !nativeAppIsActive()) {
         supersedeAudio();
         return;
       }
+      // A request rejected only by the sound cooldown is different: it should not
+      // silence an already accepted success/error cue just because the learner taps
+      // the next control immediately.
       if (!canTrigger('sound', true)) return;
       const generation = supersedeAudio();
       // Start from a resolved promise so a native/player implementation that
