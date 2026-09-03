@@ -12,6 +12,7 @@ const forbidPattern = (pattern, message) => {
   if (pattern.test(source)) throw new Error(message);
 };
 
+requireSnippet("import { createLearningFeedbackGate } from './learningFeedback';", 'Learning path nodes must use the shared learning feedback gate.');
 requireSnippet("import { useMotionPreferences } from './motionPreferences';", 'Learning path nodes must use the shared motion lifecycle.');
 requireSnippet("import { theme } from './theme';", 'Learning path nodes must use shared design tokens.');
 requireSnippet('const AMBIENT_PULSE_ITERATIONS = 3;', 'Recommended-node pulse must stay bounded.');
@@ -29,7 +30,10 @@ requireSnippet('haloAnimation.stop();', 'Completion halo animation must be stopp
 requireSnippet('opacity: completionTrail, transform: [{ translateY: completionTrailY }]', 'Completed connectors must render the bounded progress trail.');
 requireSnippet('styles.completionHalo,', 'Completed nodes must render the bounded success halo.');
 requireSnippet('{ opacity: completionHalo, transform: [{ scale: completionHaloScale }] }', 'Completion halo must remain driven only by bounded opacity/scale motion.');
-requireSnippet("if (!appActive) return;", 'Haptic feedback must not fire while the app is inactive.');
+requireSnippet('const feedbackGate = useRef(createLearningFeedbackGate()).current;', 'Learning path nodes must share the throttled lifecycle-aware feedback controller.');
+requireSnippet("feedbackGate.impact(appActive, 'medium');", 'The recommended node must keep a distinct medium impact cue through the shared gate.');
+requireSnippet('feedbackGate.selection(appActive);', 'Completed nodes must use the shared selection cue.');
+requireSnippet("feedbackGate.impact(appActive, 'light');", 'Available nodes must use the shared light impact cue.');
 requireSnippet('accessibilityState={{ disabled, selected: isCurrent }}', 'Learning path node state must remain exposed to assistive technology.');
 requireSnippet('const accessibilityHint = disabled', 'Learning path nodes must keep a state-aware accessibility hint.');
 requireSnippet("'Termine les étapes précédentes pour débloquer cette activité.'", 'Locked nodes must retain a useful accessibility hint.');
@@ -55,7 +59,9 @@ const tokenUsages = [
 ];
 for (const token of tokenUsages) requireSnippet(token, `Learning path states must keep using shared token ${token}.`);
 
+forbidPattern(/expo-haptics/, 'Learning path nodes must not bypass the shared feedback gate with direct expo-haptics calls.');
+forbidPattern(/Haptics\./, 'Learning path nodes must not own direct haptic calls.');
 forbidPattern(/#[0-9A-Fa-f]{3,8}/, 'Learning path state colors must come from the design system, not hard-coded hex values.');
 forbidPattern(/rgba?\s*\(/, 'Learning path visuals must use shared design tokens, not local rgb/rgba literals.');
 
-console.log('Learning path node audit OK: bounded ambient/completion trail+halo motion, shared lifecycle, accessibility, haptics, and fully tokenized visual states.');
+console.log('Learning path node audit OK: bounded ambient/completion motion, shared lifecycle-aware haptics, accessibility, and fully tokenized visual states.');
