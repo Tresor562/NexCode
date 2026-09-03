@@ -225,7 +225,10 @@ function meaningfulChange(mission: LabMission, files: Record<string, string>) {
       (candidate) => workspaceCollisionKey(candidate) === workspaceCollisionKey(filename),
     );
     if (!starterFilename) {
-      if (meaningfulEvidenceSource(content).length > 0) return true;
+      // Adding a placeholder file such as "x" is not learning evidence. Require a
+      // small but non-trivial body of executable/markup content before an added
+      // file can unlock a Lab milestone on its own.
+      if (meaningfulEvidenceSource(content).length >= 12) return true;
       continue;
     }
     if (meaningfulEvidenceSource(content) !== meaningfulEvidenceSource(starterFiles[starterFilename] ?? '')) return true;
