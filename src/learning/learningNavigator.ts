@@ -134,10 +134,9 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
     : 0;
 
   let score = 1;
-  const isCompleted = completed.has(lesson.id);
-  if (!isCompleted) score += 45;
+  if (!completed.has(lesson.id)) score += 45;
   if (dueReview) score += 70 + reviewUrgency;
-  if (isCompleted && !dueReview) score -= COMPLETED_NOT_DUE_PENALTY;
+  if (completed.has(lesson.id) && !dueReview) score -= COMPLETED_NOT_DUE_PENALTY;
   score += Math.round((100 - weakestSkill) * 0.2);
 
   const kind = lesson.activityKind ?? 'learn';
