@@ -7,7 +7,7 @@ const expectations = [
   ['shared cooldown map', 'const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();'],
   ['shared map read', 'const previous = sharedLastTriggeredAt.get(kind);'],
   ['shared map write', 'sharedLastTriggeredAt.set(kind, current);'],
-  ['foreground gate', 'if (!appActive) return false;'],
+  ['foreground gate', 'if (!appActive || !nativeAppIsActive()) return false;'],
   ['native foreground source', "import { AppState } from 'react-native';"],
   ['native foreground predicate', "return AppState.currentState === 'active';"],
   ['native lifecycle audio invalidation', "AppState.addEventListener('change', (nextState) => {\n  if (nextState !== 'active') supersedeAudio();\n});"],
@@ -91,6 +91,10 @@ if (/const generation = supersedeAudio\(\);\s*player\.seekTo\(0\)/.test(source))
   console.error('Global learning feedback audit failed: seekTo must be entered through a promise boundary so synchronous native throws are contained.');
   process.exit(1);
 }
+if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,500}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
+  console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
+  process.exit(1);
+}
 if (!/if \(!nativeAppIsActive\(\)\) return false;[\s\S]{0,180}seekTo\(0\)/.test(source)) {
   console.error('Global learning feedback audit failed: native foreground state must be rechecked before starting an accepted asynchronous seek.');
   process.exit(1);
@@ -127,4 +131,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
