@@ -61,8 +61,8 @@ assert(
   'cloud sync must retain retry timing requested while a reconciliation is still unwinding',
 );
 assert(
-  /deferredFlushDelayMs\s*=\s*deferredFlushDelayMs\s*===\s*null[\s\S]{0,220}Math\.min/.test(cloudSync),
-  'multiple deferred flush requests must preserve the earliest requested safe deadline',
+  /deferredFlushDelayMs\s*=\s*deferredFlushDelayMs\s*===\s*null[\s\S]{0,220}Math\.max/.test(cloudSync),
+  'multiple deferred flush requests must preserve the longest requested delay so a short follow-up cannot erase retry backoff',
 );
 assert(
   /const\s+deferredDelay\s*=\s*deferredFlushDelayMs;[\s\S]{0,160}queueFlush\(deferredDelay\s*\?\?\s*FOLLOW_UP_DELAY_MS\)/.test(cloudSync),
