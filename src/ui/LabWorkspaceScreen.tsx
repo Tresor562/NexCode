@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { WebView } from 'react-native-webview';
 import { Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
@@ -9,6 +8,7 @@ import { invalidateLabValidation, openLabWorkspace, stampLabValidation, updateLa
 import { runBehavioralSuite, secretSafetyIssues } from '../learning/labBehavioralTests';
 import { webPreviewDocument } from '../learning/labSession';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
+import { createLearningFeedbackGate } from './learningFeedback';
 import { theme } from './theme';
 
 type Panel = 'files' | 'code' | 'preview' | 'console' | 'tools';
@@ -16,6 +16,7 @@ type Tool = 'format' | 'minify' | 'obfuscate' | 'deobfuscate';
 type EditorSelection = { start: number; end: number };
 
 const symbols = ['Tab', '{', '}', '(', ')', '[', ']', '<', '>', ';', '=', '=>', '"', "'", '/', ':'];
+const labFeedback = createLearningFeedbackGate();
 
 export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack }: {
   lesson: Lesson;
@@ -53,7 +54,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
     save({ ...draft, activeFile: filename, updatedAt: new Date().toISOString() });
     setSelection({ start: nextContent.length, end: nextContent.length });
     setPanel('code');
-    Haptics.selectionAsync().catch(() => undefined);
+    labFeedback.selection(true);
   }
 
   function changeContent(value: string) {
@@ -69,7 +70,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
     const caret = start + token.length;
     changeContent(nextContent);
     setSelection({ start: caret, end: caret });
-    Haptics.selectionAsync().catch(() => undefined);
+    labFeedback.selection(true);
   }
 
   async function importFiles() {
@@ -89,7 +90,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
       setSelection({ start: nextContent.length, end: nextContent.length });
       setValidated(false);
       setFeedback(`${result.imported} fichier(s) importé(s)${result.renamed ? ` • ${result.renamed} renommé(s) pour éviter un écrasement` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      labFeedback.notification(true, 'success');
     } catch {
       setFeedback('Import annulé ou fichier inaccessible.');
     } finally {
@@ -114,7 +115,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
       setSelection({ start: nextContent.length, end: nextContent.length });
       setValidated(false);
       setFeedback(`${result.imported} fichier(s) du dossier importé(s)${result.renamed ? ` • ${result.renamed} renommé(s)` : ''}${result.skipped ? ` • ${result.skipped} ignoré(s)` : ''}.`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      labFeedback.notification(true, 'success');
     } catch {
       setFeedback('Import du dossier annulé ou accès refusé.');
     } finally {
@@ -135,14 +136,14 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
     const pieces = [structural.feedback, failed.length ? `À corriger : ${failed.join(' • ')}` : 'Tests visibles : OK', behavioral.hiddenTotal ? `Tests cachés : ${behavioral.hiddenPassed}/${behavioral.hiddenTotal}` : '', behavioral.hint ?? ''].filter(Boolean);
     setFeedback(pieces.join('\n'));
     setPanel('console');
-    Haptics.notificationAsync(passed ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => undefined);
+    labFeedback.notification(true, passed ? 'success' : 'error');
   }
 
   function runTool() {
     const source = toolInput || content;
     const result = transformCode(source, tool);
     setToolOutput(result);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    labFeedback.impact(true, 'light');
   }
 
   function applyToolResult() {
@@ -228,7 +229,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
 }
 
 function NavItem({ active, label, icon, onPress }: { active: boolean; label: string; icon: string; onPress: () => void }) {
-  return <Pressable onPress={() => { onPress(); Haptics.selectionAsync().catch(() => undefined); }} style={[styles.navItem, active && styles.navItemActive]}><Text style={[styles.navIcon, active && styles.navTextActive]}>{icon}</Text><Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text></Pressable>;
+  return <Pressable onPress={() => { onPress(); labFeedback.selection(true); }} style={[styles.navItem, active && styles.navItemActive]}><Text style={[styles.navIcon, active && styles.navTextActive]}>{icon}</Text><Text style={[styles.navText, active && styles.navTextActive]}>{label}</Text></Pressable>;
 }
 
 function fileBadge(filename: string) {
