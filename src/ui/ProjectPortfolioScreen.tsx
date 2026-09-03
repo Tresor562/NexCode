@@ -28,6 +28,15 @@ function readinessGuidance(readiness: ProjectReadiness, graph: SkillNode[]) {
   };
 }
 
+function hasFreshProjectWork(draft?: LabDraft): boolean {
+  if (!draft) return false;
+  const updatedAt = Date.parse(draft.updatedAt);
+  if (!Number.isFinite(updatedAt)) return false;
+  if (!draft.lastValidatedAt) return true;
+  const lastValidatedAt = Date.parse(draft.lastValidatedAt);
+  return !Number.isFinite(lastValidatedAt) || updatedAt > lastValidatedAt;
+}
+
 export function ProjectPortfolioScreen({ projects, graph, state, onProgress, onProof, onSaveProjectDraft }: {
   projects: GuidedProject[];
   graph: SkillNode[];
@@ -99,7 +108,9 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
   const [achieved, setAchieved] = useState<string[]>([]);
   const review = reviewProject(project, achieved);
   const existingProof = state.portfolioProofs.find((item) => item.projectId === project.id);
-  const hasWorkspace = Boolean(state.projectDrafts[project.id]);
+  const projectDraft = state.projectDrafts[project.id];
+  const hasWorkspace = Boolean(projectDraft);
+  const hasFreshWork = hasFreshProjectWork(projectDraft);
   const completedSteps = project.steps.length > 0
     ? Math.min(project.steps.length, Math.max(0, Math.round((progress / 100) * project.steps.length)))
     : 0;
@@ -107,10 +118,17 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
     ? Math.round((Math.min(project.steps.length, completedSteps + 1) / project.steps.length) * 100)
     : 100;
 
-  if (workspaceOpen) return <ProjectWorkspaceScreen project={project} stored={state.projectDrafts[project.id]} onSave={(draft) => onSaveProjectDraft(project, draft)} onBack={() => setWorkspaceOpen(false)} />;
+  if (workspaceOpen) return <ProjectWorkspaceScreen project={project} stored={projectDraft} onSave={(draft) => onSaveProjectDraft(project, draft)} onBack={() => setWorkspaceOpen(false)} />;
 
   function toggleRubric(id: string) {
     setAchieved((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
+
+  function completeCurrentStep() {
+    if (!projectDraft || progress >= 100 || !hasFreshWork) return;
+    const validatedAt = new Date().toISOString();
+    onSaveProjectDraft(project, { ...projectDraft, lastValidatedAt: validatedAt });
+    onProgress(project, nextProgress);
   }
 
   function saveProof() {
@@ -119,12 +137,18 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
     if (proof) onProof(proof);
   }
 
+  const progressGateMessage = !hasWorkspace
+    ? 'Ouvre le Project IDE et sauvegarde ton code avant de valider une étape. La progression et les récompenses doivent correspondre à du travail réel.'
+    : !hasFreshWork && progress < 100
+      ? 'Retourne dans le Project IDE et fais évoluer ton code avant de valider l’étape suivante. Une même sauvegarde ne peut plus débloquer plusieurs étapes.'
+      : undefined;
+
   return <View>
     <Pressable accessibilityRole="button" accessibilityLabel="Retour à tous les projets" onPress={onBack} hitSlop={6} style={styles.backButton}>
       <Text style={styles.back}>‹ Tous les projets</Text>
     </Pressable>
     <Text style={styles.eyebrow}>{project.track.toUpperCase()} • {project.tech}</Text><Text style={styles.title}>{project.title}</Text><Text style={styles.lead}>{project.description}</Text>
-    <Card tone="primary" style={styles.ideCard}><View style={styles.ideIcon} accessible={false}><Text style={styles.ideIconText}>⌘</Text></View><View style={styles.flex}><Text style={styles.ideTitle}>{state.projectDrafts[project.id] ? 'Reprendre le code' : 'Ouvrir le Project IDE'}</Text><Text style={styles.ideText}>Fichiers, éditeur mobile, preview Web et console dans un seul workspace.</Text></View><PrimaryButton label={state.projectDrafts[project.id] ? 'Reprendre' : 'Coder'} icon="→" onPress={() => setWorkspaceOpen(true)} /></Card>
+    <Card tone="primary" style={styles.ideCard}><View style={styles.ideIcon} accessible={false}><Text style={styles.ideIconText}>⌘</Text></View><View style={styles.flex}><Text style={styles.ideTitle}>{projectDraft ? 'Reprendre le code' : 'Ouvrir le Project IDE'}</Text><Text style={styles.ideText}>Fichiers, éditeur mobile, preview Web et console dans un seul workspace.</Text></View><PrimaryButton label={projectDraft ? 'Reprendre' : 'Coder'} icon="→" onPress={() => setWorkspaceOpen(true)} /></Card>
     <Card>
       <View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.kicker}>PRÉREQUIS</Text><Text style={styles.big}>{readiness.score}%</Text></View><Pill label={readiness.ready ? 'Prêt' : 'À renforcer'} tone={readiness.ready ? 'success' : 'warning'} /></View>
       {readiness.ready ? <Text style={styles.body}>Tes bases sont assez solides pour apprendre en construisant.</Text> : <View style={styles.guidanceBlock}>
@@ -135,7 +159,7 @@ function ProjectDetail({ project, graph, state, onBack, onProgress, onProof, onS
       </View>}
     </Card>
     <SectionHeader title="Plan de construction" action={`${completedSteps}/${project.steps.length}`} />
-    <Card>{project.steps.map((step, index) => { const done=index<completedSteps||progress>=100; const current=!done&&index===completedSteps; return <View key={step} style={styles.step}><View style={[styles.stepMark,done&&styles.stepDone,current&&styles.stepCurrent]}><Text style={styles.stepMarkText}>{done?'✓':index+1}</Text></View><View style={styles.flex}><Text style={styles.stepTitle}>{step}</Text><Text style={styles.meta}>{done?'Terminée':current?'Étape actuelle':'À venir'}</Text></View></View>})}{!hasWorkspace && progress < 100 ? <Text style={styles.workspaceGate}>Ouvre le Project IDE et sauvegarde ton code avant de valider une étape. La progression et les récompenses doivent correspondre à du travail réel.</Text> : null}<PrimaryButton label={progress>=100?'Construction terminée ✓':hasWorkspace?'Étape terminée':'Coder avant de valider'} disabled={progress>=100 || !hasWorkspace} onPress={() => onProgress(project, nextProgress)} /></Card>
+    <Card>{project.steps.map((step, index) => { const done=index<completedSteps||progress>=100; const current=!done&&index===completedSteps; return <View key={step} style={styles.step}><View style={[styles.stepMark,done&&styles.stepDone,current&&styles.stepCurrent]}><Text style={styles.stepMarkText}>{done?'✓':index+1}</Text></View><View style={styles.flex}><Text style={styles.stepTitle}>{step}</Text><Text style={styles.meta}>{done?'Terminée':current?'Étape actuelle':'À venir'}</Text></View></View>})}{progressGateMessage ? <Text style={styles.workspaceGate}>{progressGateMessage}</Text> : null}<PrimaryButton label={progress>=100?'Construction terminée ✓':hasFreshWork?'Étape terminée':hasWorkspace?'Modifie le code pour continuer':'Coder avant de valider'} disabled={progress>=100 || !hasFreshWork} onPress={completeCurrentStep} /></Card>
     <SectionHeader title="Revue avant portfolio" action={`${review.score}/100`} />
     <Card>{rubric.map((criterion) => {const checked=achieved.includes(criterion.id);return <Pressable key={criterion.id} accessibilityRole="checkbox" accessibilityState={{ checked }} accessibilityLabel={`${criterion.title}, ${criterion.weight} points`} onPress={() => toggleRubric(criterion.id)} style={[styles.rubric,checked&&styles.rubricChecked]}><Text style={[styles.check,checked&&styles.checkOn]}>{checked?'✓':'○'}</Text><View style={styles.flex}><Text style={styles.rubricTitle}>{criterion.title} • {criterion.weight} pts</Text><Text style={styles.meta}>{criterion.description}</Text></View></Pressable>})}<Text style={styles.body}>{!hasWorkspace ? 'Le portfolio exige aussi un workspace sauvegardé : rouvre le Project IDE et enregistre ton code avant de publier cette preuve.' : review.passed ? 'Revue réussie. Ce projet peut devenir une preuve de portfolio.' : 'Atteins au moins 70/100 et termine le projet pour l’ajouter au portfolio.'}</Text><PrimaryButton label={existingProof?'Preuve déjà enregistrée ✓':'Ajouter au portfolio'} disabled={!hasWorkspace || !review.passed || progress < 100 || Boolean(existingProof)} onPress={saveProof} /></Card>
   </View>;
