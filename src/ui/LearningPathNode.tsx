@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { Pill } from './components';
+import { createLearningFeedbackGate } from './learningFeedback';
 import { useMotionPreferences } from './motionPreferences';
 import { theme } from './theme';
 
@@ -37,6 +37,7 @@ export function LearningPathNode({
   const completionTrail = useRef(new Animated.Value(state === 'done' ? 1 : 0)).current;
   const completionHalo = useRef(new Animated.Value(0)).current;
   const previousState = useRef<LearningPathNodeState>(state);
+  const feedbackGate = useRef(createLearningFeedbackGate()).current;
   const { reduceMotion, appActive } = useMotionPreferences();
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
@@ -170,12 +171,9 @@ export function LearningPathNode({
 
   const handlePress = () => {
     if (!appActive) return;
-    const feedback = isCurrent
-      ? Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
-      : state === 'done'
-        ? Haptics.selectionAsync()
-        : Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    feedback.catch(() => undefined);
+    if (isCurrent) feedbackGate.impact(appActive, 'medium');
+    else if (state === 'done') feedbackGate.selection(appActive);
+    else feedbackGate.impact(appActive, 'light');
     onPress();
   };
 
