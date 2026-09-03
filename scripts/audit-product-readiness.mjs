@@ -35,7 +35,7 @@ for (const token of ['expo-haptics','createLearningFeedbackGate','selectionAsync
   if (!learningFeedback.includes(token)) throw new Error(`Shared learning feedback controller missing ${token}`);
 }
 if (lesson.includes("from 'expo-haptics'")) throw new Error('Lesson flow must route haptics through the shared learning feedback controller');
-for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Déobfusquer','Console','Preview','importFilesFromPhone','importFolderFromPhone']) {
+for (const token of ['openLabWorkspace','updateLabFile','validateLabDraft','runBehavioralSuite','sauvegardé','Tests cachés','secretSafetyIssues','WebView','Code Tools','Obfusquer','Désobfusquer','Console','Preview','importFilesFromPhone','importFolderFromPhone']) {
   if (!lab.includes(token)) throw new Error(`Lab workspace UI missing ${token}`);
 }
 for (const token of ['File.pickFileAsync','pickDirectoryAsync','MAX_FILES_PER_WORKSPACE','MAX_TOTAL_TEXT_CHARS','uniquePath']) {
