@@ -71,7 +71,9 @@ function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolea
       const key = portableWorkspaceKey(filename);
       const starterEntry = starterEntries.find(([starterFilename]) => portableWorkspaceKey(starterFilename) === key);
       if (!starterEntry) {
-        if (meaningfulEvidenceSource(content).length > 0) return true;
+        // Keep the hidden behavioral gate aligned with the canonical Lab validator:
+        // a throwaway file like "x" must not count as evidence of learned work.
+        if (meaningfulEvidenceSource(content).length >= 12) return true;
         continue;
       }
 
