@@ -5,9 +5,9 @@ export const theme = {
     surface: '#0D1220',
     surfaceRaised: '#121A2D',
     // High-emphasis interactive surfaces (Lab tabs, file rows, compact controls)
-    // intentionally share the raised layer while keeping a semantic token for
-    // components that need stronger affordance than passive cards.
-    surfaceStrong: '#121A2D',
+    // get a distinct elevation layer so active/editable state is perceptible at
+    // a glance without relying on borders, glow or motion alone.
+    surfaceStrong: '#18233B',
     surfaceSoft: '#171F34',
     surfaceGlass: 'rgba(255,255,255,.055)',
     surfaceGlassStrong: 'rgba(255,255,255,.085)',
