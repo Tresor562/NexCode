@@ -56,7 +56,11 @@ function nativeAppIsActive(): boolean {
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
   function canTrigger(kind: LearningFeedbackKind, appActive: boolean) {
-    if (!appActive) return false;
+    // React state can lag a native lifecycle transition by a render. Require both
+    // the caller's state and the native AppState before firing *any* feedback,
+    // not only audio. This prevents haptics from vibrating after the learner has
+    // already backgrounded NexCode while the UI still carries a stale active flag.
+    if (!appActive || !nativeAppIsActive()) return false;
     const current = now();
     // A mocked or platform clock returning NaN/Infinity must never poison the
     // shared cooldown map. Once NaN is stored, every elapsed comparison becomes
