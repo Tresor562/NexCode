@@ -140,6 +140,20 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
 
 {
   const session = planPracticeSession([
+    activity({ courseId: 'web', lessonId: 'review-dom-a', mode: 'review', minutes: 4, skills: ['dom'], priority: 130 }),
+    activity({ courseId: 'web', lessonId: 'review-dom-b', mode: 'review', minutes: 4, skills: ['dom'], priority: 120 }),
+    activity({ courseId: 'js', lessonId: 'learn-array', mode: 'learn', minutes: 4, skills: ['array'], priority: 60 }),
+  ], 10);
+  assert.deepEqual(
+    session.activities.map((item) => item.lessonId),
+    ['review-dom-a', 'learn-array'],
+    'duplicate recovery candidates for one skill must count as one recovery unit so learning can resume once that weakness is covered',
+  );
+  assert.equal(session.deferredRecoveryCount, 0, 'duplicate lessons for an already recovered skill must not create fake deferred recovery');
+}
+
+{
+  const session = planPracticeSession([
     activity({ courseId: 'web', lessonId: 'repair-legacy-a', mode: 'repair', minutes: 3, skills: [], priority: 150 }),
     activity({ courseId: 'web', lessonId: 'review-legacy-b', mode: 'review', minutes: 9, skills: [], priority: 140 }),
     activity({ courseId: 'js', lessonId: 'learn-array', mode: 'learn', minutes: 3, skills: ['array'], priority: 60 }),
@@ -183,4 +197,4 @@ const activity = ({ courseId, lessonId, mode, minutes, skills = [], priority = 5
   assert.deepEqual(session.activities.map((item) => item.lessonId), ['bounded'], 'overscoped runtime activities must be rejected instead of expanding planning state without bound');
 }
 
-console.log('Adaptive practice audit OK: mastery prerequisite gates, mandatory targeted recovery, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing, skill diversification and malformed runtime activity containment are protected.');
+console.log('Adaptive practice audit OK: mastery prerequisite gates, distinct recovery quotas, mandatory targeted recovery, bounded fallback, deferred recovery visibility, unscoped recovery blocking, new-concept pacing, skill diversification and malformed runtime activity containment are protected.');
