@@ -41,7 +41,7 @@ assert.match(source, /useAudioPlayer\(successSound\)/, 'lesson flow must keep su
 assert.match(source, /useAudioPlayer\(errorSound\)/, 'lesson flow must keep error audio feedback wired');
 assert.match(source, /accessibilityLiveRegion="polite"/, 'quiz feedback must stay screen-reader announced');
 
-assert.match(feedbackSource, /if \(!appActive\) return false;/, 'shared feedback gate must fail closed while the app is inactive');
+assert.match(feedbackSource, /if \(!appActive(?: \|\| !nativeAppIsActive\(\))?\) return false;/, 'shared feedback gate must fail closed while the app is inactive');
 assert.match(feedbackSource, /sharedAudioRequestGeneration !== generation/, 'shared audio gate must suppress stale asynchronous replay requests');
 assert.doesNotMatch(source, /from 'expo-haptics'/, 'lesson flow must not bypass the shared haptic controller');
 assert.doesNotMatch(source, /player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/, 'lesson flow must not bypass shared stale-audio protection');
