@@ -21,6 +21,10 @@ const { canonicalWorkspacePath } = module.exports;
 assert.equal(typeof canonicalWorkspacePath, 'function', 'canonicalWorkspacePath must stay exported');
 assert.equal(canonicalWorkspacePath('src/components/App.tsx'), 'src/components/App.tsx', 'normal nested project paths must stay valid');
 assert.equal(canonicalWorkspacePath('src\\components\\App.tsx'), 'src/components/App.tsx', 'portable normalization must preserve Windows imports');
+assert.equal(canonicalWorkspacePath('src/comp\u202Egnp.tsx'), null, 'bidirectional override controls must never survive workspace path canonicalization');
+assert.equal(canonicalWorkspacePath('src/zero\u200Bwidth.js'), null, 'zero-width format controls must never create visually spoofed workspace filenames');
+assert.equal(canonicalWorkspacePath('src/word\u2060joiner.js'), null, 'invisible word-joiner controls must be rejected from workspace paths');
+assert.equal(canonicalWorkspacePath('src/café.js'), 'src/café.js', 'normal visible Unicode filenames must stay supported');
 assert.equal(canonicalWorkspacePath(`${'a'.repeat(121)}.js`), null, 'oversized path segments must be rejected');
 assert.equal(canonicalWorkspacePath(`${'a'.repeat(119)}.js`), null, 'segment bounds must include the extension in the limit');
 assert.equal(canonicalWorkspacePath(`${'a'.repeat(116)}.js`)?.endsWith('.js'), true, 'useful long filenames below the bound must remain supported');
@@ -30,6 +34,7 @@ assert.equal(canonicalWorkspacePath(`${'folder/'.repeat(11)}${'x'.repeat(180)}.j
 assert.equal(canonicalWorkspacePath('src/aux/config.js'), null, 'Windows-reserved segments must stay rejected');
 assert.equal(canonicalWorkspacePath('src/name. /file.js'), null, 'segments ending in a dot or space must stay rejected');
 
+assert.match(source, /UNSAFE_INVISIBLE_PATH_CHARS\s*=\s*\/\[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\]\//, 'workspace path policy must explicitly reject invisible and bidirectional formatting controls');
 assert.match(source, /MAX_WORKSPACE_PATH_CHARS\s*=\s*240/, 'workspace path cap must remain explicit');
 assert.match(source, /MAX_WORKSPACE_SEGMENT_CHARS\s*=\s*120/, 'workspace segment cap must remain explicit');
 assert.match(source, /MAX_WORKSPACE_DEPTH\s*=\s*12/, 'workspace depth cap must remain explicit');
@@ -42,4 +47,4 @@ assert.match(importSource, /try\s*\{\s*return directory\.list\(\);\s*\}\s*catch\
 assert.match(importSource, /const entries = safeDirectoryEntries\(directory\);\s*if \(!entries\) \{\s*skipped \+= 1;\s*return;/, 'failed subtrees must be counted and skipped while preserving already imported files');
 assert.doesNotMatch(importSource, /const entries = directory\.list\(\);/, 'recursive folder walking must never call the provider directly without recovery');
 
-console.log('Workspace path bounds audit OK: portable project paths, collision-renamed imports and partial folder-provider failures stay bounded, canonical and recoverable.');
+console.log('Workspace path bounds audit OK: portable project paths reject invisible spoofing controls while collision-renamed imports and partial provider failures stay bounded, canonical and recoverable.');

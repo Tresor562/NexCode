@@ -15,6 +15,7 @@ const SENSITIVE_BASENAMES = new Set([
 
 const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const WINDOWS_INVALID_SEGMENT_CHARS = /[<>:"|?*]/;
+const UNSAFE_INVISIBLE_PATH_CHARS = /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/;
 const MAX_WORKSPACE_PATH_CHARS = 240;
 const MAX_WORKSPACE_SEGMENT_CHARS = 120;
 const MAX_WORKSPACE_DEPTH = 12;
@@ -31,6 +32,7 @@ function portableWorkspaceSegment(segment: string): boolean {
     && segment !== '.'
     && segment !== '..'
     && !/[\u0000-\u001f\u007f]/.test(segment)
+    && !UNSAFE_INVISIBLE_PATH_CHARS.test(segment)
     && !WINDOWS_INVALID_SEGMENT_CHARS.test(segment)
     && !/[. ]$/.test(segment)
     && !WINDOWS_RESERVED_BASENAME.test(segment);
