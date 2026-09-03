@@ -10,6 +10,7 @@ const expectations = [
   ['foreground gate', 'if (!appActive) return false;'],
   ['native foreground source', "import { AppState } from 'react-native';"],
   ['native foreground predicate', "return AppState.currentState === 'active';"],
+  ['native lifecycle audio invalidation', "AppState.addEventListener('change', (nextState) => {\n  if (nextState !== 'active') supersedeAudio();\n});"],
   ['non-finite current clock guard', 'if (!Number.isFinite(current)) return false;'],
   ['non-finite previous clock recovery', 'if (!Number.isFinite(previous)) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
   ['clock rollback guard', 'if (elapsed < 0) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
@@ -40,12 +41,17 @@ if (missing.length) {
 const factoryStart = source.indexOf('export function createLearningFeedbackGate');
 const sharedMapStart = source.indexOf('const sharedLastTriggeredAt');
 const sharedAudioStart = source.indexOf('let sharedAudioRequestGeneration');
+const lifecycleInvalidationStart = source.indexOf("AppState.addEventListener('change'");
 if (sharedMapStart < 0 || factoryStart < 0 || sharedMapStart > factoryStart) {
   console.error('Global learning feedback audit failed: cooldown state must live outside individual gate instances.');
   process.exit(1);
 }
 if (sharedAudioStart < 0 || sharedAudioStart > factoryStart) {
   console.error('Global learning feedback audit failed: audio replay generation must be shared across every gate and player.');
+  process.exit(1);
+}
+if (lifecycleInvalidationStart < 0 || lifecycleInvalidationStart > factoryStart) {
+  console.error('Global learning feedback audit failed: app lifecycle invalidation must be module-wide so every feedback gate shares it.');
   process.exit(1);
 }
 
@@ -93,6 +99,10 @@ if (!/sharedAudioRequestGeneration !== generation[\s\S]{0,120}!nativeAppIsActive
   console.error('Global learning feedback audit failed: accepted audio must recheck native foreground state after seek and before playback.');
   process.exit(1);
 }
+if (!/AppState\.addEventListener\('change',[\s\S]{0,120}nextState !== 'active'[\s\S]{0,80}supersedeAudio\(\)/.test(source)) {
+  console.error('Global learning feedback audit failed: background transitions must supersede accepted audio before a later foreground resume.');
+  process.exit(1);
+}
 
 const lessonExpectations = [
   ['lesson shared gate import', "createLearningFeedbackGate"],
@@ -117,4 +127,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, finite-clock recovery, clock rollback recovery, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
