@@ -185,8 +185,9 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
       .filter((item) => item.skillIds.length === 0)
       .map(recoveryActivityKey),
   );
-  const hasPendingRecovery = recoverySkills.size > 0 || unscopedRecoveryKeys.size > 0;
-  const recoveryQuota = recoveryQuotaForBudget(budgetMinutes, recoveryCandidates.length);
+  const pendingRecoveryUnitCount = recoverySkills.size + unscopedRecoveryKeys.size;
+  const hasPendingRecovery = pendingRecoveryUnitCount > 0;
+  const recoveryQuota = recoveryQuotaForBudget(budgetMinutes, pendingRecoveryUnitCount);
   const overrunAllowance = Math.max(2, Math.round(budgetMinutes * 0.15));
   const maxMinutes = budgetMinutes + overrunAllowance;
 
