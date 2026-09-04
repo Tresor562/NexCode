@@ -96,9 +96,10 @@ function TactileButton({
   }, [depth, scale]);
 
   const animate = (pressed: boolean) => {
-    if (disabled) {
-      scale.stopAnimation();
-      depth.stopAnimation();
+    scale.stopAnimation();
+    depth.stopAnimation();
+
+    if (disabled || reduceMotion || !appActive) {
       scale.setValue(1);
       depth.setValue(0);
       return;
@@ -106,13 +107,6 @@ function TactileButton({
 
     const nextScale = pressed ? theme.motion.pressedScale : 1;
     const nextDepth = pressed ? theme.motion.pressedDepth : 0;
-    if (reduceMotion || !appActive) {
-      scale.stopAnimation();
-      depth.stopAnimation();
-      scale.setValue(nextScale);
-      depth.setValue(nextDepth);
-      return;
-    }
     Animated.parallel([
       Animated.spring(scale, {
         toValue: nextScale,
@@ -147,7 +141,7 @@ function TactileButton({
         onPress={handlePress}
         onPressIn={() => animate(true)}
         onPressOut={() => animate(false)}
-        style={[style, disabled && styles.disabled]}
+        style={({ pressed }) => [style, disabled && styles.disabled, pressed && (reduceMotion || !appActive) && styles.pressedReducedMotion]}
       >
         {children}
       </Pressable>
@@ -382,6 +376,7 @@ const styles = StyleSheet.create({
   secondaryButtonText: { color: theme.colors.text, fontSize: 13, fontWeight: theme.weight.bold },
   buttonRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.space.sm },
   disabled: { opacity: 0.4 },
+  pressedReducedMotion: { opacity: 0.76 },
   iconButton: {
     width: theme.control.heightSm,
     height: theme.control.heightSm,
