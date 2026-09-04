@@ -71,6 +71,11 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
 
   const starter = projectStarterFiles(project);
   if (!hasRequiredStarterFiles(starter, draft.files)) return 0;
+  const starterEvidence = new Set(
+    Object.values(starter)
+      .map((content) => meaningfulEvidenceText(content))
+      .filter(Boolean),
+  );
 
   let score = 0;
   for (const [filename, rawContent] of Object.entries(draft.files)) {
@@ -78,6 +83,9 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
     if (!content.trim()) continue;
     if (!(filename in starter)) {
       const meaningfulContent = meaningfulEvidenceText(content);
+      // Renaming or duplicating starter code is not learner construction. A new
+      // file only earns evidence when its normalized content is genuinely new.
+      if (!meaningfulContent || starterEvidence.has(meaningfulContent)) continue;
       score += Math.min(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent.length);
       continue;
     }
