@@ -30,6 +30,19 @@ function safeSessionDate(value: Date) {
   return Number.isFinite(value.getTime()) ? value : new Date();
 }
 
+function draftTimestamp(value: string | undefined) {
+  if (!value) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
+function incomingDraftIsStale(incoming: LabDraft, current: LabDraft) {
+  const currentTimestamp = draftTimestamp(current.updatedAt);
+  if (currentTimestamp === undefined) return false;
+  const incomingTimestamp = draftTimestamp(incoming.updatedAt);
+  return incomingTimestamp === undefined || incomingTimestamp < currentTimestamp;
+}
+
 function snapshotLabDraft(draft: LabDraft, updatedAt: string): LabDraft {
   return {
     ...draft,
@@ -55,6 +68,7 @@ export function startLabSession(courseId: string, lesson: Lesson, stored?: LabDr
 }
 
 export function autosaveLabSession(session: LabSession, draft: LabDraft, now = new Date()): LabSession {
+  if (incomingDraftIsStale(draft, session.workspace.draft)) return session;
   const savedAt = safeSessionDate(now).toISOString();
   return {
     ...session,
