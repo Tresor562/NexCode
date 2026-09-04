@@ -43,6 +43,13 @@ function incomingDraftIsStale(incoming: LabDraft, current: LabDraft) {
   return incomingTimestamp === undefined || incomingTimestamp <= currentTimestamp;
 }
 
+function nextAutosaveTimestamp(incoming: LabDraft, current: LabDraft, now: Date) {
+  const clockTimestamp = safeSessionDate(now).getTime();
+  const incomingTimestamp = draftTimestamp(incoming.updatedAt) ?? clockTimestamp;
+  const currentTimestamp = draftTimestamp(current.updatedAt) ?? clockTimestamp - 1;
+  return new Date(Math.max(clockTimestamp, incomingTimestamp, currentTimestamp + 1)).toISOString();
+}
+
 function snapshotLabDraft(draft: LabDraft, updatedAt: string): LabDraft {
   return {
     ...draft,
@@ -69,7 +76,7 @@ export function startLabSession(courseId: string, lesson: Lesson, stored?: LabDr
 
 export function autosaveLabSession(session: LabSession, draft: LabDraft, now = new Date()): LabSession {
   if (incomingDraftIsStale(draft, session.workspace.draft)) return session;
-  const savedAt = safeSessionDate(now).toISOString();
+  const savedAt = nextAutosaveTimestamp(draft, session.workspace.draft, now);
   return {
     ...session,
     workspace: { ...session.workspace, draft: snapshotLabDraft(draft, savedAt) },
