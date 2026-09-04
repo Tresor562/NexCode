@@ -28,6 +28,10 @@ expectIncludes(
 expect(evidence, /\.replace\(\/\\s\+\/g, ''\)/, 'Whitespace-only formatting must not inflate project evidence.');
 expect(evidence, /function hasRequiredStarterFiles\([\s\S]*Object\.keys\(starter\)\.every\([\s\S]*canonicalText\(files\[filename\]\)\.trim\(\)\.length > 0/, 'Required starter files must remain present and non-empty before edits can count as project evidence.');
 expect(evidence, /if \(!hasRequiredStarterFiles\(starter, draft\.files\)\) return 0;/, 'Deleting or emptying a starter file must fail closed instead of increasing the evidence score.');
+expect(evidence, /const NON_CODE_EVIDENCE_EXTENSIONS = new Set\(\['md', 'markdown', 'txt', 'rst'\]\)/, 'Coding projects must identify documentation-only file extensions explicitly.');
+expect(evidence, /function isConstructionEvidenceFile\(filename: string, starter: Record<string, string>\)/, 'Workspace evidence must distinguish source construction from documentation edits.');
+expect(evidence, /return !Object\.keys\(starter\)\.some\([\s\S]*!NON_CODE_EVIDENCE_EXTENSIONS\.has\(starterExtension\)/, 'Documentation may only count when the project has no source-code starter files.');
+expect(evidence, /if \(!content\.trim\(\) \|\| !isConstructionEvidenceFile\(filename, starter\)\) continue;/, 'Documentation-only edits must not unlock coding project milestones.');
 expect(evidence, /function addedFileConstructionEvidence\([\s\S]*const meaningfulContent = meaningfulEvidenceText\(content\);[\s\S]*if \(!meaningfulContent\) return 0;/, 'Added-file evidence must ignore empty or filler-only content.');
 expect(evidence, /const noveltyAgainstClosestStarter = Math\.min\([\s\S]*Object\.values\(starter\)\.map\(\(starterContent\) => changedCharacterEvidence\(starterContent, content\)\)/, 'Added files must be scored against the closest starter so near-copies only earn their genuinely new delta.');
 expect(evidence, /Math\.min\(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent\.length, noveltyAgainstClosestStarter\)/, 'Added-file evidence must be capped by both meaningful length and novelty versus starter code.');
