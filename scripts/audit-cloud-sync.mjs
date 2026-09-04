@@ -29,16 +29,24 @@ requirePattern(
   'Cloud scheduling delays must reject non-finite input and remain bounded before reaching setTimeout.',
 );
 requirePattern(
-  /function queueFlush\(delayMs: number\): void \{[\s\S]*const safeDelay = normalizeFlushDelay\(delayMs, FOLLOW_UP_DELAY_MS\);[\s\S]*setTimeout\([\s\S]*safeDelay\);/,
-  'Every queued cloud flush, including retry and handoff paths, must use a sanitized finite delay.',
+  /let pendingPushPreservesBackoff = false;[\s\S]*let deferredFlushPreservesBackoff = false;/,
+  'Cloud scheduling must explicitly retain whether pending and deferred timers represent protected retry backoff.',
 );
 requirePattern(
-  /deferredFlushDelayMs = deferredFlushDelayMs === null[\s\S]{0,120}\? safeDelay[\s\S]{0,120}: Math\.max\(deferredFlushDelayMs, safeDelay\);/,
-  'Deferred cloud scheduling must retain the longest requested delay so a shorter follow-up cannot erase exponential retry backoff while offline.',
+  /function queueFlush\(delayMs: number, preserveBackoff = false\): void \{[\s\S]*const safeDelay = normalizeFlushDelay\(delayMs, FOLLOW_UP_DELAY_MS\);[\s\S]*pendingPushPreservesBackoff = preserveBackoff;[\s\S]*setTimeout\([\s\S]*safeDelay\);/,
+  'Every queued cloud flush, including retry and handoff paths, must use a sanitized finite delay and preserve retry intent.',
 );
 requirePattern(
-  /export function scheduleCloudStatePush\(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS\): void \{[\s\S]*queueFlush\(normalizeFlushDelay\(delayMs\)\);/,
-  'Caller-provided debounce delays must be normalized before scheduling cloud state.',
+  /deferredFlushDelayMs = deferredFlushDelayMs === null[\s\S]{0,120}\? safeDelay[\s\S]{0,120}: Math\.max\(deferredFlushDelayMs, safeDelay\);[\s\S]*deferredFlushPreservesBackoff = deferredFlushPreservesBackoff \|\| preserveBackoff;/,
+  'Deferred cloud scheduling must retain the longest requested delay and retry intent so a shorter follow-up cannot erase exponential retry backoff while offline.',
+);
+requirePattern(
+  /export function scheduleCloudStatePush\(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS\): void \{[\s\S]*if \(pendingPush && pendingPushPreservesBackoff && retryUserId === session\.user\.id\) return;[\s\S]*clearPendingPush\(\);[\s\S]*queueFlush\(normalizeFlushDelay\(delayMs\)\);/,
+  'Fresh local mutations must update the queued snapshot without collapsing an existing retry backoff for the same learner.',
+);
+requirePattern(
+  /function clearPendingPush\(\): void \{[\s\S]*pendingPush = null;[\s\S]*pendingPushPreservesBackoff = false;/,
+  'Clearing a cloud timer must also clear its retry-protection marker.',
 );
 requirePattern(
   /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*const currentBeforePush = loadCloudSession\(\);[\s\S]*await pushCloudState\(currentBeforePush, reconciled\.state\);/,
@@ -69,8 +77,8 @@ requirePattern(
   'Signing out during a failed push must clear only the stale learner retry and reset backoff.',
 );
 requirePattern(
-  /queueFlush\(consumeRetryDelay\(snapshot\.userId\)\);/,
-  'Transient cloud failures must consume bounded backoff for the learner that actually failed.',
+  /queueFlush\(consumeRetryDelay\(snapshot\.userId\), true\);/,
+  'Transient cloud failures must consume bounded backoff and mark that timer as protected for the learner that actually failed.',
 );
 requirePattern(
   /let activeFlush: Promise<boolean> \| null = null;/,
@@ -81,8 +89,8 @@ requirePattern(
   'Cloud sync must share in-flight work and always release the active reconciliation promise.',
 );
 requirePattern(
-  /finally \{[\s\S]*const deferredDelay = deferredFlushDelayMs;[\s\S]*if \(latestState && !pendingPush\) \{[\s\S]*queueFlush\(deferredDelay \?\? FOLLOW_UP_DELAY_MS\);/,
-  'A settled push must schedule any newer queued snapshot while preserving deferred retry timing.',
+  /finally \{[\s\S]*const deferredDelay = deferredFlushDelayMs;[\s\S]*const preserveDeferredBackoff = deferredFlushPreservesBackoff;[\s\S]*deferredFlushPreservesBackoff = false;[\s\S]*if \(latestState && !pendingPush\) \{[\s\S]*queueFlush\(deferredDelay \?\? FOLLOW_UP_DELAY_MS, preserveDeferredBackoff\);/,
+  'A settled push must schedule any newer queued snapshot while preserving deferred retry timing and retry intent.',
 );
 
 requirePattern(
@@ -176,4 +184,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, preserved deferred retry backoff, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, protected offline retry timers across fresh local edits, preserved deferred retry intent, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
