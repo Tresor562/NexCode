@@ -17,10 +17,17 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
   sound: 90,
 };
 
+// A strong semantic haptic should get a short tactile quiet window. Without this,
+// the learner can submit a quiz, receive a success/error notification, then tap the
+// next CTA quickly enough to stack a selection tick on top of the stronger cue.
+// Premium mobile feedback feels intentional when the strong event gets to land.
+const WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS = 160;
+
 // Feedback gates are created by many independent controls. Keep the cooldown state
 // at module scope so quickly moving between controls cannot produce a burst of
 // duplicate vibrations or sounds just because each control owns a different gate.
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
+let sharedLastStrongFeedbackAt: number | undefined;
 
 // Success and error are different semantic tones, but they drive the same physical
 // notification channel. Gate them together so a fast correction after a mistake
@@ -67,6 +74,22 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     // false and rapid feedback can bypass throttling indefinitely.
     if (!Number.isFinite(current)) return false;
 
+    // Selection ticks are intentionally weaker than notification/impact cues. Give
+    // the stronger haptic a shared quiet window across every control and gate so a
+    // rapid CTA press cannot turn one semantic event into tactile chatter.
+    if (kind === 'selection' && sharedLastStrongFeedbackAt !== undefined) {
+      if (!Number.isFinite(sharedLastStrongFeedbackAt)) {
+        sharedLastStrongFeedbackAt = undefined;
+      } else {
+        const elapsedSinceStrong = current - sharedLastStrongFeedbackAt;
+        if (elapsedSinceStrong < 0) {
+          sharedLastStrongFeedbackAt = current;
+          return false;
+        }
+        if (elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS) return false;
+      }
+    }
+
     const previous = sharedLastTriggeredAt.get(kind);
     if (previous !== undefined) {
       // Recover defensively from any legacy/corrupted module state without
@@ -86,6 +109,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       if (elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
     }
     sharedLastTriggeredAt.set(kind, current);
+    if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;
     return true;
   }
 
