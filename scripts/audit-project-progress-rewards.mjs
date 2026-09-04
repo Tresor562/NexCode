@@ -23,6 +23,8 @@ expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Project 
 expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Project rewards must sanitize their canonical reward clock against the actual system clock.');
 expect(/value\.getTime\(\)\s*<=\s*trustedSystemNow\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied future clock must not expand project reward or portfolio proof windows.');
 expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);\s*return rewardProgress\(progressed, \{[\s\S]*?now:\s*rewardTime,[\s\S]*?\}\);/, 'Project step XP, NexCoins and streak accounting must use the trusted reward clock.');
+expect(/function portfolioProofTimestamp\(proof:\s*PortfolioProof \| undefined\):\s*number \| null/, 'Portfolio proof updates need a central persisted-version timestamp parser.');
+expect(/Date\.parse\(proof\.completedAt\)/, 'Portfolio proof versioning must parse persisted completion timestamps.');
 expect(/function isRewardablePortfolioProof\(proof:\s*PortfolioProof,\s*project:\s*GuidedProject,\s*now:\s*Date\):\s*boolean/, 'Portfolio rewards must validate evidence against its canonical project.');
 expect(/defaultProjectRubric\(project\)\.map\(\(item\)\s*=>\s*item\.id\)/, 'Portfolio rubric ids must come from the canonical project rubric.');
 expect(/const review = reviewProject\(project, rubricIds\);/, 'Portfolio score must be recomputed from canonical review logic.');
@@ -33,14 +35,16 @@ expect(/proof\.score\s*===\s*review\.score/, 'Client supplied portfolio score mu
 expect(/rubricIds\.every\(\(id\)\s*=>\s*allowedRubricIds\.has\(id\)\)/, 'Unknown rubric ids must not enter the portfolio reward path.');
 expect(/proof\.score\s*>=\s*PORTFOLIO_PASS_SCORE/, 'A failing portfolio score must never receive a completion reward.');
 expect(/proof\.score\s*<=\s*100/, 'Portfolio proof scores must stay within the valid percentage range.');
-expect(/Date\.parse\(proof\.completedAt\)/, 'Portfolio proof completion dates must be runtime validated.');
 expect(/completedAt\s*<=\s*now\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS/, 'Future-dated portfolio evidence must not mint rewards outside the bounded clock-skew window.');
 expect(/rubricIds\.length\s*>\s*0/, 'Portfolio proof rewards require rubric evidence.');
 expect(/uniqueRubricIds\.size\s*===\s*rubricIds\.length/, 'Duplicate rubric evidence must not pass proof validation.');
 expect(/const project = canonicalProject\(proof\?\.projectId\);[\s\S]*if \(!project \|\| !isRewardablePortfolioProof\(proof, project, rewardTime\)\) return state;/, 'Unknown projects and malformed canonical evidence must be rejected before persistence or reward.');
 expect(/findIndex\(\(item\)\s*=>\s*item\.projectId\s*===\s*project\.id\)/, 'Portfolio proofs must detect an existing canonical project proof before rewarding.');
+expect(/const existingProof = state\.portfolioProofs\[existingIndex\];[\s\S]*const existingCompletedAt = portfolioProofTimestamp\(existingProof\);[\s\S]*const incomingCompletedAt = portfolioProofTimestamp\(proof\);/, 'Existing proof updates must compare canonical persisted and incoming versions.');
+expect(/if \(incomingCompletedAt === null\) return state;/, 'An invalid incoming portfolio proof timestamp must fail closed.');
+expect(/if \(existingCompletedAt !== null && incomingCompletedAt <= existingCompletedAt\) return state;/, 'Stale or equal-version portfolio callbacks must never overwrite newer proof evidence.');
 expect(/if \(existingIndex\s*>=\s*0\)[\s\S]*?portfolioProofs:\s*state\.portfolioProofs\.map/, 'Existing portfolio proofs must be replaceable without granting another reward.');
-expect(/index\s*===\s*existingIndex\s*\?\s*proof\s*:\s*item/, 'A proof update must replace only the matching project evidence.');
+expect(/index\s*===\s*existingIndex\s*\?\s*proof\s*:\s*item/, 'A newer proof update must replace only the matching project evidence.');
 expect(/safePercent\(state\.projectProgress\[project\.id\]\)\s*<\s*100/, 'A first portfolio reward must require canonical 100% project completion evidence.');
 expect(/const rewarded = rewardProgress\(state, \{ \.\.\.PORTFOLIO_PROOF_REWARD, now: rewardTime \}\);/, 'Only a first valid proof for a completed canonical project may enter the reward path.');
 expect(/portfolioProofs:\s*\[\.\.\.rewarded\.portfolioProofs,\s*proof\]/, 'A first valid portfolio proof must be persisted after rewarding.');
@@ -74,6 +78,9 @@ if (!existingProofBranch) {
 }
 if (/rewardProgress\s*\(/.test(existingProofBranch)) {
   throw new Error('Updating an existing portfolio proof must never mint XP or NexCoins.');
+}
+if (!/incomingCompletedAt\s*<=\s*existingCompletedAt/.test(existingProofBranch)) {
+  throw new Error('Existing portfolio proof updates must reject stale and equal-version callbacks before replacement.');
 }
 
 const canonicalGateIndex = source.indexOf('const project = canonicalProject(proof?.projectId);');
