@@ -65,28 +65,34 @@ function changedCharacterEvidence(before: string, after: string): number {
   return Math.max(0, added);
 }
 
+function addedFileConstructionEvidence(starter: Record<string, string>, content: string): number {
+  const meaningfulContent = meaningfulEvidenceText(content);
+  if (!meaningfulContent) return 0;
+
+  // A copied starter with one token appended must only earn credit for that new
+  // token, not for the copied body. Use the closest canonical starter as the
+  // novelty ceiling for newly added files.
+  const noveltyAgainstClosestStarter = Math.min(
+    meaningfulContent.length,
+    ...Object.values(starter).map((starterContent) => changedCharacterEvidence(starterContent, content)),
+  );
+
+  return Math.min(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent.length, noveltyAgainstClosestStarter);
+}
+
 export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: LabDraft | undefined): number {
   if (!draft || !draft.files || typeof draft.files !== 'object') return 0;
   if (draft.missionId && draft.missionId !== `project:${project.id}`) return 0;
 
   const starter = projectStarterFiles(project);
   if (!hasRequiredStarterFiles(starter, draft.files)) return 0;
-  const starterEvidence = new Set(
-    Object.values(starter)
-      .map((content) => meaningfulEvidenceText(content))
-      .filter(Boolean),
-  );
 
   let score = 0;
   for (const [filename, rawContent] of Object.entries(draft.files)) {
     const content = canonicalText(rawContent);
     if (!content.trim()) continue;
     if (!(filename in starter)) {
-      const meaningfulContent = meaningfulEvidenceText(content);
-      // Renaming or duplicating starter code is not learner construction. A new
-      // file only earns evidence when its normalized content is genuinely new.
-      if (!meaningfulContent || starterEvidence.has(meaningfulContent)) continue;
-      score += Math.min(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent.length);
+      score += addedFileConstructionEvidence(starter, content);
       continue;
     }
     score += changedCharacterEvidence(starter[filename] ?? '', content);
