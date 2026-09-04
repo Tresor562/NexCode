@@ -7,9 +7,11 @@ type PendingCloudState = {
 };
 
 let pendingPush: ReturnType<typeof setTimeout> | null = null;
+let pendingPushPreservesBackoff = false;
 let latestState: PendingCloudState | null = null;
 let activeFlush: Promise<boolean> | null = null;
 let deferredFlushDelayMs: number | null = null;
+let deferredFlushPreservesBackoff = false;
 let retryDelayMs = 1_500;
 let retryUserId: string | null = null;
 
@@ -65,9 +67,10 @@ function clearPendingPush(): void {
   if (!pendingPush) return;
   clearTimeout(pendingPush);
   pendingPush = null;
+  pendingPushPreservesBackoff = false;
 }
 
-function queueFlush(delayMs: number): void {
+function queueFlush(delayMs: number, preserveBackoff = false): void {
   if (!latestState) return;
   const safeDelay = normalizeFlushDelay(delayMs, FOLLOW_UP_DELAY_MS);
 
@@ -80,12 +83,15 @@ function queueFlush(delayMs: number): void {
     deferredFlushDelayMs = deferredFlushDelayMs === null
       ? safeDelay
       : Math.max(deferredFlushDelayMs, safeDelay);
+    deferredFlushPreservesBackoff = deferredFlushPreservesBackoff || preserveBackoff;
     return;
   }
 
   if (pendingPush) return;
+  pendingPushPreservesBackoff = preserveBackoff;
   pendingPush = setTimeout(() => {
     pendingPush = null;
+    pendingPushPreservesBackoff = false;
     void flushLatestState();
   }, safeDelay);
 }
@@ -154,7 +160,7 @@ async function performLatestStateFlush(): Promise<boolean> {
       return false;
     }
 
-    queueFlush(consumeRetryDelay(snapshot.userId));
+    queueFlush(consumeRetryDelay(snapshot.userId), true);
     return false;
   }
 }
@@ -173,9 +179,11 @@ async function flushLatestState(): Promise<boolean> {
     if (activeFlush === flush) activeFlush = null;
 
     const deferredDelay = deferredFlushDelayMs;
+    const preserveDeferredBackoff = deferredFlushPreservesBackoff;
     deferredFlushDelayMs = null;
+    deferredFlushPreservesBackoff = false;
     if (latestState && !pendingPush) {
-      queueFlush(deferredDelay ?? FOLLOW_UP_DELAY_MS);
+      queueFlush(deferredDelay ?? FOLLOW_UP_DELAY_MS, preserveDeferredBackoff);
     }
   }
 }
@@ -191,6 +199,16 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = DEFAULT_PUSH
   // Debounce rapid local mutations, but never start a second request while one
   // is in flight. The completed request immediately flushes any newer snapshot.
   if (activeFlush) return;
+
+  // When this learner is already waiting for an exponential retry, keep that
+  // retry timer intact. Local XP, streak or editor mutations should replace the
+  // queued snapshot with the freshest state, not collapse a 30s offline backoff
+  // back to the ordinary ~900ms debounce and repeatedly hammer Supabase.
+  if (pendingPush && pendingPushPreservesBackoff && retryUserId === session.user.id) return;
+
+  // A pending retry from a previous learner must never delay the new account.
+  // Clearing it here is safe because latestState above is already scoped to the
+  // newly active session and resetRetryBackoff will occur on the stale handoff.
   clearPendingPush();
   queueFlush(normalizeFlushDelay(delayMs));
 }
