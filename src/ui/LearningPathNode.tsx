@@ -12,6 +12,7 @@ const AMBIENT_SHIMMER_ITERATIONS = 2;
 const COMPLETION_TRAIL_DURATION_MS = 420;
 const COMPLETION_HALO_IN_MS = 160;
 const COMPLETION_HALO_OUT_MS = 260;
+const CURRENT_ARRIVAL_DURATION_MS = 360;
 
 export function LearningPathNode({
   title,
@@ -33,16 +34,20 @@ export function LearningPathNode({
   const press = useRef(new Animated.Value(0)).current;
   const focusPulse = useRef(new Animated.Value(0)).current;
   const shimmer = useRef(new Animated.Value(0)).current;
+  const currentArrival = useRef(new Animated.Value(1)).current;
   const completionPop = useRef(new Animated.Value(1)).current;
   const completionTrail = useRef(new Animated.Value(state === 'done' ? 1 : 0)).current;
   const completionHalo = useRef(new Animated.Value(0)).current;
   const previousState = useRef<LearningPathNodeState>(state);
+  const previousCurrentState = useRef<LearningPathNodeState>(state);
   const feedbackGate = useRef(createLearningFeedbackGate()).current;
   const { reduceMotion, appActive } = useMotionPreferences();
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
   const translateY = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
   const nodeScale = press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.965] });
+  const arrivalScale = currentArrival.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
+  const arrivalY = currentArrival.interpolate({ inputRange: [0, 1], outputRange: [7, 0] });
   const ringScale = focusPulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.2] });
   const ringOpacity = focusPulse.interpolate({ inputRange: [0, 0.45, 1], outputRange: [0.16, 0.34, 0] });
   const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-54, 70] });
@@ -95,6 +100,28 @@ export function LearningPathNode({
       shimmerLoop.stop();
     };
   }, [appActive, focusPulse, isCurrent, reduceMotion, shimmer]);
+
+  useEffect(() => {
+    const previous = previousCurrentState.current;
+    previousCurrentState.current = state;
+    const becameCurrent = previous !== 'current' && state === 'current';
+
+    currentArrival.stopAnimation();
+    if (!becameCurrent || reduceMotion || !appActive) {
+      currentArrival.setValue(1);
+      return;
+    }
+
+    currentArrival.setValue(0);
+    const arrivalAnimation = Animated.timing(currentArrival, {
+      toValue: 1,
+      duration: CURRENT_ARRIVAL_DURATION_MS,
+      easing: Easing.out(Easing.back(1.18)),
+      useNativeDriver: true,
+    });
+    arrivalAnimation.start();
+    return () => arrivalAnimation.stop();
+  }, [appActive, currentArrival, reduceMotion, state]);
 
   useEffect(() => {
     const previous = previousState.current;
@@ -150,9 +177,10 @@ export function LearningPathNode({
 
   useEffect(() => () => {
     press.stopAnimation();
+    currentArrival.stopAnimation();
     completionTrail.stopAnimation();
     completionHalo.stopAnimation();
-  }, [completionHalo, completionTrail, press]);
+  }, [completionHalo, completionTrail, currentArrival, press]);
 
   const animate = (toValue: number) => {
     if (reduceMotion || !appActive) {
@@ -230,7 +258,7 @@ export function LearningPathNode({
         ) : null}
 
         <View style={[styles.nodeBase, isCurrent && styles.nodeBaseCurrent, state === 'done' && styles.nodeBaseDone, disabled && styles.nodeBaseLocked]} />
-        <Animated.View style={{ transform: [{ translateY }, { scale: nodeScale }] }}>
+        <Animated.View style={{ transform: [{ translateY }, { translateY: arrivalY }, { scale: nodeScale }, { scale: arrivalScale }] }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={accessibilityLabel}
