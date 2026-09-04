@@ -19,12 +19,12 @@ requirePattern(
   'Account scope must persist a durable marker once local ownership has been initialized.',
 );
 requirePattern(
-  /const MAX_ACCOUNT_ID_CHARS = 160;/,
-  'Authenticated account identifiers must have a bounded persisted representation.',
+  /const SUPABASE_USER_ID_PATTERN = \/\^\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$\/i;/,
+  'Authenticated Supabase account identifiers must remain canonical UUIDs.',
 );
 requirePattern(
-  /function normalizeAccountId\(value: unknown\): string \| null \{[\s\S]*typeof value !== 'string'[\s\S]*normalized\.length > MAX_ACCOUNT_ID_CHARS[\s\S]*\\u0000-\\u001f\\u007f[\s\S]*return normalized;/,
-  'Account identifiers must reject empty, oversized, and control-character-corrupted values before ownership decisions.',
+  /function normalizeAccountId\(value: unknown\): string \| null \{[\s\S]*typeof value !== 'string'[\s\S]*SUPABASE_USER_ID_PATTERN\.test\(normalized\)[\s\S]*return normalized\.toLowerCase\(\);/,
+  'Account identifiers must reject malformed persisted/session ids and canonicalize UUID casing before ownership decisions.',
 );
 requirePattern(
   /return normalizeAccountId\(ownerFile\.textSync\(\)\);/,
@@ -55,4 +55,4 @@ requirePattern(
   'Fresh account state must clear progression, currency, projects, mastery, and Lab drafts together.',
 );
 
-console.log('Account scope audit OK: account ids are bounded and validated, legacy migration stays one-time, lost ownership metadata fails closed, and cross-account learning state remains isolated.');
+console.log('Account scope audit OK: Supabase UUIDs are canonicalized and validated, legacy migration stays one-time, lost ownership metadata fails closed, and cross-account learning state remains isolated.');
