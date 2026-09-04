@@ -11,6 +11,7 @@ assert.match(source, /setStepIndex\(0\)/, 'lesson switch must reset the step ind
 assert.match(source, /setAnswer\(null\)/, 'lesson switch must clear the selected quiz answer');
 assert.match(source, /setSubmitted\(false\)/, 'lesson switch must clear submitted feedback');
 assert.match(source, /setRecorded\(false\)/, 'lesson switch must clear per-attempt recording state');
+assert.match(source, /setPredictionDraft\(''\)/, 'lesson switch must clear code-prediction drafts');
 assert.match(source, /setRecallDraft\(''\)/, 'lesson switch must clear active-recall drafts');
 assert.match(source, /setRecallRevealed\(false\)/, 'lesson switch must hide old active-recall hints');
 assert.match(source, /setRecallConfidence\(null\)/, 'lesson switch must clear recall confidence');
@@ -26,6 +27,11 @@ assert.match(source, /const exampleFilename = lessonExampleFilename\(course\.lan
 assert.match(source, /<Text style=\{styles\.codeFile\}>\{exampleFilename\}<\/Text>/, 'the code card must render the resolved native filename');
 assert.doesNotMatch(source, /example\.\{course\.language\.toLowerCase\(\)\.includes\('python'\) \? 'py' : 'txt'\}/, 'non-Python courses must not fall back to misleading .txt code examples');
 
+assert.match(source, /predictionDraft\.trim\(\)\.length >= 12/, 'code observation must require a substantive written prediction');
+assert.match(source, /value=\{predictionDraft\}/, 'code prediction must be an actual learner input');
+assert.match(source, /onChangeText=\{setPredictionDraft\}/, 'code prediction must remain interactive');
+assert.match(source, /accessibilityLabel="Ta prédiction sur le résultat du code"/, 'code prediction must remain accessible to screen-reader users');
+assert.match(source, /label="Valider ma prédiction"[^>]*disabled=\{!predictionAttemptReady\}/, 'example continuation must stay gated until the learner commits to a prediction');
 assert.match(source, /recallDraft\.trim\(\)\.length >= 3/, 'active recall must require a real written attempt');
 assert.match(source, /disabled=\{!recallAttemptReady\}/, 'recall hint reveal must stay gated by the written attempt');
 assert.match(source, /disabled=\{recallConfidence === null\}/, 'quiz continuation must require recall self-assessment');
@@ -55,4 +61,4 @@ assert.match(feedbackSource, /sharedAudioRequestGeneration !== generation/, 'sha
 assert.doesNotMatch(source, /from 'expo-haptics'/, 'lesson flow must not bypass the shared haptic controller');
 assert.doesNotMatch(source, /player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/, 'lesson flow must not bypass shared stale-audio protection');
 
-console.log('Lesson flow audit OK: native code filenames, lesson-switch reset, active recall, post-quiz retrieval reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
+console.log('Lesson flow audit OK: native code filenames, active code prediction, lesson-switch reset, active recall, post-quiz retrieval reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
