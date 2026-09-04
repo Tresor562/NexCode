@@ -124,15 +124,15 @@ function resolveWorkspaceFilename(files: Record<string, string>, filename: strin
 export function updateLabFile(draft: LabDraft, filename: string, content: string): LabDraft {
   const existingFilename = resolveEditableLabFilename(draft, filename);
   if (!existingFilename) return draft;
+  if (draft.files[existingFilename] === content) return draft;
 
-  const changed = draft.files[existingFilename] !== content;
   const next = {
     ...draft,
     files: { ...draft.files, [existingFilename]: content },
     activeFile: existingFilename,
     updatedAt: new Date().toISOString(),
   };
-  return changed ? invalidateLabValidation(next) : next;
+  return invalidateLabValidation(next);
 }
 
 export function addLabFile(draft: LabDraft, filename: string) {
