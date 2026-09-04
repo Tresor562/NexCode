@@ -103,14 +103,26 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
   if (!hasRequiredStarterFiles(starter, draft.files)) return 0;
 
   let score = 0;
-  const seenAddedFileEvidence = new Set<string>();
+  const creditedConstructionFingerprints = new Set<string>();
+
+  // Seed the dedupe set with every starter file that already earns construction
+  // credit. Copying that edited code into a newly named file must not make the
+  // same learner work count twice toward project milestones.
+  for (const [filename, starterContent] of Object.entries(starter)) {
+    const content = canonicalText(draft.files[filename]);
+    if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
+    if (changedCharacterEvidence(starterContent, content) <= 0) continue;
+    const evidenceFingerprint = meaningfulEvidenceText(content);
+    if (evidenceFingerprint) creditedConstructionFingerprints.add(evidenceFingerprint);
+  }
+
   for (const [filename, rawContent] of Object.entries(draft.files)) {
     const content = canonicalText(rawContent);
     if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
     if (!(filename in starter)) {
       const evidenceFingerprint = meaningfulEvidenceText(content);
-      if (!evidenceFingerprint || seenAddedFileEvidence.has(evidenceFingerprint)) continue;
-      seenAddedFileEvidence.add(evidenceFingerprint);
+      if (!evidenceFingerprint || creditedConstructionFingerprints.has(evidenceFingerprint)) continue;
+      creditedConstructionFingerprints.add(evidenceFingerprint);
       score += addedFileConstructionEvidence(starter, content);
       continue;
     }
