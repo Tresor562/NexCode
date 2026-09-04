@@ -99,7 +99,12 @@ function TactileButton({
     scale.stopAnimation();
     depth.stopAnimation();
 
-    if (disabled || reduceMotion || !appActive) {
+    if (disabled) {
+      scale.setValue(1);
+      depth.setValue(0);
+      return;
+    }
+    if (reduceMotion || !appActive) {
       scale.setValue(1);
       depth.setValue(0);
       return;
