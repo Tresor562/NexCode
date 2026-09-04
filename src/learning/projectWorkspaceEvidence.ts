@@ -105,28 +105,29 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
   let score = 0;
   const creditedConstructionFingerprints = new Set<string>();
 
-  // Seed the dedupe set with every starter file that already earns construction
-  // credit. Copying that edited code into a newly named file must not make the
-  // same learner work count twice toward project milestones.
+  // Score starter edits first and dedupe them against each other. Reusing the
+  // same normalized learner construction in two canonical files must not make
+  // one piece of work satisfy multiple milestones. These fingerprints also seed
+  // the boundary used by newly added files below.
   for (const [filename, starterContent] of Object.entries(starter)) {
     const content = canonicalText(draft.files[filename]);
     if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
-    if (changedCharacterEvidence(starterContent, content) <= 0) continue;
+    const earnedEvidence = changedCharacterEvidence(starterContent, content);
+    if (earnedEvidence <= 0) continue;
     const evidenceFingerprint = meaningfulEvidenceText(content);
-    if (evidenceFingerprint) creditedConstructionFingerprints.add(evidenceFingerprint);
+    if (!evidenceFingerprint || creditedConstructionFingerprints.has(evidenceFingerprint)) continue;
+    creditedConstructionFingerprints.add(evidenceFingerprint);
+    score += earnedEvidence;
   }
 
   for (const [filename, rawContent] of Object.entries(draft.files)) {
+    if (filename in starter) continue;
     const content = canonicalText(rawContent);
     if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
-    if (!(filename in starter)) {
-      const evidenceFingerprint = meaningfulEvidenceText(content);
-      if (!evidenceFingerprint || creditedConstructionFingerprints.has(evidenceFingerprint)) continue;
-      creditedConstructionFingerprints.add(evidenceFingerprint);
-      score += addedFileConstructionEvidence(starter, content);
-      continue;
-    }
-    score += changedCharacterEvidence(starter[filename] ?? '', content);
+    const evidenceFingerprint = meaningfulEvidenceText(content);
+    if (!evidenceFingerprint || creditedConstructionFingerprints.has(evidenceFingerprint)) continue;
+    creditedConstructionFingerprints.add(evidenceFingerprint);
+    score += addedFileConstructionEvidence(starter, content);
   }
   return score;
 }
