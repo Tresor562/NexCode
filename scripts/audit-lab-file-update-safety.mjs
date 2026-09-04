@@ -41,5 +41,17 @@ assert(
   !updateBody.includes('[filename]: content'),
   'updateLabFile must never write directly under the untrusted requested filename.',
 );
+assert(
+  updateBody.includes('if (draft.files[existingFilename] === content) return draft;'),
+  'updateLabFile must preserve the original draft and timestamp when an edit does not change content.',
+);
+assert(
+  !updateBody.includes('return changed ?'),
+  'No-op Lab edits must not flow through a timestamp-refreshing draft path.',
+);
+assert(
+  updateBody.includes('return invalidateLabValidation(next);'),
+  'Real Lab content edits must invalidate previous validation evidence.',
+);
 
 console.log('✓ Lab file update safety audit passed');
