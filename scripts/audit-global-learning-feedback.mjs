@@ -7,6 +7,11 @@ const expectations = [
   ['shared cooldown map', 'const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();'],
   ['shared map read', 'const previous = sharedLastTriggeredAt.get(kind);'],
   ['shared map write', 'sharedLastTriggeredAt.set(kind, current);'],
+  ['shared strong-feedback timestamp', 'let sharedLastStrongFeedbackAt: number | undefined;'],
+  ['strong-feedback quiet window', 'const WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS = 160;'],
+  ['selection strong-feedback gate', "if (kind === 'selection' && sharedLastStrongFeedbackAt !== undefined)"],
+  ['strong-feedback timestamp write', "if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;"],
+  ['strong-feedback rollback recovery', 'if (elapsedSinceStrong < 0) {\n          sharedLastStrongFeedbackAt = current;\n          return false;\n        }'],
   ['foreground gate', 'if (!appActive || !nativeAppIsActive()) return false;'],
   ['native foreground source', "import { AppState } from 'react-native';"],
   ['native foreground predicate', "return AppState.currentState === 'active';"],
@@ -40,10 +45,15 @@ if (missing.length) {
 
 const factoryStart = source.indexOf('export function createLearningFeedbackGate');
 const sharedMapStart = source.indexOf('const sharedLastTriggeredAt');
+const sharedStrongStart = source.indexOf('let sharedLastStrongFeedbackAt');
 const sharedAudioStart = source.indexOf('let sharedAudioRequestGeneration');
 const lifecycleInvalidationStart = source.indexOf("AppState.addEventListener('change'");
 if (sharedMapStart < 0 || factoryStart < 0 || sharedMapStart > factoryStart) {
   console.error('Global learning feedback audit failed: cooldown state must live outside individual gate instances.');
+  process.exit(1);
+}
+if (sharedStrongStart < 0 || sharedStrongStart > factoryStart) {
+  console.error('Global learning feedback audit failed: strong-feedback cadence state must be shared across every feedback gate.');
   process.exit(1);
 }
 if (sharedAudioStart < 0 || sharedAudioStart > factoryStart) {
@@ -65,6 +75,14 @@ if (source.includes("success: 180") || source.includes("error: 180")) {
 }
 if (/canTrigger\(tone, appActive\)/.test(source)) {
   console.error('Global learning feedback audit failed: semantic success/error tones must not create independent haptic cooldowns.');
+  process.exit(1);
+}
+if (!/kind === 'selection'[\s\S]{0,700}elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS/.test(source)) {
+  console.error('Global learning feedback audit failed: weak selection haptics must respect the shared post-strong quiet window.');
+  process.exit(1);
+}
+if (!/kind === 'notification' \|\| kind === 'impact'\) sharedLastStrongFeedbackAt = current;/.test(source)) {
+  console.error('Global learning feedback audit failed: notification and impact cues must both establish the shared strong-feedback cadence baseline.');
   process.exit(1);
 }
 if (source.includes('new WeakMap<ReplayableAudioPlayer, number>()')) {
@@ -91,7 +109,7 @@ if (/const generation = supersedeAudio\(\);\s*player\.seekTo\(0\)/.test(source))
   console.error('Global learning feedback audit failed: seekTo must be entered through a promise boundary so synchronous native throws are contained.');
   process.exit(1);
 }
-if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,900}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
+if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,1500}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
   console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
   process.exit(1);
 }
@@ -146,4 +164,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, cooldowns, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, post-strong tactile quiet windows, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
