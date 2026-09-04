@@ -16,6 +16,20 @@ const tapSound = require('../../assets/sounds/tap.wav');
 type Step = 'learn' | 'example' | 'recall' | 'quiz' | 'transfer' | 'lab';
 type RecallConfidence = 'unsure' | 'close' | 'ready';
 
+function lessonExampleFilename(language: string): string {
+  const normalized = language.trim().toLowerCase();
+  if (normalized.includes('html')) return 'index.html';
+  if (normalized.includes('css')) return 'styles.css';
+  if (normalized.includes('typescript')) return 'script.ts';
+  if (normalized.includes('javascript') || normalized === 'js') return 'script.js';
+  if (normalized.includes('python')) return 'main.py';
+  if (normalized.includes('sql')) return 'query.sql';
+  if (normalized.includes('node') || normalized.includes('api')) return 'server.js';
+  if (normalized.includes('bot')) return 'bot.js';
+  if (normalized.includes('git')) return 'commands.sh';
+  return 'example.txt';
+}
+
 export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, onBack }: {
   course: Course;
   lesson: Lesson;
@@ -55,6 +69,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const snapshots = useMemo(() => (lesson.skillIds ?? []).map((id) => masterySnapshot(id, state.mastery)), [lesson.id, state.mastery]);
   const mastery = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
+  const exampleFilename = lessonExampleFilename(course.language);
 
   useEffect(() => {
     if (appActive && !reduceMotion) return;
@@ -193,7 +208,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
           <Text style={styles.prompt}>Lis le code, puis prédis ce qu’il fait.</Text>
           <View style={styles.codeBlock}>
             <View style={styles.codeTop}>
-              <Text style={styles.codeFile}>example.{course.language.toLowerCase().includes('python') ? 'py' : 'txt'}</Text>
+              <Text style={styles.codeFile}>{exampleFilename}</Text>
               <Text style={styles.runBadge}>EXEMPLE</Text>
             </View>
             <Text style={styles.code}>{lesson.example}</Text>
