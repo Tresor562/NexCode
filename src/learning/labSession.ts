@@ -40,7 +40,7 @@ function incomingDraftIsStale(incoming: LabDraft, current: LabDraft) {
   const currentTimestamp = draftTimestamp(current.updatedAt);
   if (currentTimestamp === undefined) return false;
   const incomingTimestamp = draftTimestamp(incoming.updatedAt);
-  return incomingTimestamp === undefined || incomingTimestamp < currentTimestamp;
+  return incomingTimestamp === undefined || incomingTimestamp <= currentTimestamp;
 }
 
 function snapshotLabDraft(draft: LabDraft, updatedAt: string): LabDraft {
