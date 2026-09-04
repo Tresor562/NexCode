@@ -17,6 +17,15 @@ assert.match(source, /setRecallConfidence\(null\)/, 'lesson switch must clear re
 assert.match(source, /setQuizReflection\(''\)/, 'lesson switch and retry flow must clear stale quiz reflections');
 assert.match(source, /setTransferDraft\(''\)/, 'lesson switch must clear transfer drafts');
 
+assert.match(source, /function lessonExampleFilename\(language: string\): string/, 'lesson examples must derive a native-looking filename from the active course language');
+assert.match(source, /normalized\.includes\('html'\).*return 'index\.html'/s, 'HTML examples must look like real HTML files');
+assert.match(source, /normalized\.includes\('javascript'\).*return 'script\.js'/s, 'JavaScript examples must look like real JavaScript files');
+assert.match(source, /normalized\.includes\('python'\).*return 'main\.py'/s, 'Python examples must look like real Python files');
+assert.match(source, /normalized\.includes\('sql'\).*return 'query\.sql'/s, 'SQL examples must look like real SQL files');
+assert.match(source, /const exampleFilename = lessonExampleFilename\(course\.language\);/, 'lesson flow must resolve the example filename once from course metadata');
+assert.match(source, /<Text style=\{styles\.codeFile\}>\{exampleFilename\}<\/Text>/, 'the code card must render the resolved native filename');
+assert.doesNotMatch(source, /example\.\{course\.language\.toLowerCase\(\)\.includes\('python'\) \? 'py' : 'txt'\}/, 'non-Python courses must not fall back to misleading .txt code examples');
+
 assert.match(source, /recallDraft\.trim\(\)\.length >= 3/, 'active recall must require a real written attempt');
 assert.match(source, /disabled=\{!recallAttemptReady\}/, 'recall hint reveal must stay gated by the written attempt');
 assert.match(source, /disabled=\{recallConfidence === null\}/, 'quiz continuation must require recall self-assessment');
@@ -46,4 +55,4 @@ assert.match(feedbackSource, /sharedAudioRequestGeneration !== generation/, 'sha
 assert.doesNotMatch(source, /from 'expo-haptics'/, 'lesson flow must not bypass the shared haptic controller');
 assert.doesNotMatch(source, /player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/, 'lesson flow must not bypass shared stale-audio protection');
 
-console.log('Lesson flow audit OK: lesson-switch reset, active recall, post-quiz retrieval reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
+console.log('Lesson flow audit OK: native code filenames, lesson-switch reset, active recall, post-quiz retrieval reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
