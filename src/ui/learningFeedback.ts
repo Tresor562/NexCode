@@ -23,6 +23,12 @@ const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
 // Premium mobile feedback feels intentional when the strong event gets to land.
 const WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS = 160;
 
+// Notification and impact are technically different native APIs, but they both
+// occupy the same tactile channel for the learner. Serialize them globally so a
+// success/error cue cannot be immediately followed by an impact from an entering
+// CTA, robot reaction or animation. That keeps one semantic event = one clear pulse.
+const STRONG_FEEDBACK_COOLDOWN_MS = 180;
+
 // Feedback gates are created by many independent controls. Keep the cooldown state
 // at module scope so quickly moving between controls cannot produce a burst of
 // duplicate vibrations or sounds just because each control owns a different gate.
@@ -74,10 +80,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     // false and rapid feedback can bypass throttling indefinitely.
     if (!Number.isFinite(current)) return false;
 
-    // Selection ticks are intentionally weaker than notification/impact cues. Give
-    // the stronger haptic a shared quiet window across every control and gate so a
-    // rapid CTA press cannot turn one semantic event into tactile chatter.
-    if (kind === 'selection' && sharedLastStrongFeedbackAt !== undefined) {
+    if (sharedLastStrongFeedbackAt !== undefined) {
       if (!Number.isFinite(sharedLastStrongFeedbackAt)) {
         sharedLastStrongFeedbackAt = undefined;
       } else {
@@ -86,7 +89,11 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
           sharedLastStrongFeedbackAt = current;
           return false;
         }
-        if (elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS) return false;
+        // Weak selection ticks should not chatter after a semantic cue, and strong
+        // channels should not race each other merely because they use distinct
+        // native APIs. Both rules intentionally share the same global timestamp.
+        if (kind === 'selection' && elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS) return false;
+        if ((kind === 'notification' || kind === 'impact') && elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS) return false;
       }
     }
 
