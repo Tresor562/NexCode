@@ -103,10 +103,14 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
   if (!hasRequiredStarterFiles(starter, draft.files)) return 0;
 
   let score = 0;
+  const seenAddedFileEvidence = new Set<string>();
   for (const [filename, rawContent] of Object.entries(draft.files)) {
     const content = canonicalText(rawContent);
     if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
     if (!(filename in starter)) {
+      const evidenceFingerprint = meaningfulEvidenceText(content);
+      if (!evidenceFingerprint || seenAddedFileEvidence.has(evidenceFingerprint)) continue;
+      seenAddedFileEvidence.add(evidenceFingerprint);
       score += addedFileConstructionEvidence(starter, content);
       continue;
     }
