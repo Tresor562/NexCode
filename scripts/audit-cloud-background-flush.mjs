@@ -61,12 +61,24 @@ assert(
   'cloud sync must retain retry timing requested while a reconciliation is still unwinding',
 );
 assert(
+  /let\s+deferredFlushPreservesBackoff\s*=\s*false/.test(cloudSync),
+  'cloud sync must retain whether a deferred flush carries protected retry backoff',
+);
+assert(
   /deferredFlushDelayMs\s*=\s*deferredFlushDelayMs\s*===\s*null[\s\S]{0,220}Math\.max/.test(cloudSync),
   'multiple deferred flush requests must preserve the longest requested delay so a short follow-up cannot erase retry backoff',
 );
 assert(
-  /const\s+deferredDelay\s*=\s*deferredFlushDelayMs;[\s\S]{0,160}queueFlush\(deferredDelay\s*\?\?\s*FOLLOW_UP_DELAY_MS\)/.test(cloudSync),
-  'settled reconciliations must honor deferred retry timing before using the normal follow-up delay',
+  /deferredFlushPreservesBackoff\s*=\s*deferredFlushPreservesBackoff\s*\|\|\s*preserveBackoff/.test(cloudSync),
+  'deferred flush requests must retain retry intent when any queued request is protected by backoff',
+);
+assert(
+  /const\s+deferredDelay\s*=\s*deferredFlushDelayMs;[\s\S]{0,220}const\s+preserveDeferredBackoff\s*=\s*deferredFlushPreservesBackoff;[\s\S]{0,260}queueFlush\(deferredDelay\s*\?\?\s*FOLLOW_UP_DELAY_MS,\s*preserveDeferredBackoff\)/.test(cloudSync),
+  'settled reconciliations must honor deferred retry timing and retry intent before using the normal follow-up delay',
+);
+assert(
+  /deferredFlushDelayMs\s*=\s*null;[\s\S]{0,120}deferredFlushPreservesBackoff\s*=\s*false;/.test(cloudSync),
+  'settled reconciliations must clear both deferred timing and retry intent before queueing the next flush',
 );
 assert(
   initialClearIndex >= 0 &&
@@ -112,4 +124,4 @@ assert(
   'AppState lifecycle listener must be removed on cleanup',
 );
 
-console.log('Cloud background flush audit passed.');
+console.log('Cloud background flush audit passed: deferred retry timing and retry intent survive in-flight reconciliation and lifecycle flushes.');
