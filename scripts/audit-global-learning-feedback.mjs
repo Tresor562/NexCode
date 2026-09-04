@@ -8,8 +8,11 @@ const expectations = [
   ['shared map read', 'const previous = sharedLastTriggeredAt.get(kind);'],
   ['shared map write', 'sharedLastTriggeredAt.set(kind, current);'],
   ['shared strong-feedback timestamp', 'let sharedLastStrongFeedbackAt: number | undefined;'],
-  ['strong-feedback quiet window', 'const WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS = 160;'],
-  ['selection strong-feedback gate', "if (kind === 'selection' && sharedLastStrongFeedbackAt !== undefined)"],
+  ['weak-after-strong quiet window', 'const WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS = 160;'],
+  ['strong-feedback serialization window', 'const STRONG_FEEDBACK_COOLDOWN_MS = 180;'],
+  ['shared strong-feedback gate', 'if (sharedLastStrongFeedbackAt !== undefined)'],
+  ['selection strong-feedback gate', "if (kind === 'selection' && elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS) return false;"],
+  ['strong-channel serialization gate', "if ((kind === 'notification' || kind === 'impact') && elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS) return false;"],
   ['strong-feedback timestamp write', "if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;"],
   ['strong-feedback rollback recovery', 'if (elapsedSinceStrong < 0) {\n          sharedLastStrongFeedbackAt = current;\n          return false;\n        }'],
   ['foreground gate', 'if (!appActive || !nativeAppIsActive()) return false;'],
@@ -81,6 +84,10 @@ if (!/kind === 'selection'[\s\S]{0,700}elapsedSinceStrong < WEAK_FEEDBACK_AFTER_
   console.error('Global learning feedback audit failed: weak selection haptics must respect the shared post-strong quiet window.');
   process.exit(1);
 }
+if (!/kind === 'notification' \|\| kind === 'impact'[\s\S]{0,180}elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS/.test(source)) {
+  console.error('Global learning feedback audit failed: notification and impact cues must share one serialized strong-haptic cadence.');
+  process.exit(1);
+}
 if (!/kind === 'notification' \|\| kind === 'impact'\) sharedLastStrongFeedbackAt = current;/.test(source)) {
   console.error('Global learning feedback audit failed: notification and impact cues must both establish the shared strong-feedback cadence baseline.');
   process.exit(1);
@@ -109,7 +116,7 @@ if (/const generation = supersedeAudio\(\);\s*player\.seekTo\(0\)/.test(source))
   console.error('Global learning feedback audit failed: seekTo must be entered through a promise boundary so synchronous native throws are contained.');
   process.exit(1);
 }
-if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,1500}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
+if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,1800}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
   console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
   process.exit(1);
 }
@@ -164,4 +171,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, post-strong tactile quiet windows, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
