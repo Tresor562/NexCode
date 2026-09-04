@@ -3,6 +3,7 @@ import type { LabDraft } from '../lib/localState';
 
 const MIN_CHANGED_CHARS_PER_STEP = 24;
 const ADDED_FILE_EVIDENCE_CHARS = 48;
+const NON_CODE_EVIDENCE_EXTENSIONS = new Set(['md', 'markdown', 'txt', 'rst']);
 
 function canonicalText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : '';
@@ -39,6 +40,20 @@ function projectStarterFiles(project: GuidedProject): Record<string, string> {
 
 function hasRequiredStarterFiles(starter: Record<string, string>, files: Record<string, unknown>): boolean {
   return Object.keys(starter).every((filename) => canonicalText(files[filename]).trim().length > 0);
+}
+
+function isConstructionEvidenceFile(filename: string, starter: Record<string, string>): boolean {
+  const normalized = filename.trim().toLowerCase();
+  const extension = normalized.includes('.') ? normalized.split('.').pop() ?? '' : '';
+  if (!NON_CODE_EVIDENCE_EXTENSIONS.has(extension)) return true;
+
+  // Documentation is useful, but it must not unlock coding milestones for a
+  // workspace that already contains executable/source starter files. Pure-text
+  // fallback projects remain scoreable so non-code curricula are not blocked.
+  return !Object.keys(starter).some((starterFilename) => {
+    const starterExtension = starterFilename.toLowerCase().split('.').pop() ?? '';
+    return !NON_CODE_EVIDENCE_EXTENSIONS.has(starterExtension);
+  });
 }
 
 function changedCharacterEvidence(before: string, after: string): number {
@@ -90,7 +105,7 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
   let score = 0;
   for (const [filename, rawContent] of Object.entries(draft.files)) {
     const content = canonicalText(rawContent);
-    if (!content.trim()) continue;
+    if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
     if (!(filename in starter)) {
       score += addedFileConstructionEvidence(starter, content);
       continue;
