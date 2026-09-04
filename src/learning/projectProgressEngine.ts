@@ -44,6 +44,12 @@ function validRewardTime(value: Date, systemNow = new Date()): Date {
     : trustedSystemNow;
 }
 
+function portfolioProofTimestamp(proof: PortfolioProof | undefined): number | null {
+  if (!proof || typeof proof.completedAt !== 'string') return null;
+  const completedAt = Date.parse(proof.completedAt);
+  return Number.isFinite(completedAt) ? completedAt : null;
+}
+
 function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProject, now: Date): boolean {
   const projectId = typeof proof.projectId === 'string' ? proof.projectId.trim() : '';
   const title = typeof proof.title === 'string' ? proof.title.trim() : '';
@@ -132,7 +138,9 @@ export function advanceProjectProgress(
  *
  * The first portfolio proof earns the one-time completion reward only after the
  * guided project itself has reached 100%. Later valid edits replace the proof in
- * place so learners can improve evidence without farming XP/NexCoins.
+ * place so learners can improve evidence without farming XP/NexCoins. Stale or
+ * equal-version callbacks are ignored so an older editor state cannot overwrite a
+ * newer portfolio proof after a fast save/sync sequence.
  */
 export function recordPortfolioProof(
   state: LocalState,
@@ -145,6 +153,11 @@ export function recordPortfolioProof(
 
   const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId === project.id);
   if (existingIndex >= 0) {
+    const existingProof = state.portfolioProofs[existingIndex];
+    const existingCompletedAt = portfolioProofTimestamp(existingProof);
+    const incomingCompletedAt = portfolioProofTimestamp(proof);
+    if (incomingCompletedAt === null) return state;
+    if (existingCompletedAt !== null && incomingCompletedAt <= existingCompletedAt) return state;
     return {
       ...state,
       portfolioProofs: state.portfolioProofs.map((item, index) => index === existingIndex ? proof : item),
