@@ -4,17 +4,24 @@ import type { LabDraft } from '../lib/localState';
 const MIN_CHANGED_CHARS_PER_STEP = 24;
 const ADDED_FILE_EVIDENCE_CHARS = 48;
 const NON_CODE_EVIDENCE_EXTENSIONS = new Set(['md', 'markdown', 'txt', 'rst']);
+const HASH_COMMENT_EVIDENCE_EXTENSIONS = new Set(['py', 'rb', 'sh', 'bash', 'zsh', 'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf']);
 
 function canonicalText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : '';
 }
 
-function meaningfulEvidenceText(value: unknown): string {
+function meaningfulEvidenceText(value: unknown, filename = ''): string {
+  const extension = filename.trim().toLowerCase().split('.').pop() ?? '';
   return canonicalText(value)
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n')
-    .filter((line) => !/^\s*(?:\/\/|#|--)(?:\s|$)/.test(line))
+    .filter((line) => {
+      if (/^\s*\/\/(?:\s|$)/.test(line)) return false;
+      if (extension === 'sql' && /^\s*--(?:\s|$)/.test(line)) return false;
+      if (HASH_COMMENT_EVIDENCE_EXTENSIONS.has(extension) && /^\s*#(?:\s|$)/.test(line)) return false;
+      return true;
+    })
     .join('\n')
     .replace(/\s+/g, '');
 }
@@ -56,9 +63,9 @@ function isConstructionEvidenceFile(filename: string, starter: Record<string, st
   });
 }
 
-function changedCharacterEvidence(before: string, after: string): number {
-  const left = meaningfulEvidenceText(before);
-  const right = meaningfulEvidenceText(after);
+function changedCharacterEvidence(before: string, after: string, filename: string): number {
+  const left = meaningfulEvidenceText(before, filename);
+  const right = meaningfulEvidenceText(after, filename);
   if (left === right) return 0;
 
   let prefix = 0;
@@ -80,8 +87,8 @@ function changedCharacterEvidence(before: string, after: string): number {
   return Math.max(0, added);
 }
 
-function addedFileConstructionEvidence(starter: Record<string, string>, content: string): number {
-  const meaningfulContent = meaningfulEvidenceText(content);
+function addedFileConstructionEvidence(starter: Record<string, string>, filename: string, content: string): number {
+  const meaningfulContent = meaningfulEvidenceText(content, filename);
   if (!meaningfulContent) return 0;
 
   // A copied starter with one token appended must only earn credit for that new
@@ -89,7 +96,7 @@ function addedFileConstructionEvidence(starter: Record<string, string>, content:
   // novelty ceiling for newly added files.
   const noveltyAgainstClosestStarter = Math.min(
     meaningfulContent.length,
-    ...Object.values(starter).map((starterContent) => changedCharacterEvidence(starterContent, content)),
+    ...Object.values(starter).map((starterContent) => changedCharacterEvidence(starterContent, content, filename)),
   );
 
   return Math.min(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent.length, noveltyAgainstClosestStarter);
@@ -112,9 +119,9 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
   for (const [filename, starterContent] of Object.entries(starter)) {
     const content = canonicalText(draft.files[filename]);
     if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
-    const earnedEvidence = changedCharacterEvidence(starterContent, content);
+    const earnedEvidence = changedCharacterEvidence(starterContent, content, filename);
     if (earnedEvidence <= 0) continue;
-    const evidenceFingerprint = meaningfulEvidenceText(content);
+    const evidenceFingerprint = meaningfulEvidenceText(content, filename);
     if (!evidenceFingerprint || creditedConstructionFingerprints.has(evidenceFingerprint)) continue;
     creditedConstructionFingerprints.add(evidenceFingerprint);
     score += earnedEvidence;
@@ -124,10 +131,10 @@ export function projectWorkspaceEvidenceScore(project: GuidedProject, draft: Lab
     if (filename in starter) continue;
     const content = canonicalText(rawContent);
     if (!content.trim() || !isConstructionEvidenceFile(filename, starter)) continue;
-    const evidenceFingerprint = meaningfulEvidenceText(content);
+    const evidenceFingerprint = meaningfulEvidenceText(content, filename);
     if (!evidenceFingerprint || creditedConstructionFingerprints.has(evidenceFingerprint)) continue;
     creditedConstructionFingerprints.add(evidenceFingerprint);
-    score += addedFileConstructionEvidence(starter, content);
+    score += addedFileConstructionEvidence(starter, filename, content);
   }
   return score;
 }
