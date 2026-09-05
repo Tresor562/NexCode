@@ -153,11 +153,17 @@ export function buildPortfolioProof(
 }
 
 export function portfolioSkillCoverage(proofs: PortfolioProof[]) {
-  const covered = new Map<string, number>();
+  const projectsBySkill = new Map<string, Set<string>>();
   for (const proof of proofs) {
+    const projectId = typeof proof.projectId === 'string' ? normalize(proof.projectId) : '';
+    if (!projectId) continue;
     for (const skillId of canonicalProofSkillIds(proof.skillIds)) {
-      covered.set(skillId, (covered.get(skillId) ?? 0) + 1);
+      const projects = projectsBySkill.get(skillId) ?? new Set<string>();
+      projects.add(projectId);
+      projectsBySkill.set(skillId, projects);
     }
   }
-  return [...covered.entries()].map(([skillId, projectCount]) => ({ skillId, projectCount })).sort((a, b) => b.projectCount - a.projectCount);
+  return [...projectsBySkill.entries()]
+    .map(([skillId, projectIds]) => ({ skillId, projectCount: projectIds.size }))
+    .sort((a, b) => b.projectCount - a.projectCount || a.skillId.localeCompare(b.skillId));
 }
