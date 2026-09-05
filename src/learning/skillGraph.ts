@@ -96,6 +96,56 @@ function nextReviewDays(score: number, consecutiveCorrect: number, correct: bool
   return 1;
 }
 
+function boundedCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(maximum, Math.floor(value)));
+}
+
+function boundedScore(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : 0;
+}
+
+function usableAttemptTime(now: Date) {
+  return Number.isFinite(now.getTime()) ? now : new Date();
+}
+
+function latestPracticedTime(map: MasteryMap, skillIds: string[]) {
+  let latest = Number.NEGATIVE_INFINITY;
+  for (const skillId of skillIds) {
+    const timestamp = new Date(map[skillId]?.lastPracticedAt ?? '').getTime();
+    if (Number.isFinite(timestamp)) latest = Math.max(latest, timestamp);
+  }
+  return latest;
+}
+
+function monotonicAttemptTime(map: MasteryMap, lesson: Lesson, candidate: Date) {
+  const candidateMs = candidate.getTime();
+  const latestMs = latestPracticedTime(map, lesson.skillIds ?? []);
+  if (!Number.isFinite(latestMs) || candidateMs > latestMs) return candidate;
+  return new Date(latestMs + 1);
+}
+
+export function masteryConfidence(attempts: number, correctAttempts: number) {
+  if (!Number.isFinite(attempts) || !Number.isFinite(correctAttempts) || attempts <= 0 || correctAttempts <= 0) return 0;
+  const boundedAttempts = Math.max(0, Math.floor(attempts));
+  const boundedCorrect = Math.max(0, Math.min(boundedAttempts, Math.floor(correctAttempts)));
+  if (boundedAttempts === 0 || boundedCorrect === 0) return 0;
+
+  // Confidence should represent repeated evidence, not a single lucky answer.
+  // The previous formula produced 73% confidence after one correct attempt,
+  // which was enough to satisfy the mastery confidence gate immediately.
+  // Evidence depth now ramps over the first four attempts and observed
+  // accuracy scales the whole confidence budget. A learner therefore needs
+  // several consistent attempts before confidence can cross the 70% gate.
+  const accuracy = boundedCorrect / boundedAttempts;
+  const evidenceDepth = Math.min(1, boundedAttempts / 4);
+  const depthBudget = 70 * evidenceDepth;
+  const repetitionBudget = Math.min(boundedAttempts, 10) * 3;
+  return Math.max(0, Math.min(100, Math.round(accuracy * (depthBudget + repetitionBudget))));
+}
+
 export function recordSkillAttempt(
   map: MasteryMap,
   lesson: Lesson,
@@ -104,6 +154,8 @@ export function recordSkillAttempt(
   errorTag?: string,
 ): MasteryMap {
   const next = { ...map };
+  const attemptTime = monotonicAttemptTime(map, lesson, usableAttemptTime(now));
+  const attemptIso = attemptTime.toISOString();
   for (const skillId of lesson.skillIds ?? []) {
     const previous = next[skillId] ?? {
       skillId,
@@ -116,21 +168,27 @@ export function recordSkillAttempt(
       errorTags: [],
       evidence: [],
     };
-    const attempts = previous.attempts + 1;
-    const correctAttempts = previous.correctAttempts + (correct ? 1 : 0);
-    const consecutiveCorrect = correct ? previous.consecutiveCorrect + 1 : 0;
+    const previousAttempts = boundedCount(previous.attempts);
+    const previousCorrectAttempts = boundedCount(previous.correctAttempts, previousAttempts);
+    const previousConsecutiveCorrect = boundedCount(previous.consecutiveCorrect, previousAttempts);
+    const previousScore = boundedScore(previous.score);
+    const previousErrorTags = Array.isArray(previous.errorTags) ? previous.errorTags.filter((tag) => typeof tag === 'string') : [];
+    const previousEvidence = Array.isArray(previous.evidence) ? previous.evidence : [];
+    const attempts = previousAttempts + 1;
+    const correctAttempts = Math.min(attempts, previousCorrectAttempts + (correct ? 1 : 0));
+    const consecutiveCorrect = correct ? Math.min(attempts, previousConsecutiveCorrect + 1) : 0;
     const delta = qualityWeight(lesson, correct);
-    const score = Math.max(0, Math.min(100, previous.score + delta));
-    const confidence = Math.max(0, Math.min(100, Math.round((correctAttempts / attempts) * 70 + Math.min(attempts, 10) * 3)));
+    const score = Math.max(0, Math.min(100, previousScore + delta));
+    const confidence = masteryConfidence(attempts, correctAttempts);
     const reviewDays = nextReviewDays(score, consecutiveCorrect, correct);
-    const nextReview = new Date(now);
+    const nextReview = new Date(attemptTime);
     nextReview.setDate(nextReview.getDate() + reviewDays);
     const evidence: AttemptEvidence = {
       lessonId: lesson.id,
       activityKind: lesson.activityKind ?? 'learn',
       correct,
       scoreDelta: delta,
-      at: now.toISOString(),
+      at: attemptIso,
       errorTag: !correct ? errorTag : undefined,
     };
     next[skillId] = {
@@ -141,10 +199,10 @@ export function recordSkillAttempt(
       attempts,
       correctAttempts,
       consecutiveCorrect,
-      lastPracticedAt: now.toISOString(),
+      lastPracticedAt: attemptIso,
       nextReviewAt: nextReview.toISOString(),
-      errorTags: errorTag && !correct ? [...new Set([...previous.errorTags, errorTag])].slice(-8) : previous.errorTags,
-      evidence: [...previous.evidence, evidence].slice(-20),
+      errorTags: errorTag && !correct ? [...new Set([...previousErrorTags, errorTag])].slice(-8) : previousErrorTags,
+      evidence: [...previousEvidence, evidence].slice(-20),
     };
   }
   return next;
@@ -162,7 +220,12 @@ export function missingPrerequisites(node: SkillNode, mastery: MasteryMap) {
 export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
   const state = mastery[node.id];
   if (!state || state.score < 55) return true;
-  return !state.evidence.some((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind));
+  const contexts = new Set(
+    state.evidence
+      .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind))
+      .map((item) => `${item.activityKind}:${item.lessonId}`),
+  );
+  return contexts.size < 2;
 }
 
 export function courseMastery(course: Course, mastery: MasteryMap): number {

@@ -21,7 +21,22 @@ jobs:
       - name: Check Expo dependency compatibility
         run: npx expo install --check
       - name: Audit production dependencies
-        run: npm audit --omit=dev --audit-level=critical
+        shell: bash
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            echo "Production dependency audit attempt ${attempt}/3"
+            npm audit --omit=dev --audit-level=critical
+            status=$?
+            if [ "$status" -eq 0 ]; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              sleep $((attempt * 10))
+            fi
+          done
+          echo "::error::Production dependency audit failed after 3 attempts."
+          exit "$status"
       - run: npm run validate:content
       - run: npm run audit:curriculum
       - run: npm run audit:mastery

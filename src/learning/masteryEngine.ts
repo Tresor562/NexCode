@@ -24,9 +24,21 @@ export type GateResult = {
   missingIndependentEvidence: string[];
 };
 
+const MAX_FUTURE_PRACTICE_SKEW_MS = 5 * 60 * 1000;
+
+function boundedPercent(value: unknown, fallback = 0) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : fallback;
+}
+
 function ageDays(iso: string | undefined, now: Date) {
   if (!iso) return Number.POSITIVE_INFINITY;
-  return Math.max(0, (now.getTime() - new Date(iso).getTime()) / 86_400_000);
+  const nowMs = now.getTime();
+  const practicedMs = new Date(iso).getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(practicedMs)) return Number.POSITIVE_INFINITY;
+  if (practicedMs - nowMs > MAX_FUTURE_PRACTICE_SKEW_MS) return Number.POSITIVE_INFINITY;
+  return Math.max(0, (nowMs - practicedMs) / 86_400_000);
 }
 
 function retentionFactor(state: SkillMastery, now: Date) {
@@ -38,6 +50,37 @@ function retentionFactor(state: SkillMastery, now: Date) {
   if (days <= 30) return 0.88;
   if (days <= 60) return 0.8;
   return 0.7;
+}
+
+function recurringErrorTags(state: SkillMastery) {
+  const counts = new Map<string, number>();
+  for (const attempt of state.evidence.slice(-12)) {
+    if (attempt.correct || !attempt.errorTag) continue;
+    counts.set(attempt.errorTag, (counts.get(attempt.errorTag) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag]) => tag);
+}
+
+function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
+  if (!nextReviewAt) return true;
+  const timestamp = new Date(nextReviewAt).getTime();
+  return !Number.isFinite(timestamp) || timestamp <= now.getTime();
+}
+
+function independentEvidenceContextCount(state: SkillMastery) {
+  const contexts = new Set<string>();
+  for (const evidence of state.evidence) {
+    if (!evidence.correct || !['lab', 'checkpoint', 'boss', 'project'].includes(evidence.activityKind)) continue;
+    contexts.add(`${evidence.activityKind}:${evidence.lessonId}`);
+  }
+  return contexts.size;
+}
+
+function snapshotIsMastered(snapshot: MasterySnapshot) {
+  return snapshot.effectiveScore >= 85 && snapshot.confidence >= 70 && snapshot.independentEvidence;
 }
 
 export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new Date()): MasterySnapshot {
@@ -55,22 +98,22 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
       independentEvidence: false,
     };
   }
-  const effectiveScore = Math.round(state.score * retentionFactor(state, now));
+  const rawScore = boundedPercent(state.score);
+  const confidence = boundedPercent(state.confidence);
+  const effectiveScore = Math.round(rawScore * retentionFactor(state, now));
   const evidenceKinds = [...new Set(state.evidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
-  const counts = new Map<string, number>();
-  for (const tag of state.errorTags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  const recurringErrors = [...counts.entries()].filter(([, count]) => count >= 2).map(([tag]) => tag);
-  const independentEvidence = evidenceKinds.some((kind) => ['lab', 'checkpoint', 'boss', 'project'].includes(kind));
-  const due = !state.nextReviewAt || new Date(state.nextReviewAt).getTime() <= now.getTime();
+  const recurringErrors = recurringErrorTags(state);
+  const independentEvidence = independentEvidenceContextCount(state) >= 2;
+  const due = reviewIsDue(state.nextReviewAt, now);
   return {
     skillId,
-    rawScore: state.score,
+    rawScore,
     effectiveScore,
-    confidence: state.confidence,
+    confidence,
     band: masteryBand(effectiveScore),
     evidenceKinds,
     recurringErrors,
-    needsReview: due || effectiveScore < state.score - 5,
+    needsReview: due || effectiveScore < rawScore - 5,
     independentEvidence,
   };
 }
@@ -87,16 +130,28 @@ export function evidenceStrength(snapshot: MasterySnapshot) {
 }
 
 export function skillIsMastered(skillId: string, mastery: MasteryMap, now = new Date()) {
-  const snapshot = masterySnapshot(skillId, mastery, now);
-  return snapshot.effectiveScore >= 85 && snapshot.confidence >= 70 && snapshot.independentEvidence;
+  return snapshotIsMastered(masterySnapshot(skillId, mastery, now));
 }
 
 export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, required = 70, now = new Date()): GateResult {
+  const normalizedRequired = boundedPercent(required, 100);
   const snapshots = skillIds.map((id) => masterySnapshot(id, mastery, now));
+  const confidenceRequired = Math.min(70, normalizedRequired);
   const missingSkills = snapshots.filter((item) => item.rawScore === 0).map((item) => item.skillId);
-  const weakSkills = snapshots.filter((item) => item.rawScore > 0 && item.effectiveScore < required).map((item) => item.skillId);
+  const weakSkills = snapshots
+    .filter(
+      (item) =>
+        item.rawScore > 0 &&
+        (item.effectiveScore < normalizedRequired || item.confidence < confidenceRequired),
+    )
+    .map((item) => item.skillId);
   const missingIndependentEvidence = snapshots
-    .filter((item) => item.effectiveScore >= required && !item.independentEvidence)
+    .filter(
+      (item) =>
+        item.effectiveScore >= normalizedRequired &&
+        item.confidence >= confidenceRequired &&
+        !item.independentEvidence,
+    )
     .map((item) => item.skillId);
   const score = snapshots.length
     ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length)
@@ -104,7 +159,7 @@ export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, requi
   return {
     passed: missingSkills.length === 0 && weakSkills.length === 0 && missingIndependentEvidence.length === 0,
     score,
-    required,
+    required: normalizedRequired,
     missingSkills,
     weakSkills,
     missingIndependentEvidence,
@@ -114,7 +169,7 @@ export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, requi
 export function courseMasterySnapshot(course: Course, mastery: MasteryMap, now = new Date()) {
   const snapshots = course.skillIds.map((id) => masterySnapshot(id, mastery, now));
   const score = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
-  const mastered = snapshots.filter((item) => item.effectiveScore >= 85 && item.independentEvidence).length;
+  const mastered = snapshots.filter(snapshotIsMastered).length;
   const dueForReview = snapshots.filter((item) => item.needsReview).length;
   return { score, mastered, total: snapshots.length, dueForReview, snapshots };
 }
