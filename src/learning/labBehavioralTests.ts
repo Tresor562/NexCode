@@ -23,6 +23,8 @@ const secretPatterns = [
   /\b(?:sk_live|rk_live)_[A-Za-z0-9]{16,}\b/,
   /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
   /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{35}\b/,
 ];
 
 function normalizeSource(content: string): string {
