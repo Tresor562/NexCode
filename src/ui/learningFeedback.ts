@@ -29,11 +29,19 @@ const WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS = 160;
 // CTA, robot reaction or animation. That keeps one semantic event = one clear pulse.
 const STRONG_FEEDBACK_COOLDOWN_MS = 180;
 
+// Success/error audio is requested immediately after its semantic notification.
+// Native audio seeking can be slower than the learner's next tap, so a later tap
+// sound used to supersede the still-pending success/error cue. Protect that semantic
+// sound briefly once it has been accepted; weak tap sounds may resume afterwards.
+const SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS = 40;
+const SEMANTIC_AUDIO_PROTECTION_MS = 180;
+
 // Feedback gates are created by many independent controls. Keep the cooldown state
 // at module scope so quickly moving between controls cannot produce a burst of
 // duplicate vibrations or sounds just because each control owns a different gate.
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 let sharedLastStrongFeedbackAt: number | undefined;
+let sharedSemanticAudioProtectedUntil: number | undefined;
 
 // Success and error are different semantic tones, but they drive the same physical
 // notification channel. Gate them together so a fast correction after a mistake
@@ -60,7 +68,10 @@ function supersedeAudio(): number {
 // returns. Without a lifecycle generation bump that stale cue would look active
 // again and could play late on resume.
 AppState.addEventListener('change', (nextState) => {
-  if (nextState !== 'active') supersedeAudio();
+  if (nextState !== 'active') {
+    sharedSemanticAudioProtectedUntil = undefined;
+    supersedeAudio();
+  }
 });
 
 function nativeAppIsActive(): boolean {
@@ -68,13 +79,13 @@ function nativeAppIsActive(): boolean {
 }
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
-  function canTrigger(kind: LearningFeedbackKind, appActive: boolean) {
+  function canTrigger(kind: LearningFeedbackKind, appActive: boolean, sampledAt?: number) {
     // React state can lag a native lifecycle transition by a render. Require both
     // the caller's state and the native AppState before firing *any* feedback,
     // not only audio. This prevents haptics from vibrating after the learner has
     // already backgrounded NexCode while the UI still carries a stale active flag.
     if (!appActive || !nativeAppIsActive()) return false;
-    const current = now();
+    const current = sampledAt ?? now();
     // A mocked or platform clock returning NaN/Infinity must never poison the
     // shared cooldown map. Once NaN is stored, every elapsed comparison becomes
     // false and rapid feedback can bypass throttling indefinitely.
@@ -141,13 +152,42 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       // audio first, but checking here as well closes the race where React still
       // reports active while the native app is already backgrounded.
       if (!appActive || !nativeAppIsActive()) {
+        sharedSemanticAudioProtectedUntil = undefined;
         supersedeAudio();
         return;
       }
+
+      const current = now();
+      if (!Number.isFinite(current)) return;
+
+      // A weak tap requested while a success/error cue is still landing must not
+      // invalidate that semantic cue's async seek generation. Reject it before the
+      // normal sound cooldown and, crucially, before supersedeAudio().
+      if (sharedSemanticAudioProtectedUntil !== undefined) {
+        if (!Number.isFinite(sharedSemanticAudioProtectedUntil) || current < 0) {
+          sharedSemanticAudioProtectedUntil = undefined;
+        } else if (current < sharedSemanticAudioProtectedUntil) {
+          return;
+        } else {
+          sharedSemanticAudioProtectedUntil = undefined;
+        }
+      }
+
       // A request rejected only by the sound cooldown is different: it should not
       // silence an already accepted success/error cue just because the learner taps
       // the next control immediately.
-      if (!canTrigger('sound', true)) return;
+      if (!canTrigger('sound', true, current)) return;
+
+      // Notification feedback is emitted immediately before success/error audio in
+      // the lesson flow. That close temporal pairing identifies a semantic sound
+      // without coupling this shared utility to any concrete audio player instance.
+      if (sharedLastStrongFeedbackAt !== undefined && Number.isFinite(sharedLastStrongFeedbackAt)) {
+        const elapsedSinceStrong = current - sharedLastStrongFeedbackAt;
+        if (elapsedSinceStrong >= 0 && elapsedSinceStrong <= SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS) {
+          sharedSemanticAudioProtectedUntil = current + SEMANTIC_AUDIO_PROTECTION_MS;
+        }
+      }
+
       const generation = supersedeAudio();
       // Start from a resolved promise so a native/player implementation that
       // throws synchronously from seekTo is handled exactly like a rejected seek.
