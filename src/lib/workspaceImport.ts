@@ -7,6 +7,9 @@ const TEXT_EXTENSIONS = new Set([
 const IGNORED_DIRECTORIES = new Set([
   '.git','.hg','.svn','node_modules','vendor','dist','build','.next','.expo','.turbo','.cache','coverage','pods','deriveddata',
 ]);
+const SENSITIVE_DIRECTORIES = new Set([
+  '.ssh','.aws','.gnupg','.azure','.kube','.docker','.gcloud',
+]);
 const MAX_TEXT_BYTES = 1_500_000;
 const MAX_TEXT_CHARS = 1_500_000;
 const MAX_TOTAL_TEXT_CHARS = 5_000_000;
@@ -169,7 +172,12 @@ export async function importFolderFromPhone(existing: Record<string, string>): P
     for (const entry of entries) {
       if (workspaceFiles >= MAX_FILES_PER_WORKSPACE || workspaceChars >= MAX_TOTAL_TEXT_CHARS) break;
       if (entry instanceof Directory) {
-        if (!isSafeSegment(entry.name) || IGNORED_DIRECTORIES.has(entry.name.toLowerCase())) continue;
+        const normalizedDirectoryName = entry.name.toLowerCase();
+        if (
+          !isSafeSegment(entry.name)
+          || IGNORED_DIRECTORIES.has(normalizedDirectoryName)
+          || SENSITIVE_DIRECTORIES.has(normalizedDirectoryName)
+        ) continue;
         await walk(entry, `${prefix}${entry.name}/`, depth + 1);
         continue;
       }
