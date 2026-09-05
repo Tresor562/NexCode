@@ -196,13 +196,21 @@ function containsLikelySecret(files: Record<string, string>) {
   return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test|changeme)[A-Za-z0-9_-]{12,}/i.test(text);
 }
 
-function meaningfulEvidenceSource(content: string) {
+function meaningfulEvidenceSource(content: string, filename: string) {
+  const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
+  const supportsHashComments = /\.(?:py|pyw|sh|bash|zsh|fish|ya?ml|toml|ini|cfg|conf)$/i.test(normalizedName);
+  const supportsSqlComments = /\.sql$/i.test(normalizedName);
   return content
     .replace(/\r\n?/g, '\n')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n')
-    .filter((line) => !/^\s*(?:\/\/|#|--)(?:\s|$)/.test(line))
+    .filter((line) => {
+      if (/^\s*\/\/(?:\s|$)/.test(line)) return false;
+      if (supportsHashComments && /^\s*#(?:\s|$)/.test(line)) return false;
+      if (supportsSqlComments && /^\s*--(?:\s|$)/.test(line)) return false;
+      return true;
+    })
     .join('\n')
     .replace(/\s+/g, '');
 }
@@ -210,14 +218,14 @@ function meaningfulEvidenceSource(content: string) {
 function meaningfulChange(mission: LabMission, files: Record<string, string>) {
   const starterFiles = mission.starterFiles ?? starterFilesFor(mission.language, mission.starterCode ?? '');
   const filesByKey = new Map(
-    Object.entries(files).map(([filename, content]) => [workspaceCollisionKey(filename), content]),
+    Object.entries(files).map(([filename, content]) => [workspaceCollisionKey(filename), { filename, content }]),
   );
 
   // Starter destruction must never satisfy the Lab learning-evidence gate.
   for (const [filename, starterContent] of Object.entries(starterFiles)) {
-    const content = filesByKey.get(workspaceCollisionKey(filename));
-    if (content === undefined) return false;
-    if (meaningfulEvidenceSource(starterContent).length > 0 && meaningfulEvidenceSource(content).length === 0) return false;
+    const stored = filesByKey.get(workspaceCollisionKey(filename));
+    if (stored === undefined) return false;
+    if (meaningfulEvidenceSource(starterContent, filename).length > 0 && meaningfulEvidenceSource(stored.content, stored.filename).length === 0) return false;
   }
 
   for (const [filename, content] of Object.entries(files)) {
@@ -225,13 +233,10 @@ function meaningfulChange(mission: LabMission, files: Record<string, string>) {
       (candidate) => workspaceCollisionKey(candidate) === workspaceCollisionKey(filename),
     );
     if (!starterFilename) {
-      // Adding a placeholder file such as "x" is not learning evidence. Require a
-      // small but non-trivial body of executable/markup content before an added
-      // file can unlock a Lab milestone on its own.
-      if (meaningfulEvidenceSource(content).length >= 12) return true;
+      if (meaningfulEvidenceSource(content, filename).length >= 12) return true;
       continue;
     }
-    if (meaningfulEvidenceSource(content) !== meaningfulEvidenceSource(starterFiles[starterFilename] ?? '')) return true;
+    if (meaningfulEvidenceSource(content, filename) !== meaningfulEvidenceSource(starterFiles[starterFilename] ?? '', starterFilename)) return true;
   }
 
   return false;
