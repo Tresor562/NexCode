@@ -12,6 +12,8 @@ assert.match(source, /Math\.min\(10_000, safeAttemptCount\(state\.lessonAttempts
 assert.doesNotMatch(source, /\(state\.lessonAttempts\[lesson\.id\] \?\? 0\) \+ 1/, 'raw persisted attempt counters must not flow directly into pedagogy gating');
 assert.match(source, /export function recordLessonOutcome\(/, 'attempt recording must have a reward-free outcome path shared by UI and indexed answers');
 assert.match(source, /return recordLessonOutcome\(state, lesson, correct, errorTag, now\);/, 'indexed answers must delegate to the shared attempt outcome path');
+assert.match(source, /const clockSkewMs = value\.getTime\(\) - safeSystemNow\.getTime\(\);/, 'trusted lesson time must measure clock skew in both directions');
+assert.match(source, /Math\.abs\(clockSkewMs\) <= MAX_EVIDENCE_CLOCK_SKEW_MS \? value : safeSystemNow/, 'future and regressed device clocks must both clamp to the trusted system clock');
 
 const attemptStart = source.indexOf('export function recordLessonOutcome(');
 const answerStart = source.indexOf('export function recordLessonAnswer(');
@@ -31,4 +33,4 @@ assert.match(rewardSection, /const rewardTime = trustedCompletionTime\(now\);/, 
 assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'only the completion boundary should mint the learning reward through the trusted clock');
 assert.doesNotMatch(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'raw caller time must never reach the progression reward boundary');
 
-console.log('Session attempt audit OK: attempts are bounded and reward-free, while mastery evidence and completion rewards share the trusted clock boundary.');
+console.log('Session attempt audit OK: attempts are bounded and reward-free, while mastery evidence and completion rewards share a bidirectional trusted clock boundary.');
