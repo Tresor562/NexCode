@@ -38,11 +38,10 @@ const scheduleBody = extractFunctionBody(
   'export function scheduleCloudStatePush(state: LocalState, delayMs = DEFAULT_PUSH_DELAY_MS): void',
 );
 const initialClearIndex = immediateFlush.indexOf('clearPendingPush();');
-const awaitFlushIndex = immediateFlush.indexOf('const completed = await flushLatestState();');
-const failedReturnIndex = immediateFlush.indexOf('if (!completed) return;');
-const successfulClearIndex = immediateFlush.indexOf('clearPendingPush();', initialClearIndex + 1);
-const drainIndex = immediateFlush.indexOf('if (latestState)');
-const secondFlushIndex = immediateFlush.indexOf('await flushLatestState();', drainIndex);
+const drainLoopIndex = immediateFlush.indexOf('while (latestState || activeFlush)');
+const awaitFlushIndex = immediateFlush.indexOf('const completed = await flushLatestState();', drainLoopIndex);
+const failedReturnIndex = immediateFlush.indexOf('if (!completed) return;', awaitFlushIndex);
+const successfulClearIndex = immediateFlush.indexOf('clearPendingPush();', failedReturnIndex);
 
 assert(
   /export\s+async\s+function\s+flushCloudStateNow\s*\(/.test(cloudSync),
@@ -82,18 +81,19 @@ assert(
 );
 assert(
   initialClearIndex >= 0 &&
-    awaitFlushIndex > initialClearIndex &&
+    drainLoopIndex > initialClearIndex &&
+    awaitFlushIndex > drainLoopIndex &&
     failedReturnIndex > awaitFlushIndex &&
     successfulClearIndex > failedReturnIndex,
-  'background flush must preserve a failed reconciliation retry and only cancel successful follow-up timers',
+  'background flush must drain all queued reconciliations, preserve a failed retry, and only cancel successful follow-up timers',
+);
+assert(
+  /while\s*\(latestState\s*\|\|\s*activeFlush\)\s*\{[\s\S]*const\s+completed\s*=\s*await\s+flushLatestState\(\);[\s\S]*if\s*\(!completed\)\s*return;[\s\S]*clearPendingPush\(\);[\s\S]*\}/.test(immediateFlush),
+  'background flush must keep draining state captured during reconciliation until no queued or in-flight work remains',
 );
 assert(
   !/const\s+completed\s*=\s*await\s+flushLatestState\(\);\s*clearPendingPush\(\);/.test(immediateFlush),
   'background flush must never clear the retry timer immediately after a failed Supabase reconciliation',
-);
-assert(
-  drainIndex > successfulClearIndex && secondFlushIndex > drainIndex,
-  'background flush must immediately drain a newer snapshot after a successful first reconciliation',
 );
 assert(
   failedReturnIndex >= 0,
@@ -124,4 +124,4 @@ assert(
   'AppState lifecycle listener must be removed on cleanup',
 );
 
-console.log('Cloud background flush audit passed: deferred retry timing and retry intent survive in-flight reconciliation and lifecycle flushes.');
+console.log('Cloud background flush audit passed: lifecycle flushes fully drain successful reconciliations while deferred retry timing and retry intent survive failures.');
