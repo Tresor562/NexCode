@@ -21,13 +21,15 @@ assert.equal(typeof runBehavioralSuite, 'function', 'runBehavioralSuite must sta
 assert.match(source, /normalize\('NFC'\)\.toLocaleLowerCase\('en-US'\)/, 'starter delta paths must use the portable case/Unicode identity policy');
 assert.match(source, /resolvePortableDraftFile\(draft, 'index\.html'\)/, 'HTML behavioral checks must resolve portable workspace paths');
 assert.match(source, /resolvePortableDraftFile\(draft, 'styles\.css'\)/, 'CSS behavioral checks must resolve portable workspace paths');
-assert.match(source, /content === undefined\) return false/, 'missing starter files must fail Lab learning evidence');
+assert.match(source, /stored === undefined\) return false/, 'missing starter files must fail Lab learning evidence');
 assert.match(
   source,
-  /normalizeSource\(starterContent\)\.trim\(\)\.length > 0\s*&&\s*normalizeSource\(content\)\.trim\(\)\.length === 0\) return false/,
+  /normalizeSource\(starterContent\)\.trim\(\)\.length > 0\s*&&\s*normalizeSource\(stored\.content\)\.trim\(\)\.length === 0\) return false/,
   'emptying non-empty starter files must fail Lab learning evidence',
 );
-assert.match(source, /function meaningfulEvidenceSource\(content: string\)/, 'Lab evidence must normalize filler before comparing learner work');
+assert.match(source, /function meaningfulEvidenceSource\(content: string, filename: string\)/, 'Lab evidence must be syntax-aware per workspace file');
+assert.match(source, /supportsHashComments/, 'Lab evidence must gate hash comments by file syntax');
+assert.match(source, /supportsSqlComments/, 'Lab evidence must gate SQL comments by file syntax');
 assert.match(source, /replace\(\/<!--\[\\s\\S\]\*\?-->\/g, ''\)/, 'HTML-only comments must not earn Lab progress');
 assert.match(source, /replace\(\/\\\/\\\*\[\\s\\S\]\*\?\\\*\\\/\/g, ''\)/, 'block comments must not earn Lab progress');
 
@@ -83,6 +85,13 @@ const commentOnly = runBehavioralSuite(mission, draft({
 assert.equal(commentOnly.hiddenPassed, 0, 'comment-only edits must not satisfy the hidden Lab progress check');
 assert.equal(commentOnly.passed, false, 'comment-only filler must not pass the Lab suite');
 
+const cssIdSelector = runBehavioralSuite(mission, draft({
+  ...mission.starterFiles,
+  'styles.css': `${mission.starterFiles['styles.css']}\n#hero {\n  color: tomato;\n}`,
+}));
+assert.equal(cssIdSelector.hiddenPassed, 1, 'a CSS ID selector must count as real Lab work, not a hash comment');
+assert.equal(cssIdSelector.passed, true, 'valid CSS ID-selector work should pass the Lab behavioral suite');
+
 const commentOnlyAddedFile = runBehavioralSuite(mission, draft({
   ...mission.starterFiles,
   'notes.js': '// beaucoup de texte pour contourner une validation de longueur uniquement',
@@ -117,6 +126,23 @@ const addedFile = runBehavioralSuite(mission, draft({
 }));
 assert.equal(addedFile.hiddenPassed, 1, 'a substantive learner-created file must count as a real workspace change');
 
+const pythonMission = {
+  id: 'python-lab',
+  title: 'Variable Python',
+  instructions: 'Modifie le comportement.',
+  language: 'Python',
+  starterCode: 'value = 1',
+  successCriteria: [],
+};
+const pythonHashComment = runBehavioralSuite(pythonMission, {
+  missionId: pythonMission.id,
+  language: pythonMission.language,
+  files: { 'main.py': 'value = 1\n# ceci reste seulement un commentaire très long' },
+  activeFile: 'main.py',
+  updatedAt: '2026-08-30T12:00:00.000Z',
+});
+assert.equal(pythonHashComment.hiddenPassed, 0, 'Python hash comments must still be ignored as filler');
+
 const singleFileMission = {
   id: 'js-lab',
   title: 'Compteur',
@@ -143,4 +169,4 @@ const singleCommentOnly = runBehavioralSuite(singleFileMission, {
 });
 assert.equal(singleCommentOnly.hiddenPassed, 0, 'starterCode-only missions must reject comment-only changes too');
 
-console.log('Lab starter delta audit OK: starter files stay intact, filler is ignored, destructive edits fail, and substantive edits remain valid.');
+console.log('Lab starter delta audit OK: syntax-aware evidence ignores filler without discarding real CSS selectors.');
