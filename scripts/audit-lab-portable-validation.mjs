@@ -31,7 +31,9 @@ new Function('require', 'exports', 'module', compiled)(requireStub, exports, mod
 const { validateLabDraft, stampLabValidation } = module.exports;
 assert.equal(typeof validateLabDraft, 'function', 'validateLabDraft must stay exported');
 assert.equal(typeof stampLabValidation, 'function', 'stampLabValidation must stay exported for persisted Lab progress');
-assert.match(source, /function meaningfulEvidenceSource\(content: string\)/, 'Lab validation must normalize learning evidence before comparing starter work');
+assert.match(source, /function meaningfulEvidenceSource\(content: string, filename: string\)/, 'Lab validation must keep learning evidence syntax-aware per workspace file');
+assert.match(source, /supportsHashComments/, 'Lab validation must only strip hash comments for syntaxes that support them');
+assert.match(source, /supportsSqlComments/, 'Lab validation must only strip SQL comments for SQL files');
 assert.equal(source.includes(".replace(/<!--[\\s\\S]*?-->/g, '')"), true, 'HTML comments must not count as Lab learning evidence');
 assert.equal(source.includes(".replace(/\\/\\*[\\s\\S]*?\\*\\//g, '')"), true, 'block comments must not count as Lab learning evidence');
 
@@ -84,6 +86,15 @@ const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret rée
   });
   assert.equal(fillerOnly.checks.find((check) => check.id === 'criterion-1')?.passed, false, 'comment-only edits must fail the authored modification criterion');
   assert.equal(fillerOnly.passed, false, 'comment-only filler must never validate a Lab mission');
+
+  const cssIdSelector = validateLabDraft(mission, {
+    ...draft,
+    files: {
+      'INDEX.HTML': mission.starterFiles['index.html'],
+      'Styles.CSS': `${mission.starterFiles['styles.css']}\n#hero { color: tomato; padding: 12px; }`,
+    },
+  });
+  assert.equal(cssIdSelector.checks.find((check) => check.id === 'criterion-1')?.passed, true, 'CSS ID selectors must count as real learning evidence, not hash comments');
 }
 
 {
@@ -112,4 +123,4 @@ const criteria = ['Modification réelle', 'Structure valide', 'Aucun secret rée
   assert.equal(result.passed, true, 'a valid portable Node workspace must be fully accepted without deleting its canonical starter file');
 }
 
-console.log('Lab portable validation audit OK: portable files validate correctly, filler-only edits fail, starter integrity is preserved, and persisted progress stays scoped to authored mission criteria.');
+console.log('Lab portable validation audit OK: portable files validate correctly, syntax-aware evidence rejects filler without discarding CSS selectors, starter integrity is preserved, and persisted progress stays scoped to authored mission criteria.');
