@@ -21,7 +21,8 @@ expect(/PROJECT_STEP_REWARD\.nexCoins\s*\*\s*newlyCompletedSteps/, 'NexCoins mus
 expect(/const PORTFOLIO_PASS_SCORE\s*=\s*70/, 'Portfolio rewards must preserve the project review passing threshold.');
 expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Project reward timestamps need a small bounded clock-skew tolerance.');
 expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Project rewards must sanitize their canonical reward clock against the actual system clock.');
-expect(/value\.getTime\(\)\s*<=\s*trustedSystemNow\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied future clock must not expand project reward or portfolio proof windows.');
+expect(/const clockSkewMs\s*=\s*value\.getTime\(\)\s*-\s*trustedSystemNow\.getTime\(\);/, 'Project reward clock sanitization must measure signed device clock drift.');
+expect(/Math\.abs\(clockSkewMs\)\s*<=\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied clock must not distort project rewards in either the future or backward direction.');
 expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);\s*return rewardProgress\(progressed, \{[\s\S]*?now:\s*rewardTime,[\s\S]*?\}\);/, 'Project step XP, NexCoins and streak accounting must use the trusted reward clock.');
 expect(/function portfolioProofTimestamp\(proof:\s*PortfolioProof \| undefined\):\s*number \| null/, 'Portfolio proof updates need a central persisted-version timestamp parser.');
 expect(/Date\.parse\(proof\.completedAt\)/, 'Portfolio proof versioning must parse persisted completion timestamps.');
@@ -62,6 +63,14 @@ if (/completedProjectSteps\(project,/.test(source)) {
 }
 if (/requestedProgress\s*>\s*\(state\.projectProgress/.test(source)) {
   throw new Error('Do not reward raw progress increases without monotonic step accounting.');
+}
+
+const rewardClockBody = source.match(/function validRewardTime\([\s\S]*?\n\}/)?.[0] ?? '';
+if (!rewardClockBody) {
+  throw new Error('Could not isolate project reward clock sanitization.');
+}
+if (/value\.getTime\(\)\s*<=\s*trustedSystemNow\.getTime\(\)\s*\+\s*MAX_FUTURE_PROOF_SKEW_MS/.test(rewardClockBody)) {
+  throw new Error('Project reward clock protection must not regress to future-only skew validation.');
 }
 
 const progressRewardSection = source.match(/if \(newlyCompletedSteps === 0\) return progressed;([\s\S]*?)\n\}/)?.[1] ?? '';
