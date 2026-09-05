@@ -56,16 +56,19 @@ const SHARED_NOTIFICATION_KIND: LearningFeedbackKind = 'notification';
 // accepted cue may call play().
 let sharedAudioRequestGeneration = 0;
 
+function clearSemanticAudioProtection() {
+  sharedSemanticAudioProtectedFrom = undefined;
+  sharedSemanticAudioProtectedUntil = undefined;
+}
+
 function supersedeAudio(): number {
+  // Any *accepted* newer sound owns the audio channel. Clear a prior semantic quiet
+  // window only here, after weak taps have already had the chance to be rejected.
+  clearSemanticAudioProtection();
   sharedAudioRequestGeneration = sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER
     ? 1
     : sharedAudioRequestGeneration + 1;
   return sharedAudioRequestGeneration;
-}
-
-function clearSemanticAudioProtection() {
-  sharedSemanticAudioProtectedFrom = undefined;
-  sharedSemanticAudioProtectedUntil = undefined;
 }
 
 // Invalidate accepted cues as soon as the native app leaves the foreground. A
@@ -75,7 +78,6 @@ function clearSemanticAudioProtection() {
 // again and could play late on resume.
 AppState.addEventListener('change', (nextState) => {
   if (nextState !== 'active') supersedeAudio();
-  if (nextState !== 'active') clearSemanticAudioProtection();
 });
 
 function nativeAppIsActive(): boolean {
