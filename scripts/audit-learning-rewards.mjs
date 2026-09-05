@@ -23,7 +23,9 @@ assert.match(source, /inferErrorTag\(lesson, answerIndex\)/, 'error evidence mus
 assert.match(source, /const MAX_EVIDENCE_CLOCK_SKEW_MS = 5 \* 60 \* 1000;/, 'completion evidence may tolerate only a small device clock skew');
 assert.match(source, /function trustedCompletionTime\(value: Date, systemNow = new Date\(\)\): Date/, 'lesson completion must bind caller time to the real system clock');
 assert.match(source, /if \(!\(value instanceof Date\) \|\| !Number\.isFinite\(value\.getTime\(\)\)\) return safeSystemNow;/, 'invalid caller time must fall back to system time before evidence validation');
-assert.match(source, /value\.getTime\(\) <= safeSystemNow\.getTime\(\) \+ MAX_EVIDENCE_CLOCK_SKEW_MS \? value : safeSystemNow/, 'far-future caller time must not widen the mastery evidence trust window');
+assert.match(source, /const clockSkewMs = value\.getTime\(\) - safeSystemNow\.getTime\(\);/, 'trusted lesson time must measure caller skew relative to the system clock');
+assert.match(source, /Math\.abs\(clockSkewMs\) <= MAX_EVIDENCE_CLOCK_SKEW_MS \? value : safeSystemNow/, 'far-future and far-regressed caller time must not widen or distort the mastery evidence trust window');
+assert.doesNotMatch(source, /value\.getTime\(\) <= safeSystemNow\.getTime\(\) \+ MAX_EVIDENCE_CLOCK_SKEW_MS \? value : safeSystemNow/, 'trusted lesson time must not regress to a future-only clock guard');
 assert.match(source, /function validEvidenceTime\(value: unknown, now: Date\): number \| null/, 'completion rewards must validate persisted evidence timestamps');
 assert.match(source, /if \(time > nowMs \+ MAX_EVIDENCE_CLOCK_SKEW_MS\) return null;/, 'future-dated mastery evidence must not become a durable reward token');
 assert.match(source, /function hasLatestCorrectLessonEvidence\(state: LocalState, lesson: Lesson, now: Date\): boolean/, 'completion rewards must use a dedicated contextual latest-correct-evidence gate');
@@ -68,4 +70,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, system-bound latest-correct evidence, trusted progression clocks, saturating totals and idempotence are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, bidirectional system-bound latest-correct evidence, trusted progression clocks, saturating totals and idempotence are enforced.');
