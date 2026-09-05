@@ -39,10 +39,12 @@ function validRewardTime(value: Date, systemNow = new Date()): Date {
   const trustedSystemNow = systemNow instanceof Date && Number.isFinite(systemNow.getTime()) ? systemNow : new Date();
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return trustedSystemNow;
 
-  // A caller-controlled clock must not expand the proof-validation window. Without
-  // this boundary, passing `now = 2099` would make an equally future-dated proof
-  // look legitimate even though rewardProgress later repairs its own timestamp.
-  return value.getTime() <= trustedSystemNow.getTime() + MAX_FUTURE_PROOF_SKEW_MS
+  // A caller-controlled clock must not distort project reward chronology in either
+  // direction. A far-future clock could expand proof validation, while a heavily
+  // regressed device clock could backdate XP/streak activity and later be replayed
+  // through cloud sync. Keep the same bounded tolerance for both directions.
+  const clockSkewMs = value.getTime() - trustedSystemNow.getTime();
+  return Math.abs(clockSkewMs) <= MAX_FUTURE_PROOF_SKEW_MS
     ? value
     : trustedSystemNow;
 }
