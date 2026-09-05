@@ -310,11 +310,16 @@ function mergePortfolioProofs(remote: unknown, local: LocalState['portfolioProof
       byProject.set(proof.projectId, proof as LocalState['portfolioProofs'][number]);
       continue;
     }
-    const remoteScore = typeof proof.score === 'number' && Number.isFinite(proof.score) ? proof.score : 0;
-    const currentScore = typeof current.score === 'number' && Number.isFinite(current.score) ? current.score : 0;
-    const remoteAt = typeof proof.completedAt === 'string' ? Date.parse(proof.completedAt) : Number.NaN;
-    const currentAt = Date.parse(current.completedAt);
-    if (remoteScore > currentScore || (remoteScore === currentScore && Number.isFinite(remoteAt) && (!Number.isFinite(currentAt) || remoteAt > currentAt))) {
+    const remoteAt = validIsoTimestamp(proof.completedAt);
+    const currentAt = validIsoTimestamp(current.completedAt);
+
+    // Portfolio proof identity is versioned by completion time everywhere else
+    // in the product. Keep the same monotonic rule at the Supabase boundary: a
+    // delayed device must not resurrect an older proof merely because that old
+    // rubric happened to score higher. Equal versions keep the local snapshot to
+    // avoid needless cross-device churn; an invalid local clock can still recover
+    // from a valid remote proof.
+    if (remoteAt > currentAt) {
       byProject.set(proof.projectId, proof as LocalState['portfolioProofs'][number]);
     }
   }
