@@ -12,7 +12,10 @@ const MAX_FUTURE_PROOF_SKEW_MS = 5 * 60 * 1000;
 
 function safePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, Math.round(value)));
+  // Progress is evidence, not a display-only number. Flooring prevents a caller
+  // reporting 24.6% from being promoted to the 25% construction milestone and
+  // earning XP/NexCoins before the learner has actually crossed that boundary.
+  return Math.max(0, Math.min(100, Math.floor(value)));
 }
 
 function canonicalProject(projectId: unknown): GuidedProject | undefined {
