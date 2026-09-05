@@ -74,18 +74,20 @@ function fieldMatchesTerm(value: string, term: string) {
 }
 
 function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return false;
   if (!nextReviewAt) return true;
   const nextReviewMs = Date.parse(nextReviewAt);
   if (!Number.isFinite(nextReviewMs)) return true;
-  const nowMs = now.getTime();
-  return Number.isFinite(nowMs) ? nextReviewMs <= nowMs : true;
+  return nextReviewMs <= nowMs;
 }
 
 function reviewUrgencyBonus(nextReviewAt: string | undefined, now: Date) {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return 0;
   if (!nextReviewAt) return 12;
   const nextReviewMs = Date.parse(nextReviewAt);
-  const nowMs = now.getTime();
-  if (!Number.isFinite(nextReviewMs) || !Number.isFinite(nowMs)) return 12;
+  if (!Number.isFinite(nextReviewMs)) return 12;
   if (nextReviewMs > nowMs) return 0;
 
   const overdueDays = Math.max(0, Math.floor((nowMs - nextReviewMs) / DAY_MS));
