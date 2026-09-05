@@ -153,17 +153,27 @@ export function buildPortfolioProof(
 }
 
 export function portfolioSkillCoverage(proofs: PortfolioProof[]) {
-  const projectsBySkill = new Map<string, Set<string>>();
+  const projectsBySkillIdentity = new Map<string, Set<string>>();
+  const skillIdByIdentity = new Map<string, string>();
+
   for (const proof of proofs) {
     const projectId = typeof proof.projectId === 'string' ? normalize(proof.projectId) : '';
     if (!projectId) continue;
+
     for (const skillId of canonicalProofSkillIds(proof.skillIds)) {
-      const projects = projectsBySkill.get(skillId) ?? new Set<string>();
+      const skillIdentity = normalize(skillId);
+      if (!skillIdentity) continue;
+      if (!skillIdByIdentity.has(skillIdentity)) skillIdByIdentity.set(skillIdentity, skillId);
+      const projects = projectsBySkillIdentity.get(skillIdentity) ?? new Set<string>();
       projects.add(projectId);
-      projectsBySkill.set(skillId, projects);
+      projectsBySkillIdentity.set(skillIdentity, projects);
     }
   }
-  return [...projectsBySkill.entries()]
-    .map(([skillId, projectIds]) => ({ skillId, projectCount: projectIds.size }))
+
+  return [...projectsBySkillIdentity.entries()]
+    .map(([skillIdentity, projectIds]) => ({
+      skillId: skillIdByIdentity.get(skillIdentity) ?? skillIdentity,
+      projectCount: projectIds.size,
+    }))
     .sort((a, b) => b.projectCount - a.projectCount || a.skillId.localeCompare(b.skillId));
 }
