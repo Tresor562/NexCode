@@ -159,8 +159,8 @@ requirePattern(
   accountSource,
 );
 requirePattern(
-  /remoteScore > currentScore[\s\S]*remoteScore === currentScore[\s\S]*remoteAt > currentAt/,
-  'Conflicting portfolio proofs must prefer stronger evidence, then the newer proof when scores tie.',
+  /function mergePortfolioProofs\([\s\S]*const remoteAt = validIsoTimestamp\(proof\.completedAt\);[\s\S]*const currentAt = validIsoTimestamp\(current\.completedAt\);[\s\S]*if \(remoteAt > currentAt\) \{[\s\S]*byProject\.set\(proof\.projectId, proof as LocalState\['portfolioProofs'\]\[number\]\);/,
+  'Conflicting portfolio proofs must follow the same monotonic completedAt version rule as local project saves, regardless of score.',
   accountSource,
 );
 requirePattern(
@@ -184,4 +184,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, protected offline retry timers across fresh local edits, preserved deferred retry intent, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, protected offline retry timers across fresh local edits, preserved deferred retry intent, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, monotonic portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
