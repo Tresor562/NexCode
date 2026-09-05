@@ -5,6 +5,29 @@ const MIN_CHANGED_CHARS_PER_STEP = 24;
 const ADDED_FILE_EVIDENCE_CHARS = 48;
 const NON_CODE_EVIDENCE_EXTENSIONS = new Set(['md', 'markdown', 'txt', 'rst']);
 const HASH_COMMENT_EVIDENCE_EXTENSIONS = new Set(['py', 'rb', 'sh', 'bash', 'zsh', 'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf']);
+const GENERATED_CONSTRUCTION_BASENAMES = new Set([
+  'package-lock.json',
+  'npm-shrinkwrap.json',
+  'yarn.lock',
+  'pnpm-lock.yaml',
+  'bun.lockb',
+  'deno.lock',
+  'composer.lock',
+  'poetry.lock',
+  'pipfile.lock',
+  'cargo.lock',
+]);
+const GENERATED_CONSTRUCTION_DIRECTORIES = new Set([
+  'node_modules',
+  'vendor',
+  'dist',
+  'build',
+  'coverage',
+  '.next',
+  '.nuxt',
+  '.expo',
+  '.cache',
+]);
 
 function canonicalText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : '';
@@ -49,7 +72,18 @@ function hasRequiredStarterFiles(starter: Record<string, string>, files: Record<
   return Object.keys(starter).every((filename) => canonicalText(files[filename]).trim().length > 0);
 }
 
+function isGeneratedConstructionArtifact(filename: string): boolean {
+  const normalized = filename.trim().toLowerCase().replace(/\\/g, '/');
+  if (!normalized) return true;
+  const pathSegments = normalized.split('/').filter(Boolean);
+  const basename = pathSegments[pathSegments.length - 1] ?? '';
+  if (GENERATED_CONSTRUCTION_BASENAMES.has(basename)) return true;
+  if (pathSegments.slice(0, -1).some((segment) => GENERATED_CONSTRUCTION_DIRECTORIES.has(segment))) return true;
+  return basename.endsWith('.map') || /\.min\.(?:js|css)$/.test(basename);
+}
+
 function isConstructionEvidenceFile(filename: string, starter: Record<string, string>): boolean {
+  if (isGeneratedConstructionArtifact(filename)) return false;
   const normalized = filename.trim().toLowerCase();
   const extension = normalized.includes('.') ? normalized.split('.').pop() ?? '' : '';
   if (!NON_CODE_EVIDENCE_EXTENSIONS.has(extension)) return true;
