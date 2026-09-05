@@ -54,7 +54,8 @@ function safeAttemptCount(value: unknown): number {
 function trustedCompletionTime(value: Date, systemNow = new Date()): Date {
   const safeSystemNow = systemNow instanceof Date && Number.isFinite(systemNow.getTime()) ? systemNow : new Date();
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeSystemNow;
-  return value.getTime() <= safeSystemNow.getTime() + MAX_EVIDENCE_CLOCK_SKEW_MS ? value : safeSystemNow;
+  const clockSkewMs = value.getTime() - safeSystemNow.getTime();
+  return Math.abs(clockSkewMs) <= MAX_EVIDENCE_CLOCK_SKEW_MS ? value : safeSystemNow;
 }
 
 function validEvidenceTime(value: unknown, now: Date): number | null {
@@ -110,8 +111,8 @@ export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now 
   // evidence produced by recordLessonOutcome for every declared lesson skill.
   // A failed retry must never become rewardable because an older success still
   // exists deeper in the mastery history. The caller-provided clock is bounded
-  // against the real system clock before evidence validation so a future `now`
-  // cannot legitimize equally future-dated mastery evidence.
+  // against the real system clock before evidence validation so either a future
+  // or regressed device clock cannot legitimize misplaced mastery evidence.
   if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
   if (!hasLatestCorrectLessonEvidence(state, lesson, rewardTime)) return state;
   const reward = learningCompletionReward(lesson);
@@ -132,10 +133,10 @@ export function recordLessonOutcome(
   const attempts = Math.min(10_000, safeAttemptCount(state.lessonAttempts[lesson.id]) + 1);
   const normalizedErrorTag = correct ? undefined : errorTag?.trim() || `${lesson.skillIds?.[0] ?? lesson.id}.incorrect`;
   // The same trusted clock boundary used for rewards must also protect mastery
-  // evidence. Otherwise a device clock far in the future can write a latest
-  // attempt that review scheduling trusts, while the reward boundary correctly
-  // rejects it. Clamping before recordSkillAttempt keeps mastery, review dates,
-  // cloud sync and the eventual reward anchored to the same plausible timeline.
+  // evidence. Otherwise a device clock far in the future or past can write a
+  // latest attempt that distorts review scheduling while reward progression uses
+  // a different timeline. Bounding before recordSkillAttempt keeps mastery,
+  // review dates, cloud sync and the eventual reward on one plausible clock.
   const attemptTime = trustedCompletionTime(now);
   const mastery = recordSkillAttempt(state.mastery, lesson, correct, attemptTime, normalizedErrorTag);
   const previousScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (state.mastery[id]?.score ?? 0), 0);
