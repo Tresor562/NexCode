@@ -37,6 +37,12 @@ function isSafeSegment(name: string) {
   return !/[\u0000-\u001f\u007f]/.test(name);
 }
 
+function shouldSkipDirectory(name: string) {
+  if (!isSafeSegment(name)) return true;
+  const normalized = name.toLowerCase();
+  return IGNORED_DIRECTORIES.has(normalized) || SENSITIVE_DIRECTORIES.has(normalized);
+}
+
 function canReadAsText(file: File) {
   const size = typeof file.size === 'number' ? file.size : 0;
   return size <= MAX_TEXT_BYTES && isSafeSegment(file.name) && !isSensitiveWorkspaceFilename(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
@@ -153,6 +159,9 @@ export async function importFolderFromPhone(existing: Record<string, string>): P
   } catch {
     return { files: existing, imported: 0, skipped: 0, renamed: 0 };
   }
+  if (shouldSkipDirectory(root.name)) {
+    return { files: existing, imported: 0, skipped: 1, renamed: 0 };
+  }
   const occupied = occupiedWorkspaceKeys(existing);
   const next = { ...existing };
   const usage = workspaceUsage(existing);
@@ -172,12 +181,7 @@ export async function importFolderFromPhone(existing: Record<string, string>): P
     for (const entry of entries) {
       if (workspaceFiles >= MAX_FILES_PER_WORKSPACE || workspaceChars >= MAX_TOTAL_TEXT_CHARS) break;
       if (entry instanceof Directory) {
-        const normalizedDirectoryName = entry.name.toLowerCase();
-        if (
-          !isSafeSegment(entry.name)
-          || IGNORED_DIRECTORIES.has(normalizedDirectoryName)
-          || SENSITIVE_DIRECTORIES.has(normalizedDirectoryName)
-        ) continue;
+        if (shouldSkipDirectory(entry.name)) continue;
         await walk(entry, `${prefix}${entry.name}/`, depth + 1);
         continue;
       }
