@@ -131,7 +131,13 @@ export function recordLessonOutcome(
 ): AttemptResult {
   const attempts = Math.min(10_000, safeAttemptCount(state.lessonAttempts[lesson.id]) + 1);
   const normalizedErrorTag = correct ? undefined : errorTag?.trim() || `${lesson.skillIds?.[0] ?? lesson.id}.incorrect`;
-  const mastery = recordSkillAttempt(state.mastery, lesson, correct, now, normalizedErrorTag);
+  // The same trusted clock boundary used for rewards must also protect mastery
+  // evidence. Otherwise a device clock far in the future can write a latest
+  // attempt that review scheduling trusts, while the reward boundary correctly
+  // rejects it. Clamping before recordSkillAttempt keeps mastery, review dates,
+  // cloud sync and the eventual reward anchored to the same plausible timeline.
+  const attemptTime = trustedCompletionTime(now);
+  const mastery = recordSkillAttempt(state.mastery, lesson, correct, attemptTime, normalizedErrorTag);
   const previousScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (state.mastery[id]?.score ?? 0), 0);
   const nextScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0);
   const previousErrors = state.lessonErrorTags[lesson.id] ?? [];
