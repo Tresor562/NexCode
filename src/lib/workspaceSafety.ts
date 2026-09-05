@@ -86,6 +86,7 @@ function validValidationMetadata(stored: LabDraft, nowMs: number): boolean {
   const hasCriteria = stored.passedCriteria !== undefined;
   if (!hasValidationTimestamp && !hasCriteria) return true;
   if (!plausibleIsoDate(stored.lastValidatedAt, nowMs) || !Array.isArray(stored.passedCriteria)) return false;
+  if (!validIsoDate(stored.updatedAt) || Date.parse(stored.lastValidatedAt) < Date.parse(stored.updatedAt)) return false;
   if (stored.passedCriteria.length > MAX_VALIDATION_CRITERIA) return false;
   return stored.passedCriteria.every((criterion) => {
     if (typeof criterion !== 'string') return false;
