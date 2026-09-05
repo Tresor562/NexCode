@@ -30,12 +30,20 @@ function normalizeSource(content: string): string {
     .replace(/\n+$/g, '');
 }
 
-function meaningfulEvidenceSource(content: string): string {
+function meaningfulEvidenceSource(content: string, filename: string): string {
+  const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
+  const supportsHashComments = /\.(?:py|pyw|sh|bash|zsh|fish|ya?ml|toml|ini|cfg|conf)$/i.test(normalizedName);
+  const supportsSqlComments = /\.sql$/i.test(normalizedName);
   return normalizeSource(content)
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .split('\n')
-    .filter((line) => !/^\s*(?:\/\/|#|--)(?:\s|$)/.test(line))
+    .filter((line) => {
+      if (/^\s*\/\/(?:\s|$)/.test(line)) return false;
+      if (supportsHashComments && /^\s*#(?:\s|$)/.test(line)) return false;
+      if (supportsSqlComments && /^\s*--(?:\s|$)/.test(line)) return false;
+      return true;
+    })
     .join('\n')
     .replace(/\s+/g, '');
 }
@@ -50,34 +58,40 @@ function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
   return actualName ? draft.files[actualName] ?? '' : '';
 }
 
+function starterFilenameFor(language: LabMission['language']): string {
+  if (language === 'Python') return 'main.py';
+  if (language === 'SQL') return 'query.sql';
+  if (language === 'Git') return 'commands.txt';
+  if (language === 'Node/API') return 'server.js';
+  if (language === 'Bots') return 'bot.js';
+  if (language === 'HTML/CSS') return 'index.html';
+  return 'main.js';
+}
+
 function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolean {
   const starterFiles = mission.starterFiles ?? {};
   const starterEntries = Object.entries(starterFiles);
 
   if (starterEntries.length) {
     const draftByKey = new Map(
-      Object.entries(draft.files).map(([filename, content]) => [portableWorkspaceKey(filename), content]),
+      Object.entries(draft.files).map(([filename, content]) => [portableWorkspaceKey(filename), { filename, content }]),
     );
 
-    // A Lab submission must preserve every canonical starter file. Removing or
-    // emptying required starter content is destructive work, not evidence of learning.
     for (const [filename, starterContent] of starterEntries) {
-      const content = draftByKey.get(portableWorkspaceKey(filename));
-      if (content === undefined) return false;
-      if (normalizeSource(starterContent).trim().length > 0 && normalizeSource(content).trim().length === 0) return false;
+      const stored = draftByKey.get(portableWorkspaceKey(filename));
+      if (stored === undefined) return false;
+      if (normalizeSource(starterContent).trim().length > 0 && normalizeSource(stored.content).trim().length === 0) return false;
     }
 
     for (const [filename, content] of Object.entries(draft.files)) {
       const key = portableWorkspaceKey(filename);
       const starterEntry = starterEntries.find(([starterFilename]) => portableWorkspaceKey(starterFilename) === key);
       if (!starterEntry) {
-        // Keep the hidden behavioral gate aligned with the canonical Lab validator:
-        // a throwaway file like "x" must not count as evidence of learned work.
-        if (meaningfulEvidenceSource(content).length >= 12) return true;
+        if (meaningfulEvidenceSource(content, filename).length >= 12) return true;
         continue;
       }
 
-      if (meaningfulEvidenceSource(content) !== meaningfulEvidenceSource(starterEntry[1])) return true;
+      if (meaningfulEvidenceSource(content, filename) !== meaningfulEvidenceSource(starterEntry[1], starterEntry[0])) return true;
     }
 
     return false;
@@ -85,16 +99,19 @@ function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolea
 
   const starterCode = mission.starterCode;
   if (typeof starterCode === 'string' && starterCode.length) {
-    const meaningfulStarter = meaningfulEvidenceSource(starterCode);
-    const substantiveFiles = Object.values(draft.files)
-      .map(meaningfulEvidenceSource)
+    const starterFilename = starterFilenameFor(mission.language);
+    const meaningfulStarter = meaningfulEvidenceSource(starterCode, starterFilename);
+    const substantiveFiles = Object.entries(draft.files)
+      .map(([filename, content]) => meaningfulEvidenceSource(content, filename))
       .filter((content) => content.length > 0);
     if (!substantiveFiles.length) return false;
     if (substantiveFiles.length === 1) return substantiveFiles[0] !== meaningfulStarter;
     return substantiveFiles.some((content) => content !== meaningfulStarter);
   }
 
-  return Object.values(draft.files).map(meaningfulEvidenceSource).join('').length >= 60;
+  return Object.entries(draft.files)
+    .map(([filename, content]) => meaningfulEvidenceSource(content, filename))
+    .join('').length >= 60;
 }
 
 export function secretSafetyIssues(draft: LabDraft) {
