@@ -72,6 +72,23 @@ const baseState = (overrides = {}) => ({
   });
   const quality = evidenceQuality('skill-a', mastery, NOW);
   assert.equal(quality.recency, 0, 'far-future evidence must not manufacture fresh mastery');
+  assert.equal(quality.transferable, false, 'far-future project evidence must not manufacture transferability');
+  assert.equal(quality.diversity, 0, 'far-future evidence must not manufacture evidence diversity');
+  assert.equal(quality.independence, 0, 'far-future evidence must not manufacture independent contexts');
+}
+
+{
+  const mastery = baseState({
+    evidence: [
+      { lessonId: 'lab-valid', activityKind: 'lab', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: 'project-future', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-15T00:00:00.000Z' },
+      { lessonId: 'boss-future', activityKind: 'boss', correct: true, scoreDelta: 10, at: 'invalid-date' },
+    ],
+  });
+  const quality = evidenceQuality('skill-a', mastery, NOW);
+  assert.equal(quality.diversity, 20, 'only timestamp-valid evidence may contribute to diversity');
+  assert.equal(quality.independence, 25, 'only timestamp-valid independent evidence may count');
+  assert.equal(quality.transferable, false, 'invalid or future transfer evidence must fail closed');
 }
 
 {
@@ -88,6 +105,9 @@ const baseState = (overrides = {}) => ({
 {
   const quality = evidenceQuality('skill-a', baseState(), new Date(Number.NaN));
   assert.equal(quality.recency, 0, 'an invalid runtime clock must fail closed instead of treating evidence as fresh');
+  assert.equal(quality.diversity, 0, 'an invalid runtime clock must not preserve mastery diversity');
+  assert.equal(quality.independence, 0, 'an invalid runtime clock must not preserve independent evidence');
+  assert.equal(quality.transferable, false, 'an invalid runtime clock must not preserve transfer evidence');
 }
 
-console.log('Mastery evidence audit OK: future timestamps and non-finite mastery values fail closed while valid recent evidence remains intact.');
+console.log('Mastery evidence audit OK: only timestamp-valid evidence contributes to recency, diversity, independence and transferability.');
