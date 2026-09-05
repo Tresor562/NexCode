@@ -32,10 +32,6 @@ function resetRetryBackoff(): void {
 }
 
 function consumeRetryDelay(userId: string): number {
-  // Backoff belongs to the learner whose request failed. A previous account may
-  // have reached the 30s ceiling while offline; carrying that delay into another
-  // learner session would make the first retry on the new account unnecessarily
-  // slow even though it has never failed.
   if (retryUserId !== userId) {
     retryDelayMs = BASE_RETRY_DELAY_MS;
     retryUserId = userId;
@@ -46,12 +42,6 @@ function consumeRetryDelay(userId: string): number {
 }
 
 function snapshotCloudState(state: LocalState): LocalState | null {
-  // LocalState is intentionally JSON-serializable because the same shape is
-  // persisted to disk and Supabase. Clone it when queueing so later in-memory
-  // mutations cannot silently rewrite a snapshot that is already waiting for
-  // upload or currently being retried. Treat serialization as an untrusted
-  // persistence boundary: a circular or otherwise non-JSON runtime mutation
-  // must never crash a learning interaction just because cloud sync is enabled.
   try {
     const serialized = JSON.stringify(state);
     if (!serialized) return null;
@@ -75,11 +65,6 @@ function queueFlush(delayMs: number, preserveBackoff = false): void {
   const safeDelay = normalizeFlushDelay(delayMs, FOLLOW_UP_DELAY_MS);
 
   if (activeFlush) {
-    // A retry or account handoff may be requested while the current request is
-    // still unwinding. Never shorten an already-requested deferred delay: a
-    // shorter follow-up request must not erase exponential backoff and hammer
-    // Supabase while the device is offline. Account handoffs reset backoff before
-    // they enqueue their own follow-up, so retaining the longer delay here is safe.
     deferredFlushDelayMs = deferredFlushDelayMs === null
       ? safeDelay
       : Math.max(deferredFlushDelayMs, safeDelay);
@@ -106,9 +91,6 @@ async function performLatestStateFlush(): Promise<boolean> {
   }
 
   const snapshot = latestState;
-
-  // A debounce timer can outlive a sign-out/sign-in. Never send learner A's
-  // queued progress through learner B's Supabase session.
   if (session.user.id !== snapshot.userId) {
     latestState = null;
     resetRetryBackoff();
@@ -118,28 +100,16 @@ async function performLatestStateFlush(): Promise<boolean> {
   latestState = null;
 
   try {
-    // Reconcile the queued local snapshot with the latest remote state before
-    // writing. Without this read-merge-write boundary, device B could upload an
-    // older local snapshot after device A and silently remove completed lessons,
-    // mastery evidence, XP or streak progress already present in Supabase.
     const reconciled = await pullCloudState(session, snapshot.state);
     const currentBeforePush = loadCloudSession();
     if (!currentBeforePush || currentBeforePush.user.id !== snapshot.userId) {
-      // Route this through the normal failure handoff so a snapshot queued for a
-      // newly signed-in learner while the pull was running is scheduled at once.
       throw new Error('Cloud account changed during reconciliation.');
     }
 
-    // pullCloudState may have started with a session whose access token was
-    // refreshed while the request was in flight. We already re-read and verify
-    // the active learner above, so push with that freshest session rather than
-    // reusing the potentially stale session object returned by the reconciliation.
     await pushCloudState(currentBeforePush, reconciled.state);
     resetRetryBackoff();
     return true;
   } catch {
-    // Keep the newest local snapshot queued while offline. If another mutation
-    // happened during the request, that newer state already supersedes this one.
     if (!latestState) latestState = snapshot;
 
     const current = loadCloudSession();
@@ -150,10 +120,6 @@ async function performLatestStateFlush(): Promise<boolean> {
     }
 
     if (current.user.id !== snapshot.userId) {
-      // The failed request belonged to learner A, but learner B may already have
-      // queued a newer snapshot while A's request was in flight. Do not strand B's
-      // progress until another mutation happens: discard only A's stale retry and
-      // immediately schedule B's pending state under B's own current session.
       if (latestState?.userId === snapshot.userId) latestState = null;
       resetRetryBackoff();
       if (latestState?.userId === current.user.id) queueFlush(FOLLOW_UP_DELAY_MS);
@@ -166,9 +132,6 @@ async function performLatestStateFlush(): Promise<boolean> {
 }
 
 async function flushLatestState(): Promise<boolean> {
-  // Share the same promise with lifecycle flushes so a background transition can
-  // wait for an already-running Supabase reconciliation instead of returning
-  // immediately and relying on a follow-up timer that the OS may suspend.
   if (activeFlush) return activeFlush;
 
   const flush = performLatestStateFlush();
@@ -196,41 +159,28 @@ export function scheduleCloudStatePush(state: LocalState, delayMs = DEFAULT_PUSH
   if (!snapshot) return;
   latestState = { userId: session.user.id, state: snapshot };
 
-  // Debounce rapid local mutations, but never start a second request while one
-  // is in flight. The completed request immediately flushes any newer snapshot.
   if (activeFlush) return;
-
-  // When this learner is already waiting for an exponential retry, keep that
-  // retry timer intact. Local XP, streak or editor mutations should replace the
-  // queued snapshot with the freshest state, not collapse a 30s offline backoff
-  // back to the ordinary ~900ms debounce and repeatedly hammer Supabase.
   if (pendingPush && pendingPushPreservesBackoff && retryUserId === session.user.id) return;
 
-  // A pending retry from a previous learner must never delay the new account.
-  // Clearing it here is safe because latestState above is already scoped to the
-  // newly active session and resetRetryBackoff will occur on the stale handoff.
   clearPendingPush();
   queueFlush(normalizeFlushDelay(delayMs));
 }
 
 export async function flushCloudStateNow(): Promise<void> {
-  // Mobile operating systems may suspend JavaScript shortly after the app leaves
-  // the foreground. Cancel the debounce, await any request already in flight,
-  // then immediately drain one newer snapshot that arrived during that request.
+  // Background transitions are a narrow reliability window on mobile. Cancel the
+  // debounce and keep draining successful reconciliations until no newer snapshot
+  // remains. A single follow-up is insufficient: local state can mutate again while
+  // that second request is in flight, and the OS may suspend the timer scheduled by
+  // its finally block before that newest XP, streak, NexCoins or Lab state is sent.
   clearPendingPush();
-  const completed = await flushLatestState();
 
-  // A failed reconciliation schedules its exponential retry from flushLatestState's
-  // finally block. Do not clear that timer here: backgrounding while offline must
-  // never strand unsynced XP, streak, NexCoins or lesson progress until the next
-  // local mutation happens.
-  if (!completed) return;
+  while (latestState || activeFlush) {
+    const completed = await flushLatestState();
+    if (!completed) return;
 
-  // Successful reconciliation can leave a short follow-up timer for a newer local
-  // snapshot that arrived while the first request was running. Cancel only that
-  // successful follow-up because we are about to drain the newest snapshot now.
-  clearPendingPush();
-  if (latestState) {
-    await flushLatestState();
+    // Successful reconciliation may have scheduled a short follow-up for state
+    // captured during the request. We are already in an explicit lifecycle flush,
+    // so cancel only that success timer and immediately drain the newest snapshot.
+    clearPendingPush();
   }
 }
