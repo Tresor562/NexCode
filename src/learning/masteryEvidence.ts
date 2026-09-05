@@ -41,21 +41,22 @@ export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new 
   }
 
   const nowMs = now.getTime();
-  const correct = state.evidence.filter((item) => item.correct);
-  const kinds = [...new Set(correct.map((item) => item.activityKind))];
+  const correct = state.evidence
+    .filter((item) => item.correct)
+    .map((item) => ({ item, timestamp: validTimestamp(item.at, nowMs) }))
+    .filter((entry): entry is { item: typeof state.evidence[number]; timestamp: number } => entry.timestamp !== null);
+  const kinds = [...new Set(correct.map(({ item }) => item.activityKind))];
   const independentContexts = new Set(
     correct
-      .filter((item) => independentKinds.has(item.activityKind))
-      .map((item) => `${item.activityKind}:${item.lessonId}`),
+      .filter(({ item }) => independentKinds.has(item.activityKind))
+      .map(({ item }) => `${item.activityKind}:${item.lessonId}`),
   );
   const transferContexts = new Set(
     correct
-      .filter((item) => transferKinds.has(item.activityKind))
-      .map((item) => `${item.activityKind}:${item.lessonId}`),
+      .filter(({ item }) => transferKinds.has(item.activityKind))
+      .map(({ item }) => `${item.activityKind}:${item.lessonId}`),
   );
-  const timestamps = correct
-    .map((item) => validTimestamp(item.at, nowMs))
-    .filter((value): value is number => value !== null);
+  const timestamps = correct.map(({ timestamp }) => timestamp);
   const latestAt = timestamps.length ? Math.max(...timestamps) : 0;
   const days = latestAt && Number.isFinite(nowMs)
     ? Math.max(0, (nowMs - latestAt) / 86_400_000)
