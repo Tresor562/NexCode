@@ -17,7 +17,12 @@ assert.match(source, /rubricIds: safeRubricIds/, 'portfolio proof must persist c
 assert.match(source, /completedAt: validCompletionDate\(completedAt\)\.toISOString\(\)/, 'portfolio proof serialization must never call toISOString on an unchecked date');
 assert.match(source, /function canonicalProofSkillIds\(skillIds: string\[\]\): string\[\]/, 'portfolio coverage must canonicalize restored skill ids before counting evidence');
 assert.match(source, /const skillId = raw\.trim\(\);[\s\S]*const identity = normalize\(skillId\);[\s\S]*if \(!identity \|\| seen\.has\(identity\)\) continue;/, 'restored portfolio skill ids must be trimmed, empty-filtered and deduplicated by normalized identity');
-assert.match(source, /for \(const skillId of canonicalProofSkillIds\(proof\.skillIds\)\)/, 'each project proof must contribute at most one coverage unit per canonical skill');
-assert.doesNotMatch(source, /for \(const proof of proofs\) for \(const skillId of proof\.skillIds\)/, 'raw restored skill arrays must never be counted directly');
+assert.match(source, /const projectsBySkill = new Map<string, Set<string>>\(\);/, 'portfolio coverage must track distinct project identities per skill');
+assert.match(source, /const projectId = typeof proof\.projectId === 'string' \? normalize\(proof\.projectId\) : '';/, 'restored project ids must be canonicalized before coverage counting');
+assert.match(source, /if \(!projectId\) continue;/, 'invalid restored project ids must not contribute portfolio coverage');
+assert.match(source, /for \(const skillId of canonicalProofSkillIds\(proof\.skillIds\)\)/, 'each proof must contribute only canonical skill ids');
+assert.match(source, /projects\.add\(projectId\);/, 'duplicate restored proofs for one project must collapse to one project contribution per skill');
+assert.match(source, /projectCount: projectIds\.size/, 'portfolio coverage must be the number of distinct projects, not the number of proof rows');
+assert.doesNotMatch(source, /covered\.set\(skillId, \(covered\.get\(skillId\) \?\? 0\) \+ 1\)/, 'raw proof-row counting must not inflate skill coverage after sync duplication');
 
-console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, and per-project skill coverage are canonicalized before persistence or counting.');
+console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, and distinct-project skill coverage are canonicalized before persistence or counting.');
