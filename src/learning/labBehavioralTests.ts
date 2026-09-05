@@ -19,6 +19,10 @@ export type BehavioralSuiteResult = {
 const secretPatterns = [
   /(?:bot[_-]?token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[=:]\s*["']?(?!replace|example|test|your|changeme)[A-Za-z0-9_\-.]{12,}/i,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
+  /\b(?:sk_live|rk_live)_[A-Za-z0-9]{16,}\b/,
+  /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
+  /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/,
 ];
 
 function normalizeSource(content: string): string {
