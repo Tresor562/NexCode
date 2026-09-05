@@ -36,6 +36,21 @@ expect(evidence, /const NON_CODE_EVIDENCE_EXTENSIONS = new Set\(\['md', 'markdow
 expect(evidence, /function isConstructionEvidenceFile\(filename: string, starter: Record<string, string>\)/, 'Workspace evidence must distinguish source construction from documentation edits.');
 expect(evidence, /return !Object\.keys\(starter\)\.some\([\s\S]*!NON_CODE_EVIDENCE_EXTENSIONS\.has\(starterExtension\)/, 'Documentation may only count when the project has no source-code starter files.');
 expect(evidence, /if \(!content\.trim\(\) \|\| !isConstructionEvidenceFile\(filename, starter\)\) continue;/, 'Documentation-only edits must not unlock coding project milestones.');
+expectIncludes(
+  evidence,
+  [
+    "'package-lock.json'",
+    "'yarn.lock'",
+    "'pnpm-lock.yaml'",
+    "'node_modules'",
+    "'dist'",
+    "'build'",
+    "'coverage'",
+  ],
+  'Generated dependency metadata and build directories must be explicitly excluded from construction evidence.',
+);
+expect(evidence, /function isGeneratedConstructionArtifact\(filename: string\): boolean \{[\s\S]*replace\(\/\\\\\/g, '\/'\)[\s\S]*GENERATED_CONSTRUCTION_BASENAMES\.has\(basename\)[\s\S]*GENERATED_CONSTRUCTION_DIRECTORIES\.has\(segment\)[\s\S]*basename\.endsWith\('\.map'\)[\s\S]*\\\.min\\\.\(\?:js\|css\)/, 'Generated-file detection must normalize portable paths and reject lockfiles, generated directories, sourcemaps and minified bundles.');
+expect(evidence, /function isConstructionEvidenceFile\(filename: string, starter: Record<string, string>\): boolean \{\s*if \(isGeneratedConstructionArtifact\(filename\)\) return false;/, 'Generated artifacts must fail closed before they can contribute project evidence.');
 expect(evidence, /function addedFileConstructionEvidence\(starter: Record<string, string>, filename: string, content: string\)[\s\S]*const meaningfulContent = meaningfulEvidenceText\(content, filename\);[\s\S]*if \(!meaningfulContent\) return 0;/, 'Added-file evidence must ignore syntax-aware filler-only content.');
 expect(evidence, /const noveltyAgainstClosestStarter = Math\.min\([\s\S]*Object\.values\(starter\)\.map\(\(starterContent\) => changedCharacterEvidence\(starterContent, content, filename\)\)/, 'Added files must be scored against the closest starter so near-copies only earn their genuinely new delta.');
 expect(evidence, /Math\.min\(ADDED_FILE_EVIDENCE_CHARS, meaningfulContent\.length, noveltyAgainstClosestStarter\)/, 'Added-file evidence must be capped by both meaningful length and novelty versus starter code.');
