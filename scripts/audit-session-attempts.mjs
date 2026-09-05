@@ -19,6 +19,9 @@ assert.ok(attemptStart >= 0 && answerStart > attemptStart, 'attempt outcome sect
 const attemptSection = source.slice(attemptStart, answerStart);
 assert.doesNotMatch(attemptSection, /rewardProgress\(/, 'answer attempts must never mint XP, NexCoins, streak progress or learning minutes');
 assert.doesNotMatch(attemptSection, /completedLessons:/, 'answer attempts must not mark lessons complete before the completion boundary');
+assert.match(attemptSection, /const attemptTime = trustedCompletionTime\(now\);/, 'lesson evidence must clamp caller time before mastery recording');
+assert.match(attemptSection, /recordSkillAttempt\(state\.mastery, lesson, correct, attemptTime, normalizedErrorTag\)/, 'mastery evidence must receive the trusted attempt clock');
+assert.doesNotMatch(attemptSection, /recordSkillAttempt\(state\.mastery, lesson, correct, now, normalizedErrorTag\)/, 'raw caller time must never reach mastery evidence recording');
 
 const rewardStart = source.indexOf('export function rewardLearningCompletion(');
 assert.ok(rewardStart >= 0 && rewardStart < attemptStart, 'completion reward boundary must remain separate from attempt recording');
@@ -28,4 +31,4 @@ assert.match(rewardSection, /const rewardTime = trustedCompletionTime\(now\);/, 
 assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'only the completion boundary should mint the learning reward through the trusted clock');
 assert.doesNotMatch(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'raw caller time must never reach the progression reward boundary');
 
-console.log('Session attempt audit OK: attempts are bounded and reward-free, while completion rewards stay idempotent and use the trusted completion clock.');
+console.log('Session attempt audit OK: attempts are bounded and reward-free, while mastery evidence and completion rewards share the trusted clock boundary.');
