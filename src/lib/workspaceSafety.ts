@@ -5,6 +5,13 @@ const SENSITIVE_BASENAMES = new Set([
   '.npmrc',
   '.pypirc',
   '.netrc',
+  '.git-credentials',
+  '.yarnrc.yml',
+  'pip.conf',
+  'pip.ini',
+  'auth.json',
+  '.dockerconfigjson',
+  'application_default_credentials.json',
   'id_rsa',
   'id_ed25519',
   'credentials',
@@ -56,6 +63,8 @@ export function isSensitiveWorkspaceFilename(path: string): boolean {
   if (basename === '.env.example') return false;
   if (SENSITIVE_BASENAMES.has(basename)) return true;
   if (basename.startsWith('.env.')) return true;
+  if (/^(?:firebase|google|gcp)[-_].*(?:admin|credential|service[-_]?account).*\.json$/i.test(basename)) return true;
+  if (/^(?:id_rsa|id_ed25519)(?:\..+)?$/i.test(basename)) return true;
   return /\.(?:pem|key|p12|pfx|jks|keystore)$/.test(basename);
 }
 
