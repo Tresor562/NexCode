@@ -90,7 +90,7 @@ function nativeAppIsActive(): boolean {
 }
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
-  function canTrigger(kind: LearningFeedbackKind, appActive: boolean) {
+  function canTrigger(kind: LearningFeedbackKind, appActive: boolean, bypassOwnCooldown = false) {
     // React state can lag a native lifecycle transition by a render. Require both
     // the caller's state and the native AppState before firing *any* feedback,
     // not only audio. This prevents haptics from vibrating after the learner has
@@ -135,7 +135,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
         sharedLastTriggeredAt.set(kind, current);
         return false;
       }
-      if (elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
+      if (!bypassOwnCooldown && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
     }
     sharedLastTriggeredAt.set(kind, current);
     if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;
@@ -195,18 +195,22 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
           semanticCandidate = current - sharedLastNotificationFeedbackAt;
         }
       }
+      const isSemanticCandidate = semanticCandidate >= 0 && semanticCandidate <= SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS;
 
-      // A request rejected only by the sound cooldown is different: it should not
-      // silence an already accepted success/error cue just because the learner taps
-      // the next control immediately.
-      if (!canTrigger('sound', true)) return;
+      // Success/error audio is more important than the weak tap that may have fired
+      // immediately before quiz submission. Let a freshly-associated semantic cue
+      // bypass only the sound channel's own cooldown, while still respecting app
+      // lifecycle and every other feedback gate. The semantic cue then supersedes
+      // the earlier weak audio generation, so the learner hears the result they
+      // actually need rather than a stale tap.
+      if (!canTrigger('sound', true, isSemanticCandidate)) return;
       const generation = supersedeAudio();
 
       // Notification feedback is emitted immediately before success/error audio in
       // the lesson flow. Pair audio only with that notification channel. Generic
       // impacts (robot bounce, CTA emphasis) intentionally never create a semantic
       // audio protection window of their own.
-      if (semanticCandidate >= 0 && semanticCandidate <= SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS) {
+      if (isSemanticCandidate) {
         sharedSemanticAudioProtectedFrom = current;
         sharedSemanticAudioProtectedUntil = current + SEMANTIC_AUDIO_PROTECTION_MS;
       }
