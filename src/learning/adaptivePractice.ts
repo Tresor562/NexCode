@@ -46,7 +46,7 @@ function scoreLesson(
   const completed = completedIds.has(lesson.id);
   const weakest = snapshots.length ? Math.min(...snapshots.map((item) => item.effectiveScore)) : 0;
   const due = snapshots.some((item) => item.needsReview);
-  const recurringErrors = snapshots.reduce((sum, item) => sum + item.recurringErrors.length, 0);
+  const recurringErrors = new Set(snapshots.flatMap((item) => item.recurringErrors)).size;
   const prereqsReady = lessonPrerequisitesReady(skills, mastery, graphById, now);
   const kind = lesson.activityKind ?? 'learn';
 
