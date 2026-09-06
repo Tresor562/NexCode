@@ -80,8 +80,8 @@ export function localDateKey(date = new Date()): string {
 function trustedProgressDate(value?: Date, reference = new Date()): Date {
   const safeReference = reference instanceof Date && Number.isFinite(reference.getTime()) ? reference : new Date();
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeReference;
-  if (value.getTime() > safeReference.getTime() + MAX_PROGRESS_CLOCK_SKEW_MS) return safeReference;
-  return value;
+  const clockSkewMs = value.getTime() - safeReference.getTime();
+  return Math.abs(clockSkewMs) <= MAX_PROGRESS_CLOCK_SKEW_MS ? value : safeReference;
 }
 
 function previousLocalDateKey(date = new Date()): string {
