@@ -20,6 +20,7 @@ const MAX_RETRY_DELAY_MS = 30_000;
 const FOLLOW_UP_DELAY_MS = 250;
 const DEFAULT_PUSH_DELAY_MS = 900;
 const MAX_PUSH_DELAY_MS = 60_000;
+const MAX_CLOUD_DATE_LEAD_MS = 36 * 60 * 60 * 1000;
 
 function normalizeFlushDelay(value: unknown, fallback = DEFAULT_PUSH_DELAY_MS): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -51,6 +52,45 @@ function snapshotCloudState(state: LocalState): LocalState | null {
   } catch {
     return null;
   }
+}
+
+function localDateKeyTimestamp(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const candidate = new Date(year, month - 1, day, 12, 0, 0, 0);
+  if (candidate.getFullYear() !== year || candidate.getMonth() !== month - 1 || candidate.getDate() !== day) return null;
+  return candidate.getTime();
+}
+
+function isImpossibleFutureCloudDate(value: unknown, reference: Date): boolean {
+  const timestamp = localDateKeyTimestamp(value);
+  if (timestamp === null) return false;
+  return timestamp > reference.getTime() + MAX_CLOUD_DATE_LEAD_MS;
+}
+
+export function sanitizeReconciledCloudActivityClock(
+  reconciled: LocalState,
+  local: LocalState,
+  reference = new Date(),
+): LocalState {
+  const safeReference = reference instanceof Date && Number.isFinite(reference.getTime()) ? reference : new Date();
+  const invalidActivityDate = isImpossibleFutureCloudDate(reconciled.lastActiveDate, safeReference);
+  const invalidRewardDate = isImpossibleFutureCloudDate(reconciled.dailyGoalRewardDate, safeReference);
+  if (!invalidActivityDate && !invalidRewardDate) return reconciled;
+
+  return {
+    ...reconciled,
+    ...(invalidActivityDate ? {
+      lastActiveDate: local.lastActiveDate,
+      dailyCompleted: local.dailyCompleted,
+      streak: local.streak,
+    } : {}),
+    ...(invalidRewardDate ? { dailyGoalRewardDate: local.dailyGoalRewardDate } : {}),
+  };
 }
 
 function clearPendingPush(): void {
@@ -106,7 +146,8 @@ async function performLatestStateFlush(): Promise<boolean> {
       throw new Error('Cloud account changed during reconciliation.');
     }
 
-    await pushCloudState(currentBeforePush, reconciled.state);
+    const safeReconciledState = sanitizeReconciledCloudActivityClock(reconciled.state, snapshot.state);
+    await pushCloudState(currentBeforePush, safeReconciledState);
     resetRetryBackoff();
     return true;
   } catch {
