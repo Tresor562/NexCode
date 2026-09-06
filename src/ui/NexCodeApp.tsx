@@ -58,10 +58,9 @@ export default function NexCodeApp() {
 
   function completeLab(draft: LabDraft) {
     if (!labLesson) return;
-    const completed = { ...labLesson, activityKind: 'lab' as const };
+    const completed = labLesson;
     setState((current) => {
-      const attempted = recordLessonOutcome(current, completed, true, undefined).state;
-      const rewarded = rewardLearningCompletion(attempted, completed);
+      const rewarded = rewardLearningCompletion(current, completed);
       return {
         ...rewarded,
         labDrafts: { ...rewarded.labDrafts, [completed.id]: draft },
