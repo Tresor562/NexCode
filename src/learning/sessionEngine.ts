@@ -28,6 +28,8 @@ const completionRewards: Readonly<Record<ActivityKind, Readonly<Omit<LearningCom
 };
 
 const MAX_EVIDENCE_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const MAX_ERROR_TAG_LENGTH = 96;
+const MAX_LESSON_ERROR_TAGS = 6;
 
 function normalizeSelectedIndex(lesson: Lesson, selectedIndex: number | null): number | null {
   if (!Number.isInteger(selectedIndex)) return null;
@@ -49,6 +51,33 @@ function safeLearningMinutes(durationMin: number): number {
 function safeAttemptCount(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(10_000, Math.floor(value)));
+}
+
+function safeErrorTag(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_ERROR_TAG_LENGTH)
+    .trim();
+  return normalized || undefined;
+}
+
+function fallbackErrorTag(lesson: Lesson): string {
+  const skill = (lesson.skillIds ?? []).map((id) => safeErrorTag(id)).find(Boolean) ?? safeErrorTag(lesson.id) ?? 'lesson';
+  return `${skill}.incorrect`.slice(0, MAX_ERROR_TAG_LENGTH);
+}
+
+function normalizeErrorTag(lesson: Lesson, correct: boolean, errorTag: unknown): string | undefined {
+  if (correct) return undefined;
+  return safeErrorTag(errorTag) ?? fallbackErrorTag(lesson);
+}
+
+function safeHistoricalErrorTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const normalized = value.map((tag) => safeErrorTag(tag)).filter((tag): tag is string => Boolean(tag));
+  return [...new Set(normalized)].slice(-MAX_LESSON_ERROR_TAGS);
 }
 
 function trustedCompletionTime(value: Date, systemNow = new Date()): Date {
@@ -131,19 +160,19 @@ export function recordLessonOutcome(
   now = new Date(),
 ): AttemptResult {
   const attempts = Math.min(10_000, safeAttemptCount(state.lessonAttempts[lesson.id]) + 1);
-  const normalizedErrorTag = correct ? undefined : errorTag?.trim() || `${lesson.skillIds?.[0] ?? lesson.id}.incorrect`;
-  // The same trusted clock boundary used for rewards must also protect mastery
-  // evidence. Otherwise a device clock far in the future or past can write a
-  // latest attempt that distorts review scheduling while reward progression uses
-  // a different timeline. Bounding before recordSkillAttempt keeps mastery,
-  // review dates, cloud sync and the eventual reward on one plausible clock.
+  // Error tags are synced and restored as part of learner state. Treat both the
+  // incoming diagnostic and any historical array as untrusted runtime data: remove
+  // control characters, collapse whitespace, cap each tag, dedupe and bound the
+  // retained history. This prevents one malformed cloud/local value from creating
+  // an ever-growing payload or leaking multiline garbage into adaptive diagnostics.
+  const normalizedErrorTag = normalizeErrorTag(lesson, correct, errorTag);
   const attemptTime = trustedCompletionTime(now);
   const mastery = recordSkillAttempt(state.mastery, lesson, correct, attemptTime, normalizedErrorTag);
   const previousScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (state.mastery[id]?.score ?? 0), 0);
   const nextScore = (lesson.skillIds ?? []).reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0);
-  const previousErrors = state.lessonErrorTags[lesson.id] ?? [];
+  const previousErrors = safeHistoricalErrorTags(state.lessonErrorTags[lesson.id]);
   const lessonErrorTags = normalizedErrorTag
-    ? { ...state.lessonErrorTags, [lesson.id]: [...new Set([...previousErrors, normalizedErrorTag])].slice(-6) }
+    ? { ...state.lessonErrorTags, [lesson.id]: [...new Set([...previousErrors, normalizedErrorTag])].slice(-MAX_LESSON_ERROR_TAGS) }
     : state.lessonErrorTags;
   const shouldOpenLab = lesson.activityKind === 'lab' || attempts >= 2 || (correct && ['practice', 'review'].includes(lesson.activityKind ?? 'learn'));
 
