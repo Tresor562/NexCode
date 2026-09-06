@@ -128,6 +128,7 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
     .filter((state): state is SkillMastery => Boolean(state));
   const dueStates = skillStates.filter((state) => reviewIsDue(state.nextReviewAt, now));
   const dueReview = dueStates.length > 0;
+  const isCompleted = completed.has(lesson.id);
   const weakestSkill = skillStates.length
     ? Math.min(...skillStates.map((state) => boundedMasteryScore(state.score)))
     : 0;
@@ -136,9 +137,9 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
     : 0;
 
   let score = 1;
-  if (!completed.has(lesson.id)) score += 45;
+  if (!isCompleted) score += 45;
   if (dueReview) score += 70 + reviewUrgency;
-  if (completed.has(lesson.id) && !dueReview) score -= COMPLETED_NOT_DUE_PENALTY;
+  if (isCompleted && !dueReview) score -= COMPLETED_NOT_DUE_PENALTY;
   score += Math.round((100 - weakestSkill) * 0.2);
 
   const kind = lesson.activityKind ?? 'learn';
@@ -147,7 +148,10 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
   else if (kind === 'lab') score += 8;
   else if (kind === 'checkpoint' || kind === 'boss') score += 5;
 
-  score -= prerequisiteReadinessPenalty(lesson, mastery);
+  // Prerequisites should sequence unseen material, not suppress spaced repetition for
+  // a lesson the learner has already completed. Once learned, a due review remains
+  // actionable even if an upstream mastery score later decays below the new-content gate.
+  if (!isCompleted) score -= prerequisiteReadinessPenalty(lesson, mastery);
   return score;
 }
 
