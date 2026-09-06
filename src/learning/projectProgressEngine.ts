@@ -55,6 +55,23 @@ function portfolioProofTimestamp(proof: PortfolioProof | undefined): number | nu
   return Number.isFinite(completedAt) ? completedAt : null;
 }
 
+function canonicalizePortfolioProof(proof: PortfolioProof, project: GuidedProject): PortfolioProof {
+  const completedAt = Date.parse(proof.completedAt);
+  return {
+    projectId: project.id,
+    title: project.title.trim(),
+    completedAt: new Date(completedAt).toISOString(),
+    score: proof.score,
+    skillIds: [...new Set(proof.skillIds
+      .map((id) => typeof id === 'string' ? id.trim() : '')
+      .filter(Boolean))],
+    rubricIds: [...new Set(proof.rubricIds
+      .map((id) => typeof id === 'string' ? id.trim() : '')
+      .filter(Boolean))],
+    evidenceSummary: proof.evidenceSummary.trim(),
+  };
+}
+
 function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProject, now: Date): boolean {
   const projectId = typeof proof.projectId === 'string' ? proof.projectId.trim() : '';
   const title = typeof proof.title === 'string' ? proof.title.trim() : '';
@@ -156,16 +173,21 @@ export function recordPortfolioProof(
   const project = canonicalProject(proof?.projectId);
   if (!project || !isRewardablePortfolioProof(proof, project, rewardTime)) return state;
 
-  const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId === project.id);
+  // Validation intentionally accepts harmless surrounding whitespace from UI or
+  // imported/cloud payloads, but persisted identity must always be canonical.
+  // Otherwise a proof stored as ` project-id ` would not match `project-id` on the
+  // next submission and could re-enter the one-time portfolio reward path.
+  const canonicalProof = canonicalizePortfolioProof(proof, project);
+  const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId.trim() === project.id);
   if (existingIndex >= 0) {
     const existingProof = state.portfolioProofs[existingIndex];
     const existingCompletedAt = portfolioProofTimestamp(existingProof);
-    const incomingCompletedAt = portfolioProofTimestamp(proof);
+    const incomingCompletedAt = portfolioProofTimestamp(canonicalProof);
     if (incomingCompletedAt === null) return state;
     if (existingCompletedAt !== null && incomingCompletedAt <= existingCompletedAt) return state;
     return {
       ...state,
-      portfolioProofs: state.portfolioProofs.map((item, index) => index === existingIndex ? proof : item),
+      portfolioProofs: state.portfolioProofs.map((item, index) => index === existingIndex ? canonicalProof : item),
     };
   }
 
@@ -181,6 +203,6 @@ export function recordPortfolioProof(
   const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now: rewardTime });
   return {
     ...rewarded,
-    portfolioProofs: [...rewarded.portfolioProofs, proof],
+    portfolioProofs: [...rewarded.portfolioProofs, canonicalProof],
   };
 }
