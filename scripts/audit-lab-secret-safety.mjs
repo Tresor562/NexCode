@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 
-const source = readFileSync(new URL('../src/learning/labBehavioralTests.ts', import.meta.url), 'utf8');
+const safetySource = readFileSync(new URL('../src/lib/workspaceSafety.ts', import.meta.url), 'utf8');
+const behavioralSource = readFileSync(new URL('../src/learning/labBehavioralTests.ts', import.meta.url), 'utf8');
 
 const requiredGuards = [
   {
@@ -30,20 +31,28 @@ const requiredGuards = [
 ];
 
 for (const guard of requiredGuards) {
-  if (!source.includes(guard.needle)) {
+  if (!safetySource.includes(guard.needle)) {
     throw new Error(`Lab secret safety audit failed: missing ${guard.label}.`);
   }
 }
 
-if (!source.includes("id: 'no-real-secret'")) {
+if (!safetySource.includes('export function containsLikelyWorkspaceSecret')) {
+  throw new Error('Lab secret safety audit failed: shared workspace secret guard is missing.');
+}
+
+if (!behavioralSource.includes("id: 'no-real-secret'")) {
   throw new Error('Lab secret safety audit failed: no-real-secret behavioral gate is missing.');
 }
 
-if (!source.includes('run: (draft) => secretSafetyIssues(draft).length === 0')) {
+if (!behavioralSource.includes('containsLikelyWorkspaceSecret(content)')) {
+  throw new Error('Lab secret safety audit failed: behavioral validation must reuse the shared workspace secret guard.');
+}
+
+if (!behavioralSource.includes('run: (draft) => secretSafetyIssues(draft).length === 0')) {
   throw new Error('Lab secret safety audit failed: secret scanner no longer blocks behavioral validation.');
 }
 
-if (!source.includes('for (const [filename, content] of Object.entries(draft.files))')) {
+if (!behavioralSource.includes('for (const [filename, content] of Object.entries(draft.files))')) {
   throw new Error('Lab secret safety audit failed: scanner must inspect every workspace file.');
 }
 
