@@ -93,6 +93,20 @@ const baseState = (overrides = {}) => ({
 
 {
   const mastery = baseState({
+    evidence: [
+      { lessonId: 'lab-valid', activityKind: 'lab', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: 'project-valid', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: 'forged-kind', activityKind: 'instant-master', correct: true, scoreDelta: 99, at: '2026-08-26T00:00:00.000Z' },
+    ],
+  });
+  const quality = evidenceQuality('skill-a', mastery, NOW);
+  assert.equal(quality.diversity, 40, 'unknown restored activity kinds must not inflate evidence diversity');
+  assert.equal(quality.independence, 50, 'known independent evidence should still count normally');
+  assert.equal(quality.transferable, true, 'a valid project should keep legitimate transferability');
+}
+
+{
+  const mastery = baseState({
     score: Number.NaN,
     confidence: Number.POSITIVE_INFINITY,
     consecutiveCorrect: Number.NaN,
@@ -110,4 +124,4 @@ const baseState = (overrides = {}) => ({
   assert.equal(quality.transferable, false, 'an invalid runtime clock must not preserve transfer evidence');
 }
 
-console.log('Mastery evidence audit OK: only timestamp-valid evidence contributes to recency, diversity, independence and transferability.');
+console.log('Mastery evidence audit OK: only valid activity kinds with valid timestamps contribute to recency, diversity, independence and transferability.');
