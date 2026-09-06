@@ -107,6 +107,33 @@ const baseState = (overrides = {}) => ({
 
 {
   const mastery = baseState({
+    evidence: [
+      { lessonId: 'same-project', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: ' same-project ', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: '\u0000same-project\u0007', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+    ],
+  });
+  const quality = evidenceQuality('skill-a', mastery, NOW);
+  assert.equal(quality.independence, 25, 'whitespace and control-character variants of one context must not manufacture independent evidence');
+  assert.equal(quality.transferable, true, 'a canonical valid project context should remain transferable');
+}
+
+{
+  const mastery = baseState({
+    evidence: [
+      { lessonId: '   ', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: 'x'.repeat(161), activityKind: 'boss', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+    ],
+  });
+  const quality = evidenceQuality('skill-a', mastery, NOW);
+  assert.equal(quality.diversity, 0, 'invalid context identities must fail closed for diversity');
+  assert.equal(quality.independence, 0, 'invalid context identities must fail closed for independence');
+  assert.equal(quality.transferable, false, 'invalid context identities must not manufacture transferability');
+  assert.equal(quality.recency, 0, 'invalid context identities must not manufacture recent evidence');
+}
+
+{
+  const mastery = baseState({
     score: Number.NaN,
     confidence: Number.POSITIVE_INFINITY,
     consecutiveCorrect: Number.NaN,
@@ -124,4 +151,4 @@ const baseState = (overrides = {}) => ({
   assert.equal(quality.transferable, false, 'an invalid runtime clock must not preserve transfer evidence');
 }
 
-console.log('Mastery evidence audit OK: only valid activity kinds with valid timestamps contribute to recency, diversity, independence and transferability.');
+console.log('Mastery evidence audit OK: activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
