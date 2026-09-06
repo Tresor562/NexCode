@@ -150,6 +150,7 @@ export function restoreWorkspaceDraft({
       || !normalizedName
       || isSensitiveWorkspaceFilename(normalizedName)
       || !validTextContent(rawContent)
+      || containsLikelyWorkspaceSecret(rawContent)
     ) {
       repaired = true;
       continue;
