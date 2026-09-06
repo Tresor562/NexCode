@@ -13,6 +13,12 @@ export type ReviewItem = {
   reason: string;
 };
 
+const DAY_MS = 86_400_000;
+// recordSkillAttempt currently schedules at most 21 days ahead. Keep one day of
+// tolerance for timezone/device-boundary effects, but fail closed if restored or
+// cloud state tries to postpone a review beyond any interval NexCode can mint.
+const MAX_REVIEW_HORIZON_MS = 22 * DAY_MS;
+
 function canonicalSkillIds(skillIds: string[] | undefined) {
   return [...new Set((skillIds ?? []).map((id) => id.trim()).filter(Boolean))];
 }
@@ -32,7 +38,9 @@ function daysUntil(iso: string | undefined, now: Date) {
   if (!iso) return 0;
   const timestamp = Date.parse(iso);
   if (!Number.isFinite(timestamp)) return 0;
-  return (timestamp - now.getTime()) / 86_400_000;
+  const delay = timestamp - now.getTime();
+  if (delay > MAX_REVIEW_HORIZON_MS) return 0;
+  return delay / DAY_MS;
 }
 
 function windowFor(days: number): ReviewWindow {
