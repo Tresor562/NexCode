@@ -202,6 +202,24 @@ function normalizeHintThreshold(value: number | undefined) {
   return Math.max(1, Math.floor(value));
 }
 
+function diagnosticNudge(evaluation?: ExerciseEvaluation) {
+  if (!evaluation || evaluation.passed) return undefined;
+  const tags = evaluation.misconceptionTags;
+  const hasTag = (tag: string) => tags.includes(tag);
+  const hasPrefix = (prefix: string) => tags.some((tag) => tag.startsWith(prefix));
+
+  if (hasTag('evaluation-gate-missing')) return 'Cette activité ne possède pas encore une correction automatique fiable. Ne transforme pas une absence de test en réussite : passe par une activité vérifiable.';
+  if (hasTag('input-required')) return 'Commence par produire une vraie tentative. Écris l’idée ou le code que tu crois correct, puis utilise le retour pour ajuster une seule chose à la fois.';
+  if (hasTag('edge-case')) return 'Le cas principal semble proche. Teste maintenant une valeur vide, minimale, maximale ou inattendue pour trouver la condition qui manque.';
+  if (hasPrefix('structure:')) return 'Le contenu est peut-être présent, mais pas dans le bon ordre. Repère les étapes qui dépendent les unes des autres et reconstruis leur séquence.';
+  if (hasPrefix('remove:')) return 'Une partie qui devait disparaître est encore présente. Cherche le comportement ou le fragment interdit avant d’ajouter du nouveau code.';
+  if (hasPrefix('syntax:')) return 'La forme attendue n’est pas encore reconnue. Vérifie la ponctuation, les délimiteurs, le nom des éléments et la structure syntaxique autour de la zone modifiée.';
+  if (hasPrefix('precision:')) return 'Tu es proche, mais la sortie doit être précise. Compare caractère par caractère la forme produite avec l’objectif, notamment espaces, casse et valeur finale.';
+  if (hasTag('expected-behavior')) return 'Pars du résultat observable demandé. Identifie la plus petite différence entre ce que ton code produit et ce qu’il devrait produire, puis corrige uniquement cette cause.';
+  if (hasPrefix('concept:')) return 'Le concept attendu n’apparaît pas encore dans ta réponse. Reviens à la règle centrale de la leçon et demande-toi où elle doit intervenir dans ta solution.';
+  return evaluation.feedback[0];
+}
+
 export function nextHint(exercise: RichExercise, attempts: number) {
   const hints = exercise.hints ?? [];
   if (!hints.length) return undefined;
@@ -215,6 +233,7 @@ export function nextHint(exercise: RichExercise, attempts: number) {
 export function exerciseScaffold(exercise: RichExercise, attempts: number, evaluation?: ExerciseEvaluation): ExerciseScaffold {
   const safeAttempts = normalizeAttemptCount(attempts);
   const hint = nextHint(exercise, safeAttempts);
+  const nudge = diagnosticNudge(evaluation);
 
   if (evaluation?.passed) {
     return {
@@ -240,7 +259,7 @@ export function exerciseScaffold(exercise: RichExercise, attempts: number, evalu
     return {
       level: 'nudge',
       title: 'Tu es en train d’apprendre',
-      message: evaluation?.feedback[0] ?? 'Relis l’objectif et modifie seulement la partie qui semble responsable du résultat.',
+      message: nudge ?? 'Relis l’objectif et modifie seulement la partie qui semble responsable du résultat.',
       shouldRevealExplanation: false,
       shouldRevealSolution: false,
     };
@@ -250,7 +269,7 @@ export function exerciseScaffold(exercise: RichExercise, attempts: number, evalu
     return {
       level: 'hint',
       title: hint ? 'Indice débloqué' : 'Réduis le problème',
-      message: hint ?? evaluation?.feedback[0] ?? 'Teste une hypothèse à la fois et observe ce qui change.',
+      message: hint ?? nudge ?? 'Teste une hypothèse à la fois et observe ce qui change.',
       hint,
       shouldRevealExplanation: false,
       shouldRevealSolution: false,
