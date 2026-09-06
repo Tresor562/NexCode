@@ -15,6 +15,18 @@ assert.match(source, /return recordLessonOutcome\(state, lesson, correct, errorT
 assert.match(source, /const clockSkewMs = value\.getTime\(\) - safeSystemNow\.getTime\(\);/, 'trusted lesson time must measure clock skew in both directions');
 assert.match(source, /Math\.abs\(clockSkewMs\) <= MAX_EVIDENCE_CLOCK_SKEW_MS \? value : safeSystemNow/, 'future and regressed device clocks must both clamp to the trusted system clock');
 
+assert.match(source, /const MAX_ERROR_TAG_LENGTH = 96;/, 'diagnostic error tags must have a hard payload bound');
+assert.match(source, /const MAX_LESSON_ERROR_TAGS = 6;/, 'per-lesson diagnostic history must have a hard item bound');
+assert.match(source, /function safeErrorTag\(value: unknown\): string \| undefined/, 'session engine must sanitize restored and incoming diagnostic tags');
+assert.match(source, /\.replace\(\/\[\\u0000-\\u001F\\u007F\]\/g, ' '\)/, 'control characters must be stripped from persisted diagnostics');
+assert.match(source, /\.slice\(0, MAX_ERROR_TAG_LENGTH\)/, 'diagnostic tags must be length bounded before persistence');
+assert.match(source, /function safeHistoricalErrorTags\(value: unknown\): string\[\]/, 'restored diagnostic arrays must be revalidated at the lesson boundary');
+assert.match(source, /Array\.isArray\(value\)/, 'non-array restored diagnostic history must fail safely');
+assert.match(source, /\[\.\.\.new Set\(normalized\)\]\.slice\(-MAX_LESSON_ERROR_TAGS\)/, 'restored diagnostic history must be deduplicated and bounded');
+assert.match(source, /const normalizedErrorTag = normalizeErrorTag\(lesson, correct, errorTag\);/, 'incoming lesson diagnostics must pass through the shared sanitizer');
+assert.match(source, /const previousErrors = safeHistoricalErrorTags\(state\.lessonErrorTags\[lesson\.id\]\);/, 'persisted lesson diagnostics must be sanitized before reuse');
+assert.match(source, /\.slice\(-MAX_LESSON_ERROR_TAGS\)/, 'updated diagnostic history must remain bounded after insertion');
+
 const attemptStart = source.indexOf('export function recordLessonOutcome(');
 const answerStart = source.indexOf('export function recordLessonAnswer(');
 assert.ok(attemptStart >= 0 && answerStart > attemptStart, 'attempt outcome section must be discoverable');
@@ -22,7 +34,7 @@ const attemptSection = source.slice(attemptStart, answerStart);
 assert.doesNotMatch(attemptSection, /rewardProgress\(/, 'answer attempts must never mint XP, NexCoins, streak progress or learning minutes');
 assert.doesNotMatch(attemptSection, /completedLessons:/, 'answer attempts must not mark lessons complete before the completion boundary');
 assert.match(attemptSection, /const attemptTime = trustedCompletionTime\(now\);/, 'lesson evidence must clamp caller time before mastery recording');
-assert.match(attemptSection, /recordSkillAttempt\(state\.mastery, lesson, correct, attemptTime, normalizedErrorTag\)/, 'mastery evidence must receive the trusted attempt clock');
+assert.match(attemptSection, /recordSkillAttempt\(state\.mastery, lesson, correct, attemptTime, normalizedErrorTag\)/, 'mastery evidence must receive the trusted attempt clock and sanitized diagnostic');
 assert.doesNotMatch(attemptSection, /recordSkillAttempt\(state\.mastery, lesson, correct, now, normalizedErrorTag\)/, 'raw caller time must never reach mastery evidence recording');
 
 const rewardStart = source.indexOf('export function rewardLearningCompletion(');
@@ -33,4 +45,4 @@ assert.match(rewardSection, /const rewardTime = trustedCompletionTime\(now\);/, 
 assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'only the completion boundary should mint the learning reward through the trusted clock');
 assert.doesNotMatch(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'raw caller time must never reach the progression reward boundary');
 
-console.log('Session attempt audit OK: attempts are bounded and reward-free, while mastery evidence and completion rewards share a bidirectional trusted clock boundary.');
+console.log('Session attempt audit OK: attempts, clocks and restored diagnostic tags are bounded before mastery/progression state is persisted.');
