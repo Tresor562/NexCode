@@ -3,6 +3,8 @@ import fs from 'node:fs';
 
 const sourceUrl = new URL('../src/learning/projectPortfolioEngine.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
+const progressSourceUrl = new URL('../src/learning/projectProgressEngine.ts', import.meta.url);
+const progressSource = fs.readFileSync(progressSourceUrl, 'utf8');
 
 assert.match(source, /const MAX_COMPLETION_CLOCK_SKEW_MS = 5 \* 60 \* 1000;/, 'portfolio proof creation must bound tolerated device clock skew');
 assert.match(source, /function validCompletionDate\(value: Date, now = new Date\(\)\): Date/, 'portfolio proof persistence must validate completion dates centrally');
@@ -29,4 +31,15 @@ assert.match(source, /projectCount: projectIds\.size/, 'portfolio coverage must 
 assert.doesNotMatch(source, /projectsBySkill\.get\(skillId\)/, 'raw skill-id spelling must not split coverage after cross-device sync');
 assert.doesNotMatch(source, /covered\.set\(skillId, \(covered\.get\(skillId\) \?\? 0\) \+ 1\)/, 'raw proof-row counting must not inflate skill coverage after sync duplication');
 
-console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, normalized skill identity, and distinct-project coverage are canonicalized before persistence or counting.');
+assert.match(progressSource, /function canonicalizePortfolioProof\(proof: PortfolioProof, project: GuidedProject\): PortfolioProof/, 'reward persistence must canonicalize validated portfolio proofs before storing them');
+assert.match(progressSource, /projectId: project\.id/, 'stored portfolio proof identity must use the canonical registered project id');
+assert.match(progressSource, /title: project\.title\.trim\(\)/, 'stored portfolio proof title must come from canonical product data');
+assert.match(progressSource, /completedAt: new Date\(completedAt\)\.toISOString\(\)/, 'stored portfolio completion timestamps must be normalized before later version comparisons');
+assert.match(progressSource, /evidenceSummary: proof\.evidenceSummary\.trim\(\)/, 'stored portfolio evidence summaries must not retain harmless identity-breaking whitespace');
+assert.match(progressSource, /const canonicalProof = canonicalizePortfolioProof\(proof, project\);/, 'the reward path must canonicalize proof payloads immediately after validation');
+assert.match(progressSource, /findIndex\(\(item\) => item\.projectId\.trim\(\) === project\.id\)/, 'legacy or cloud-restored proofs with surrounding whitespace must still be detected as existing rewards');
+assert.match(progressSource, /index === existingIndex \? canonicalProof : item/, 'proof updates must replace legacy payloads with canonical data');
+assert.match(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, canonicalProof\]/, 'first-time portfolio rewards must persist only canonical proof identity');
+assert.doesNotMatch(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, proof\]/, 'raw validated proof payloads must never be appended to the reward ledger');
+
+console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, normalized skill/project identity, reward deduplication, and distinct-project coverage are canonicalized before persistence or counting.');
