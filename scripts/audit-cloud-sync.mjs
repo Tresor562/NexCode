@@ -49,8 +49,8 @@ requirePattern(
   'Clearing a cloud timer must also clear its retry-protection marker.',
 );
 requirePattern(
-  /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*const currentBeforePush = loadCloudSession\(\);[\s\S]*await pushCloudState\(currentBeforePush, reconciled\.state\);/,
-  'Cloud pushes must reconcile the queued snapshot and use the freshest verified session for the write, so refreshed credentials are not discarded.',
+  /const reconciled = await pullCloudState\(session, snapshot\.state\);[\s\S]*const currentBeforePush = loadCloudSession\(\);[\s\S]*const safeReconciledState = sanitizeReconciledCloudActivityClock\(reconciled\.state, snapshot\.state\);[\s\S]*await pushCloudState\(currentBeforePush, safeReconciledState\);/,
+  'Cloud pushes must reconcile the queued snapshot, sanitize impossible day-scoped clock data, and use the freshest verified session for the write.',
 );
 requirePattern(
   /const currentBeforePush = loadCloudSession\(\);[\s\S]*if \(!currentBeforePush \|\| currentBeforePush\.user\.id !== snapshot\.userId\) \{[\s\S]*throw new Error\('Cloud account changed during reconciliation\.'\);/,
@@ -184,4 +184,4 @@ requirePattern(
   accountSource,
 );
 
-console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, protected offline retry timers across fresh local edits, preserved deferred retry intent, remote reconciliation, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, monotonic portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
+console.log('Cloud sync audit OK: immutable fail-safe snapshots, bounded scheduling delays, protected offline retry timers across fresh local edits, preserved deferred retry intent, remote reconciliation with impossible activity-clock sanitization, finite scalar progress merges, freshest verified write sessions, account-scoped queueing and retry backoff, monotonic progress maps, cross-device mastery evidence, merged error evidence, monotonic portfolio reconciliation, bounded retries, shared in-flight work, and deferred follow-up flushes are protected.');
