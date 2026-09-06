@@ -1,5 +1,10 @@
 import { Directory, File } from 'expo-file-system';
-import { canonicalWorkspacePath, isSensitiveWorkspaceFilename, workspaceCollisionKey } from './workspaceSafety';
+import {
+  canonicalWorkspacePath,
+  containsLikelyWorkspaceSecret,
+  isSensitiveWorkspaceFilename,
+  workspaceCollisionKey,
+} from './workspaceSafety';
 
 const TEXT_EXTENSIONS = new Set([
   'html','htm','css','scss','sass','less','js','jsx','mjs','cjs','ts','tsx','json','py','sql','md','txt','xml','yaml','yml','toml','ini','sh','bash','ps1','java','kt','kts','c','h','cpp','hpp','cs','go','rs','php','rb','dart','swift','vue','svelte','graphql','gql','csv','gitignore','dockerfile',
@@ -10,16 +15,6 @@ const IGNORED_DIRECTORIES = new Set([
 const SENSITIVE_DIRECTORIES = new Set([
   '.ssh','.aws','.gnupg','.azure','.kube','.docker','.gcloud',
 ]);
-const IMPORT_SECRET_PATTERNS = [
-  /(?:bot[_-]?token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[=:]\s*["']?(?!replace|example|test|your|changeme)[A-Za-z0-9_\-.]{12,}/i,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
-  /\b(?:sk_live|rk_live)_[A-Za-z0-9]{16,}\b/,
-  /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
-  /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/,
-  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
-  /\bAIza[0-9A-Za-z_-]{35}\b/,
-];
 const MAX_TEXT_BYTES = 1_500_000;
 const MAX_TEXT_CHARS = 1_500_000;
 const MAX_TOTAL_TEXT_CHARS = 5_000_000;
@@ -56,10 +51,6 @@ function shouldSkipDirectory(name: string) {
 function canReadAsText(file: File) {
   const size = typeof file.size === 'number' ? file.size : 0;
   return size <= MAX_TEXT_BYTES && isSafeSegment(file.name) && !isSensitiveWorkspaceFilename(file.name) && TEXT_EXTENSIONS.has(extension(file.name));
-}
-
-function containsLikelySecret(content: string) {
-  return IMPORT_SECRET_PATTERNS.some((pattern) => pattern.test(content));
 }
 
 function occupiedWorkspaceKeys(existing: Record<string, string>) {
@@ -105,7 +96,7 @@ function uniquePath(path: string, occupied: Set<string>) {
 
 async function readTextFile(file: File) {
   const text = await file.text();
-  if (text.length > MAX_TEXT_CHARS || text.includes('\0') || containsLikelySecret(text)) return null;
+  if (text.length > MAX_TEXT_CHARS || text.includes('\0') || containsLikelyWorkspaceSecret(text)) return null;
   return text;
 }
 
