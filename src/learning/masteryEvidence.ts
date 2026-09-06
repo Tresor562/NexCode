@@ -1,3 +1,4 @@
+import { ActivityKind } from '../data/curriculumCore';
 import { MasteryMap } from './skillGraph';
 import { masterySnapshot } from './masteryEngine';
 
@@ -11,8 +12,17 @@ export type EvidenceQuality = {
   reasons: string[];
 };
 
-const independentKinds = new Set(['lab', 'checkpoint', 'boss', 'project']);
-const transferKinds = new Set(['boss', 'project']);
+const independentKinds = new Set<ActivityKind>(['lab', 'checkpoint', 'boss', 'project']);
+const transferKinds = new Set<ActivityKind>(['boss', 'project']);
+const validActivityKinds: ReadonlySet<string> = new Set<ActivityKind>([
+  'learn',
+  'practice',
+  'lab',
+  'review',
+  'checkpoint',
+  'project',
+  'boss',
+]);
 const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60 * 1000;
 
 function finitePercent(value: unknown): number {
@@ -42,18 +52,18 @@ export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new 
 
   const nowMs = now.getTime();
   const correct = state.evidence
-    .filter((item) => item.correct)
+    .filter((item) => item.correct && validActivityKinds.has(item.activityKind))
     .map((item) => ({ item, timestamp: validTimestamp(item.at, nowMs) }))
     .filter((entry): entry is { item: typeof state.evidence[number]; timestamp: number } => entry.timestamp !== null);
   const kinds = [...new Set(correct.map(({ item }) => item.activityKind))];
   const independentContexts = new Set(
     correct
-      .filter(({ item }) => independentKinds.has(item.activityKind))
+      .filter(({ item }) => independentKinds.has(item.activityKind as ActivityKind))
       .map(({ item }) => `${item.activityKind}:${item.lessonId}`),
   );
   const transferContexts = new Set(
     correct
-      .filter(({ item }) => transferKinds.has(item.activityKind))
+      .filter(({ item }) => transferKinds.has(item.activityKind as ActivityKind))
       .map(({ item }) => `${item.activityKind}:${item.lessonId}`),
   );
   const timestamps = correct.map(({ timestamp }) => timestamp);
