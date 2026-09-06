@@ -54,7 +54,9 @@ assert.doesNotMatch(completionFunction, /rewardProgress\(state, \{ \.\.\.reward,
 
 assert.match(localStateSource, /function trustedProgressDate\(value\?: Date, reference = new Date\(\)\): Date/, 'reward timestamps must pass through the shared trusted progression clock boundary');
 assert.match(localStateSource, /if \(!\(value instanceof Date\) \|\| !Number\.isFinite\(value\.getTime\(\)\)\) return safeReference;/, 'invalid reward timestamps must fall back before streak dates are computed');
-assert.match(localStateSource, /if \(value\.getTime\(\) > safeReference\.getTime\(\) \+ MAX_PROGRESS_CLOCK_SKEW_MS\) return safeReference;/, 'impossible future reward timestamps must fall back before streak dates are computed');
+assert.match(localStateSource, /const clockSkewMs = value\.getTime\(\) - safeReference\.getTime\(\);/, 'trusted progression time must measure caller skew relative to the system clock');
+assert.match(localStateSource, /Math\.abs\(clockSkewMs\) <= MAX_PROGRESS_CLOCK_SKEW_MS \? value : safeReference/, 'far-future and far-regressed progress timestamps must fall back before streak dates are computed');
+assert.doesNotMatch(localStateSource, /value\.getTime\(\) > safeReference\.getTime\(\) \+ MAX_PROGRESS_CLOCK_SKEW_MS/, 'progression clock trust must not regress to a future-only guard');
 assert.match(localStateSource, /const now = trustedProgressDate\(reward\.now\);/, 'reward progress must normalize its clock before any daily or streak mutation');
 assert.match(localStateSource, /const minutes = finiteNumber\(reward\.minutes, 0, 0, 240\);/, 'reward minutes must reject NaN or Infinity and remain bounded per activity');
 assert.match(localStateSource, /const xp = finiteInteger\(reward\.xp, 0, 0, 1_000_000\);/, 'XP rewards must be finite non-negative integers with a corruption ceiling');
@@ -70,4 +72,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, bidirectional system-bound latest-correct evidence, trusted progression clocks, saturating totals and idempotence are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, bidirectional system-bound latest-correct evidence, bidirectional trusted progression clocks, saturating totals and idempotence are enforced.');
