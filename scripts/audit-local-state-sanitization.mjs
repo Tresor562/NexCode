@@ -167,6 +167,7 @@ assert.equal(crossedReward.nexCoins, 28, 'normal goal crossing must still grant 
 assert.equal(crossedReward.dailyGoalRewardDate, rewardDay);
 
 const impossibleFuture = new Date('2099-01-01T12:00:00.000Z');
+const impossiblePast = new Date('2000-01-01T12:00:00.000Z');
 const realDay = localDateKey(new Date());
 const futureReward = rewardProgress(sanitizeLocalState({
   xp: 10,
@@ -179,11 +180,28 @@ const futureReward = rewardProgress(sanitizeLocalState({
 assert.equal(futureReward.lastActiveDate, realDay, 'an impossible future reward clock must fall back to the real local day');
 assert.notEqual(futureReward.lastActiveDate, localDateKey(impossibleFuture), 'future reward clocks must never move the streak into an impossible day');
 
+const pastReward = rewardProgress(sanitizeLocalState({
+  xp: 10,
+  nexCoins: 5,
+  streak: 9,
+  bestStreak: 9,
+  dailyGoal: 20,
+  dailyCompleted: 0,
+}), { xp: 12, nexCoins: 3, minutes: 5, now: impossiblePast });
+assert.equal(pastReward.lastActiveDate, realDay, 'an impossible regressed reward clock must fall back to the real local day');
+assert.notEqual(pastReward.lastActiveDate, localDateKey(impossiblePast), 'regressed reward clocks must never move the streak into an obsolete day');
+
 const futureTouch = touchDailyActivity(sanitizeLocalState({ streak: 3, bestStreak: 5 }), impossibleFuture);
 assert.equal(futureTouch.lastActiveDate, realDay, 'direct daily activity touches must enforce the same clock boundary as rewards');
 assert.notEqual(futureTouch.lastActiveDate, localDateKey(impossibleFuture));
 
-assert.match(source, /MAX_PROGRESS_CLOCK_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'the progression clock skew boundary must remain explicit and reviewable');
-assert.match(source, /value\.getTime\(\)\s*>\s*safeReference\.getTime\(\)\s*\+\s*MAX_PROGRESS_CLOCK_SKEW_MS/, 'future timestamps must be rejected at the shared progression clock boundary');
+const pastTouch = touchDailyActivity(sanitizeLocalState({ streak: 3, bestStreak: 5 }), impossiblePast);
+assert.equal(pastTouch.lastActiveDate, realDay, 'direct daily activity touches must reject strongly regressed clocks too');
+assert.notEqual(pastTouch.lastActiveDate, localDateKey(impossiblePast));
 
-console.log('Local state sanitization audit OK: persisted learning state stays bounded, daily rewards stay exactly-once, and impossible future clocks cannot forge streak days.');
+assert.match(source, /MAX_PROGRESS_CLOCK_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'the progression clock skew boundary must remain explicit and reviewable');
+assert.match(source, /const clockSkewMs = value\.getTime\(\) - safeReference\.getTime\(\);/, 'the progression boundary must measure signed device clock skew');
+assert.match(source, /Math\.abs\(clockSkewMs\) <= MAX_PROGRESS_CLOCK_SKEW_MS \? value : safeReference/, 'future and regressed timestamps must both be rejected outside the trusted skew window');
+assert.doesNotMatch(source, /value\.getTime\(\)\s*>\s*safeReference\.getTime\(\)\s*\+\s*MAX_PROGRESS_CLOCK_SKEW_MS/, 'the progression clock boundary must not regress to a future-only check');
+
+console.log('Local state sanitization audit OK: persisted learning state stays bounded, daily rewards stay exactly-once, and impossible future or regressed clocks cannot forge streak days.');
