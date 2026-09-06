@@ -103,11 +103,23 @@ function validValidationMetadata(stored: LabDraft, nowMs: number): boolean {
   if (!plausibleIsoDate(stored.lastValidatedAt, nowMs) || !Array.isArray(stored.passedCriteria)) return false;
   if (!validIsoDate(stored.updatedAt) || Date.parse(stored.lastValidatedAt) < Date.parse(stored.updatedAt)) return false;
   if (stored.passedCriteria.length > MAX_VALIDATION_CRITERIA) return false;
-  return stored.passedCriteria.every((criterion) => {
+
+  const identities = new Set<string>();
+  for (const criterion of stored.passedCriteria) {
     if (typeof criterion !== 'string') return false;
     const normalized = criterion.trim();
-    return normalized.length > 0 && normalized.length <= MAX_VALIDATION_CRITERION_CHARS;
-  });
+    if (
+      normalized.length === 0
+      || normalized.length > MAX_VALIDATION_CRITERION_CHARS
+      || normalized !== criterion
+      || /[\u0000-\u001f\u007f]/.test(normalized)
+    ) return false;
+
+    const identity = normalized.normalize('NFC');
+    if (identities.has(identity)) return false;
+    identities.add(identity);
+  }
+  return true;
 }
 
 export function restoreWorkspaceDraft({
