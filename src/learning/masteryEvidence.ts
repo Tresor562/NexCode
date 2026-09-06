@@ -24,6 +24,7 @@ const validActivityKinds: ReadonlySet<string> = new Set<ActivityKind>([
   'boss',
 ]);
 const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60 * 1000;
+const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
 
 function finitePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -43,6 +44,13 @@ function validTimestamp(value: string, nowMs: number) {
   return time;
 }
 
+function canonicalEvidenceContext(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const context = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!context || context.length > MAX_EVIDENCE_CONTEXT_LENGTH) return null;
+  return context;
+}
+
 export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new Date()): EvidenceQuality {
   const state = mastery[skillId];
   const snapshot = masterySnapshot(skillId, mastery, now);
@@ -53,18 +61,18 @@ export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new 
   const nowMs = now.getTime();
   const correct = state.evidence
     .filter((item) => item.correct && validActivityKinds.has(item.activityKind))
-    .map((item) => ({ item, timestamp: validTimestamp(item.at, nowMs) }))
-    .filter((entry): entry is { item: typeof state.evidence[number]; timestamp: number } => entry.timestamp !== null);
+    .map((item) => ({ item, timestamp: validTimestamp(item.at, nowMs), context: canonicalEvidenceContext(item.lessonId) }))
+    .filter((entry): entry is { item: typeof state.evidence[number]; timestamp: number; context: string } => entry.timestamp !== null && entry.context !== null);
   const kinds = [...new Set(correct.map(({ item }) => item.activityKind))];
   const independentContexts = new Set(
     correct
       .filter(({ item }) => independentKinds.has(item.activityKind as ActivityKind))
-      .map(({ item }) => `${item.activityKind}:${item.lessonId}`),
+      .map(({ item, context }) => `${item.activityKind}:${context}`),
   );
   const transferContexts = new Set(
     correct
       .filter(({ item }) => transferKinds.has(item.activityKind as ActivityKind))
-      .map(({ item }) => `${item.activityKind}:${item.lessonId}`),
+      .map(({ item, context }) => `${item.activityKind}:${context}`),
   );
   const timestamps = correct.map(({ timestamp }) => timestamp);
   const latestAt = timestamps.length ? Math.max(...timestamps) : 0;
