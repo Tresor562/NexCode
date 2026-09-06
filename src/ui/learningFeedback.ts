@@ -41,6 +41,11 @@ const SEMANTIC_AUDIO_PROTECTION_MS = 180;
 // duplicate vibrations or sounds just because each control owns a different gate.
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 let sharedLastStrongFeedbackAt: number | undefined;
+// Audio semantics are narrower than tactile semantics. Impacts share the strong
+// haptic cadence, but only a success/error notification is paired with semantic
+// success/error audio. Track notifications separately so a robot/CTA impact cannot
+// accidentally turn the next ordinary tap sound into a protected semantic cue.
+let sharedLastNotificationFeedbackAt: number | undefined;
 let sharedSemanticAudioProtectedFrom: number | undefined;
 let sharedSemanticAudioProtectedUntil: number | undefined;
 
@@ -134,6 +139,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     }
     sharedLastTriggeredAt.set(kind, current);
     if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;
+    if (kind === 'notification') sharedLastNotificationFeedbackAt = current;
     return true;
   }
 
@@ -181,9 +187,14 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
         }
       }
 
-      const semanticCandidate = sharedLastStrongFeedbackAt !== undefined && Number.isFinite(sharedLastStrongFeedbackAt)
-        ? current - sharedLastStrongFeedbackAt
-        : Number.POSITIVE_INFINITY;
+      let semanticCandidate = Number.POSITIVE_INFINITY;
+      if (sharedLastNotificationFeedbackAt !== undefined) {
+        if (!Number.isFinite(sharedLastNotificationFeedbackAt) || current < sharedLastNotificationFeedbackAt) {
+          sharedLastNotificationFeedbackAt = undefined;
+        } else {
+          semanticCandidate = current - sharedLastNotificationFeedbackAt;
+        }
+      }
 
       // A request rejected only by the sound cooldown is different: it should not
       // silence an already accepted success/error cue just because the learner taps
@@ -192,8 +203,9 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       const generation = supersedeAudio();
 
       // Notification feedback is emitted immediately before success/error audio in
-      // the lesson flow. That close temporal pairing identifies a semantic sound
-      // without coupling this shared utility to any concrete audio player instance.
+      // the lesson flow. Pair audio only with that notification channel. Generic
+      // impacts (robot bounce, CTA emphasis) intentionally never create a semantic
+      // audio protection window of their own.
       if (semanticCandidate >= 0 && semanticCandidate <= SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS) {
         sharedSemanticAudioProtectedFrom = current;
         sharedSemanticAudioProtectedUntil = current + SEMANTIC_AUDIO_PROTECTION_MS;
