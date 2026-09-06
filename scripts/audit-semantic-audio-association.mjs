@@ -9,6 +9,11 @@ const expectations = [
   ['notification rollback recovery', 'current < sharedLastNotificationFeedbackAt'],
   ['notification candidate delta', 'semanticCandidate = current - sharedLastNotificationFeedbackAt;'],
   ['semantic association window', 'semanticCandidate <= SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS'],
+  ['semantic candidate classification', 'const isSemanticCandidate = semanticCandidate >= 0 && semanticCandidate <= SEMANTIC_AUDIO_ASSOCIATION_WINDOW_MS;'],
+  ['sound cooldown bypass parameter', 'bypassOwnCooldown = false'],
+  ['ordinary sound cooldown remains enforced', 'if (!bypassOwnCooldown && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;'],
+  ['semantic sound receives narrow cooldown priority', "canTrigger('sound', true, isSemanticCandidate)"],
+  ['semantic protection uses the classified candidate', 'if (isSemanticCandidate) {'],
 ];
 
 const missing = expectations.filter(([, marker]) => !source.includes(marker));
@@ -28,4 +33,14 @@ if (/kind === 'notification' \|\| kind === 'impact'\) sharedLastNotificationFeed
   process.exit(1);
 }
 
-console.log('Semantic audio association audit passed: success/error audio is associated only with notification haptics, while generic impacts keep their tactile cadence without hijacking the audio protection window.');
+if (/canTrigger\('sound', true, true\)/.test(source)) {
+  console.error('Semantic audio association audit failed: the sound cooldown must never be bypassed unconditionally.');
+  process.exit(1);
+}
+
+if (/if \(!bypassOwnCooldown[^\n]+FEEDBACK_COOLDOWN_MS\[kind\][\s\S]{0,120}kind === 'selection'/.test(source)) {
+  console.error('Semantic audio association audit failed: semantic priority must stay scoped to the sound channel rather than weakening tactile cooldowns.');
+  process.exit(1);
+}
+
+console.log('Semantic audio association audit passed: success/error audio is tied only to notification haptics, can preempt a just-fired weak tap without weakening ordinary sound/tactile cooldowns, and keeps the semantic protection window after acceptance.');
