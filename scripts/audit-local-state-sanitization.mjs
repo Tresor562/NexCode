@@ -131,7 +131,10 @@ assert.deepEqual(sanitized.portfolioProofs[0], {
 const polluted = Object.create({ projectProgress: { bypass: 100 } });
 assert.deepEqual(sanitizeLocalState(polluted).projectProgress, {}, 'prototype-inherited persisted state must fail closed');
 
-const rewardNow = new Date(2026, 7, 27, 12, 0, 0, 0);
+// Reward invariants should exercise a clock inside the trusted live window. Fixed
+// historical dates become intentionally untrusted as the repository ages and would
+// make this audit test the clock fallback instead of daily reward semantics.
+const rewardNow = new Date();
 const rewardDay = localDateKey(rewardNow);
 const rewardBase = sanitizeLocalState({
   xp: 100,
@@ -168,7 +171,7 @@ assert.equal(crossedReward.dailyGoalRewardDate, rewardDay);
 
 const impossibleFuture = new Date('2099-01-01T12:00:00.000Z');
 const impossiblePast = new Date('2000-01-01T12:00:00.000Z');
-const realDay = localDateKey(new Date());
+const realDay = rewardDay;
 const futureReward = rewardProgress(sanitizeLocalState({
   xp: 10,
   nexCoins: 5,
