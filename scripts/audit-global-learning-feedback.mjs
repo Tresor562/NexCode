@@ -33,7 +33,7 @@ const expectations = [
   ['cross-player stale audio guard', 'if (sharedAudioRequestGeneration !== generation) return;'],
   ['generation overflow guard', 'sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER'],
   ['background audio invalidation', 'if (!appActive || !nativeAppIsActive()) {\n        supersedeAudio();\n        return;\n      }'],
-  ['cooldown before supersession', "if (!canTrigger('sound', true)) return;\n      const generation = supersedeAudio();"],
+  ['semantic sound cooldown priority', "if (!canTrigger('sound', true, isSemanticCandidate)) return;\n      const generation = supersedeAudio();"],
   ['sync-safe audio seek boundary', 'Promise.resolve()\n        .then(() => {'],
   ['foreground recheck before async seek', 'if (!nativeAppIsActive()) return false;'],
   ['foreground recheck before play', 'if (!nativeAppIsActive()) return;\n          player.play();'],
@@ -116,14 +116,14 @@ if (/const generation = supersedeAudio\(\);\s*player\.seekTo\(0\)/.test(source))
   console.error('Global learning feedback audit failed: seekTo must be entered through a promise boundary so synchronous native throws are contained.');
   process.exit(1);
 }
-if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean\) \{[\s\S]{0,1800}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
+if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean, bypassOwnCooldown = false\) \{[\s\S]{0,1800}if \(!appActive \|\| !nativeAppIsActive\(\)\) return false;/.test(source)) {
   console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
   process.exit(1);
 }
 
 const soundStart = source.indexOf('sound(appActive: boolean, player: ReplayableAudioPlayer)');
 const soundCancellationStart = source.indexOf('if (!appActive || !nativeAppIsActive()) {', soundStart);
-const soundCooldownStart = source.indexOf("if (!canTrigger('sound', true)) return;", soundStart);
+const soundCooldownStart = source.indexOf("if (!canTrigger('sound', true, isSemanticCandidate)) return;", soundStart);
 const soundGenerationStart = source.indexOf('const generation = supersedeAudio();', soundStart);
 if (
   soundStart < 0 ||
@@ -171,4 +171,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, semantic sound priority, lesson routing, and cross-player stale-audio supersession are enforced.');
