@@ -20,6 +20,17 @@ const SENSITIVE_BASENAMES = new Set([
   'service_account.json',
 ]);
 
+const LIKELY_SECRET_PATTERNS = [
+  /(?:bot[_-]?token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[=:]\s*["']?(?!replace|example|test|your|changeme)[A-Za-z0-9_\-.]{12,}/i,
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
+  /\b(?:sk_live|rk_live)_[A-Za-z0-9]{16,}\b/,
+  /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
+  /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/,
+  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
+  /\bAIza[0-9A-Za-z_-]{35}\b/,
+];
+
 const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const WINDOWS_INVALID_SEGMENT_CHARS = /[<>:"|?*]/;
 const UNSAFE_INVISIBLE_PATH_CHARS = /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/;
@@ -66,6 +77,10 @@ export function isSensitiveWorkspaceFilename(path: string): boolean {
   if (/^(?:firebase|google|gcp)[-_].*(?:admin|credential|service[-_]?account).*\.json$/i.test(basename)) return true;
   if (/^(?:id_rsa|id_ed25519)(?:\..+)?$/i.test(basename)) return true;
   return /\.(?:pem|key|p12|pfx|jks|keystore)$/.test(basename);
+}
+
+export function containsLikelyWorkspaceSecret(content: string): boolean {
+  return LIKELY_SECRET_PATTERNS.some((pattern) => pattern.test(content));
 }
 
 function validIsoDate(value: unknown): value is string {
