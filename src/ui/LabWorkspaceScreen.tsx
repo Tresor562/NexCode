@@ -4,7 +4,7 @@ import { WebView } from 'react-native-webview';
 import { Lesson } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
 import { importFilesFromPhone, importFolderFromPhone } from '../lib/workspaceImport';
-import { invalidateLabValidation, openLabWorkspace, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
+import { addLabFile, invalidateLabValidation, openLabWorkspace, removeLabFile, renameLabFile, stampLabValidation, updateLabFile, validateLabDraft } from '../learning/labEngine';
 import { runBehavioralSuite, secretSafetyIssues } from '../learning/labBehavioralTests';
 import { webPreviewDocument } from '../learning/labSession';
 import { Card, Pill, PrimaryButton, ProgressBar } from './components';
@@ -37,6 +37,8 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   const [toolInput, setToolInput] = useState('');
   const [toolOutput, setToolOutput] = useState('');
   const [importing, setImporting] = useState(false);
+  const [fileNameDraft, setFileNameDraft] = useState('');
+  const [editingFile, setEditingFile] = useState<string | undefined>();
   const mission = initial.mission;
   const files = Object.keys(draft.files);
   const content = draft.files[draft.activeFile] ?? '';
@@ -71,6 +73,61 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
     changeContent(nextContent);
     setSelection({ start: caret, end: caret });
     labFeedback.selection(true);
+  }
+
+  function startCreateFile() {
+    setEditingFile(undefined);
+    setFileNameDraft('');
+    labFeedback.selection(true);
+  }
+
+  function startRenameFile(filename: string) {
+    setEditingFile(filename);
+    setFileNameDraft(filename);
+    labFeedback.selection(true);
+  }
+
+  function cancelFileEdit() {
+    setEditingFile(undefined);
+    setFileNameDraft('');
+  }
+
+  function commitFileEdit() {
+    const requested = fileNameDraft.trim();
+    if (!requested) {
+      setFeedback('Choisis un nom de fichier valide.');
+      labFeedback.notification(true, 'error');
+      return;
+    }
+    const next = editingFile ? renameLabFile(draft, editingFile, requested) : addLabFile(draft, requested);
+    if (next === draft) {
+      setFeedback(editingFile ? 'Renommage impossible : nom invalide, sensible ou déjà utilisé.' : 'Création impossible : nom invalide, sensible ou déjà utilisé.');
+      labFeedback.notification(true, 'error');
+      return;
+    }
+    save(next);
+    setValidated(false);
+    const nextContent = next.files[next.activeFile] ?? '';
+    setSelection({ start: nextContent.length, end: nextContent.length });
+    setFeedback(editingFile ? `Fichier renommé en ${next.activeFile}.` : `Fichier ${next.activeFile} créé.`);
+    cancelFileEdit();
+    labFeedback.notification(true, 'success');
+  }
+
+  function deleteFile(filename: string) {
+    const next = removeLabFile(draft, filename);
+    if (next === draft) {
+      setFeedback(files.length <= 1 ? 'Le Lab doit conserver au moins un fichier éditable.' : 'Ce fichier ne peut pas être supprimé.');
+      labFeedback.notification(true, 'error');
+      return;
+    }
+    save(next);
+    setValidated(false);
+    const nextContent = next.files[next.activeFile] ?? '';
+    setSelection({ start: nextContent.length, end: nextContent.length });
+    if (editingFile === filename) cancelFileEdit();
+    setFeedback(`${filename} supprimé. Validation à relancer.`);
+    labFeedback.notification(true, 'success');
   }
 
   async function importFiles() {
@@ -176,13 +233,34 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
 
       {panel === 'files' ? (
         <View style={styles.panel}>
-          <View style={styles.explorerHeader}><Text style={styles.panelTitle}>Explorateur</Text><Text style={styles.fileCount}>{files.length} fichier(s)</Text></View>
+          <View style={styles.explorerHeader}>
+            <View><Text style={styles.panelTitle}>Explorateur</Text><Text style={styles.fileCount}>{files.length} fichier(s)</Text></View>
+            <Pressable onPress={startCreateFile} style={styles.newFileButton} accessibilityRole="button" accessibilityLabel="Créer un fichier"><Text style={styles.newFileGlyph}>＋</Text><Text style={styles.newFileText}>Nouveau</Text></Pressable>
+          </View>
+          <View style={styles.fileEditCard}>
+            <Text style={styles.fileEditLabel}>{editingFile ? 'RENOMMER LE FICHIER' : 'NOUVEAU FICHIER'}</Text>
+            <View style={styles.fileEditRow}>
+              <TextInput value={fileNameDraft} onChangeText={setFileNameDraft} onSubmitEditing={commitFileEdit} placeholder={editingFile ?? 'ex. components/card.js'} placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" autoCorrect={false} returnKeyType="done" style={styles.fileNameInput} accessibilityLabel={editingFile ? `Renommer ${editingFile}` : 'Nom du nouveau fichier'} />
+              <Pressable onPress={commitFileEdit} style={styles.fileEditPrimary}><Text style={styles.fileEditPrimaryText}>{editingFile ? 'OK' : 'Créer'}</Text></Pressable>
+              {editingFile || fileNameDraft ? <Pressable onPress={cancelFileEdit} style={styles.fileEditCancel}><Text style={styles.fileEditCancelText}>×</Text></Pressable> : null}
+            </View>
+            <Text style={styles.fileEditMeta}>Chemins imbriqués acceptés. Les collisions, noms sensibles et chemins non portables sont refusés.</Text>
+          </View>
           <View style={styles.importActions}>
             <Pressable disabled={importing} onPress={importFiles} style={({ pressed }) => [styles.importButton, pressed && styles.importPressed]}><Text style={styles.importGlyph}>＋</Text><View><Text style={styles.importTitle}>{importing ? 'Import…' : 'Fichiers'}</Text><Text style={styles.importMeta}>Depuis le téléphone</Text></View></Pressable>
             <Pressable disabled={importing} onPress={importFolder} style={({ pressed }) => [styles.importButton, pressed && styles.importPressed]}><Text style={styles.importGlyph}>▱</Text><View><Text style={styles.importTitle}>Dossier</Text><Text style={styles.importMeta}>Projet complet</Text></View></Pressable>
           </View>
-          {files.map((filename) => <Pressable key={filename} onPress={() => changeFile(filename)} style={[styles.fileRow, draft.activeFile === filename && styles.fileRowActive]}><View style={styles.fileIcon}><Text style={styles.fileIconText}>{fileBadge(filename)}</Text></View><Text style={styles.fileName}>{filename}</Text><Text style={styles.chevron}>›</Text></Pressable>)}
-          <Text style={styles.helper}>Les imports conservent l’arborescence. En cas de même nom, NexCode garde les deux fichiers au lieu d’écraser ton code.</Text>
+          {files.map((filename) => (
+            <View key={filename} style={[styles.fileRow, draft.activeFile === filename && styles.fileRowActive]}>
+              <Pressable onPress={() => changeFile(filename)} style={styles.fileOpen} accessibilityRole="button" accessibilityLabel={`Ouvrir ${filename}`}>
+                <View style={styles.fileIcon}><Text style={styles.fileIconText}>{fileBadge(filename)}</Text></View>
+                <View style={styles.fileCopy}><Text style={styles.fileName} numberOfLines={1}>{filename}</Text>{draft.activeFile === filename ? <Text style={styles.fileActiveMeta}>Ouvert dans l’éditeur</Text> : null}</View>
+              </Pressable>
+              <Pressable onPress={() => startRenameFile(filename)} style={styles.fileAction} accessibilityRole="button" accessibilityLabel={`Renommer ${filename}`}><Text style={styles.fileActionText}>✎</Text></Pressable>
+              <Pressable onPress={() => deleteFile(filename)} style={styles.fileAction} accessibilityRole="button" accessibilityLabel={`Supprimer ${filename}`}><Text style={styles.deleteActionText}>×</Text></Pressable>
+            </View>
+          ))}
+          <Text style={styles.helper}>Le workspace est réellement multi-fichiers : crée, renomme, supprime ou importe sans écraser silencieusement ton code. Toute mutation invalide une ancienne validation.</Text>
         </View>
       ) : null}
 
@@ -270,9 +348,11 @@ const styles = StyleSheet.create({
   run: { backgroundColor: theme.colors.primary, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 11 }, runText: { color: '#fff', fontWeight: '900', fontSize: 12 },
   progressCard: { marginTop: 8, padding: 14 }, rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }, progressLabel: { color: theme.colors.text, fontSize: 12, fontWeight: '800' },
   nav: { gap: 8, paddingVertical: 14 }, navItem: { flexDirection: 'row', gap: 6, alignItems: 'center', paddingHorizontal: 13, paddingVertical: 10, borderRadius: 13, backgroundColor: theme.colors.surfaceStrong }, navItemActive: { backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primary }, navIcon: { color: theme.colors.textMuted, fontWeight: '900' }, navText: { color: theme.colors.textMuted, fontWeight: '800', fontSize: 12 }, navTextActive: { color: theme.colors.primary },
-  panel: { gap: 12, paddingBottom: 24 }, panelTitle: { color: theme.colors.text, fontWeight: '900', fontSize: 16 }, explorerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, fileCount: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '800' },
+  panel: { gap: 12, paddingBottom: 24 }, panelTitle: { color: theme.colors.text, fontWeight: '900', fontSize: 16 }, explorerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, fileCount: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '800', marginTop: 3 },
+  newFileButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, borderRadius: 12, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primary }, newFileGlyph: { color: theme.colors.primary, fontSize: 18, fontWeight: '900' }, newFileText: { color: theme.colors.primary, fontSize: 11, fontWeight: '900' },
+  fileEditCard: { gap: 8, borderRadius: 16, padding: 12, backgroundColor: theme.colors.surfaceStrong, borderWidth: 1, borderColor: theme.colors.border }, fileEditLabel: { color: theme.colors.textMuted, fontSize: 9, fontWeight: '900', letterSpacing: 1.1 }, fileEditRow: { flexDirection: 'row', alignItems: 'center', gap: 8 }, fileNameInput: { flex: 1, minHeight: 44, borderRadius: 12, paddingHorizontal: 12, backgroundColor: theme.colors.surface, color: theme.colors.text, fontFamily: 'monospace', fontSize: 12, borderWidth: 1, borderColor: theme.colors.border }, fileEditPrimary: { minHeight: 44, paddingHorizontal: 13, borderRadius: 12, backgroundColor: theme.colors.primary, alignItems: 'center', justifyContent: 'center' }, fileEditPrimaryText: { color: '#fff', fontSize: 11, fontWeight: '900' }, fileEditCancel: { width: 44, height: 44, borderRadius: 12, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' }, fileEditCancelText: { color: theme.colors.textMuted, fontSize: 22, fontWeight: '700' }, fileEditMeta: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 15 },
   importActions: { flexDirection: 'row', gap: 10 }, importButton: { flex: 1, minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 16, backgroundColor: theme.colors.surfaceStrong, borderWidth: 1, borderColor: theme.colors.border }, importPressed: { opacity: 0.72 }, importGlyph: { color: theme.colors.primary, fontSize: 20, fontWeight: '900' }, importTitle: { color: theme.colors.text, fontSize: 12, fontWeight: '900' }, importMeta: { color: theme.colors.textMuted, fontSize: 10, marginTop: 2 },
-  fileRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 12, borderRadius: 14, backgroundColor: theme.colors.surfaceStrong }, fileRowActive: { borderWidth: 1, borderColor: theme.colors.primary }, fileIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: theme.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, fileIconText: { color: theme.colors.primary, fontSize: 9, fontWeight: '900' }, fileName: { flex: 1, color: theme.colors.text, fontWeight: '800', fontSize: 13 }, chevron: { color: theme.colors.textMuted, fontSize: 20 }, helper: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18 },
+  fileRow: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, borderRadius: 14, backgroundColor: theme.colors.surfaceStrong, borderWidth: 1, borderColor: 'transparent' }, fileRowActive: { borderColor: theme.colors.primary }, fileOpen: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingLeft: 4 }, fileIcon: { width: 34, height: 34, borderRadius: 10, backgroundColor: theme.colors.primarySoft, alignItems: 'center', justifyContent: 'center' }, fileIconText: { color: theme.colors.primary, fontSize: 9, fontWeight: '900' }, fileCopy: { flex: 1, minWidth: 0 }, fileName: { color: theme.colors.text, fontWeight: '800', fontSize: 12 }, fileActiveMeta: { color: theme.colors.primary, fontSize: 9, fontWeight: '800', marginTop: 3 }, fileAction: { width: 38, height: 38, borderRadius: 11, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' }, fileActionText: { color: theme.colors.textMuted, fontSize: 17, fontWeight: '800' }, deleteActionText: { color: theme.colors.danger ?? '#f87171', fontSize: 20, fontWeight: '700' }, helper: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18 },
   tabs: { gap: 7 }, fileTab: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 11, backgroundColor: theme.colors.surfaceStrong }, fileTabActive: { backgroundColor: theme.colors.primarySoft }, fileTabText: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '800' }, fileTabTextActive: { color: theme.colors.primary },
   editor: { borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#0b1020' }, editorBar: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 13, paddingVertical: 10, backgroundColor: '#11182b' }, editorFile: { color: '#f7f8ff', fontSize: 11, fontWeight: '800' }, saved: { color: '#6ee7b7', fontSize: 10, fontWeight: '800' }, code: { minHeight: 310, maxHeight: 520, color: '#e7eaf4', fontFamily: 'monospace', fontSize: 13, lineHeight: 20, padding: 14 }, symbolBar: { gap: 6, padding: 9, backgroundColor: '#11182b' }, symbol: { minWidth: 34, alignItems: 'center', paddingHorizontal: 9, paddingVertical: 8, borderRadius: 9, backgroundColor: '#202944' }, symbolText: { color: '#f7f8ff', fontFamily: 'monospace', fontSize: 12 },
   previewTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, webWrap: { height: 420, borderRadius: 18, overflow: 'hidden', borderWidth: 1, borderColor: theme.colors.border, backgroundColor: '#fff' }, web: { flex: 1 }, emptyTitle: { color: theme.colors.text, fontWeight: '900', marginBottom: 6 },
