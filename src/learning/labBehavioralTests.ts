@@ -1,5 +1,6 @@
 import { LabMission } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
+import { containsLikelyWorkspaceSecret } from '../lib/workspaceSafety';
 
 export type BehavioralTest = {
   id: string;
@@ -15,17 +16,6 @@ export type BehavioralSuiteResult = {
   hiddenTotal: number;
   hint?: string;
 };
-
-const secretPatterns = [
-  /(?:bot[_-]?token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[=:]\s*["']?(?!replace|example|test|your|changeme)[A-Za-z0-9_\-.]{12,}/i,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}\b/,
-  /\b(?:sk_live|rk_live)_[A-Za-z0-9]{16,}\b/,
-  /\bxox[baprs]-[A-Za-z0-9-]{20,}\b/,
-  /\b\d{6,12}:[A-Za-z0-9_-]{30,}\b/,
-  /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/,
-  /\bAIza[0-9A-Za-z_-]{35}\b/,
-];
 
 function normalizeSource(content: string): string {
   return content
@@ -123,9 +113,7 @@ function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolea
 export function secretSafetyIssues(draft: LabDraft) {
   const issues: string[] = [];
   for (const [filename, content] of Object.entries(draft.files)) {
-    for (const pattern of secretPatterns) {
-      if (pattern.test(content)) issues.push(`${filename}: secret potentiel détecté`);
-    }
+    if (containsLikelyWorkspaceSecret(content)) issues.push(`${filename}: secret potentiel détecté`);
   }
   return issues;
 }
