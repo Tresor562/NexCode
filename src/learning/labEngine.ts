@@ -16,6 +16,10 @@ export type LabValidation = {
   checks: Array<{ id: string; label: string; passed: boolean; detail?: string }>;
 };
 
+const MAX_MUTABLE_LAB_FILES = 300;
+const MAX_MUTABLE_FILE_CHARS = 1_500_000;
+const MAX_MUTABLE_WORKSPACE_CHARS = 5_000_000;
+
 function inferLanguage(lesson: Lesson): LabMission['language'] {
   const text = `${lesson.module} ${lesson.title}`.toLowerCase();
   if (text.includes('python')) return 'Python';
@@ -121,10 +125,19 @@ function resolveWorkspaceFilename(files: Record<string, string>, filename: strin
   return Object.keys(files).find((existing) => workspaceCollisionKey(existing) === key);
 }
 
+function workspaceCharacterCount(files: Record<string, string>) {
+  return Object.values(files).reduce((total, value) => total + value.length, 0);
+}
+
 export function updateLabFile(draft: LabDraft, filename: string, content: string): LabDraft {
   const existingFilename = resolveEditableLabFilename(draft, filename);
   if (!existingFilename) return draft;
   if (draft.files[existingFilename] === content) return draft;
+  if (content.length > MAX_MUTABLE_FILE_CHARS) return draft;
+
+  const previousLength = draft.files[existingFilename]?.length ?? 0;
+  const nextWorkspaceLength = workspaceCharacterCount(draft.files) - previousLength + content.length;
+  if (nextWorkspaceLength > MAX_MUTABLE_WORKSPACE_CHARS) return draft;
 
   const next = {
     ...draft,
@@ -136,6 +149,8 @@ export function updateLabFile(draft: LabDraft, filename: string, content: string
 }
 
 export function addLabFile(draft: LabDraft, filename: string) {
+  if (Object.keys(draft.files).length >= MAX_MUTABLE_LAB_FILES) return draft;
+
   const safe = canonicalWorkspacePath(filename);
   if (!safe || isSensitiveWorkspaceFilename(safe)) return draft;
 
