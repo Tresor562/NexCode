@@ -28,6 +28,7 @@ const sessionFile = new File(Paths.document, 'nexcode-cloud-session.json');
 const NEXCODE_SUPABASE_URL = 'https://ojbyvjqurlamplmujmyu.supabase.co';
 const NEXCODE_SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_EnV_q5ePfEOB1NxN3-gtpA_HdwjtPyu';
 const SESSION_REFRESH_WINDOW_MS = 120_000;
+const MAX_REWARD_RECEIPTS = 2_000;
 
 type RefreshFlight = {
   refreshToken: string;
@@ -212,6 +213,32 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+function normalizeRewardReceiptId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim()
+    .normalize('NFKC')
+    .slice(0, 160);
+  return normalized || null;
+}
+
+function mergeRewardReceiptIds(remote: unknown, local: LocalState['rewardReceiptIds']): string[] {
+  const remoteReceipts = Array.isArray(remote) ? remote : [];
+  const localReceipts = Array.isArray(local) ? local : [];
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of [...remoteReceipts, ...localReceipts]) {
+    const receiptId = normalizeRewardReceiptId(raw);
+    if (!receiptId || seen.has(receiptId)) continue;
+    seen.add(receiptId);
+    merged.push(receiptId);
+  }
+
+  return merged.slice(-MAX_REWARD_RECEIPTS);
+}
+
 function mergeMaxNumberRecord(remote: unknown, local: Record<string, number>, ceiling = Number.MAX_SAFE_INTEGER): Record<string, number> {
   const merged: Record<string, number> = { ...local };
   if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
@@ -386,6 +413,7 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
     dailyGoal: finiteCloudNumber(progress?.daily_goal, local.dailyGoal, 5, 240),
     dailyCompleted: daily.dailyCompleted,
     dailyGoalRewardDate: laterDateKey(localRewardDate, remoteRewardDate),
+    rewardReceiptIds: mergeRewardReceiptIds(settings.rewardReceiptIds, local.rewardReceiptIds),
     totalLearningMinutes: Math.max(local.totalLearningMinutes, finiteCloudNumber(settings.totalLearningMinutes)),
     lastActiveDate: daily.lastActiveDate,
     recentCourseId: typeof progress?.recent_course_id === 'string' ? progress.recent_course_id : local.recentCourseId,
@@ -457,6 +485,7 @@ export async function pushCloudState(session: CloudSession, state: LocalState): 
           bestStreak: state.bestStreak,
           totalLearningMinutes: state.totalLearningMinutes,
           dailyGoalRewardDate: state.dailyGoalRewardDate ?? null,
+          rewardReceiptIds: state.rewardReceiptIds ?? [],
         },
         updated_at: updatedAt,
       }),
