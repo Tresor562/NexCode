@@ -23,6 +23,7 @@ export type LocalState = {
   dailyGoal: number;
   dailyCompleted: number;
   dailyGoalRewardDate?: string;
+  rewardReceiptIds: string[];
   totalLearningMinutes: number;
   downloadedCourses: string[];
   downloadedChapters: string[];
@@ -48,6 +49,7 @@ const initialState: LocalState = {
   bestStreak: 0,
   dailyGoal: 20,
   dailyCompleted: 0,
+  rewardReceiptIds: [],
   totalLearningMinutes: 0,
   downloadedCourses: [],
   downloadedChapters: [],
@@ -68,6 +70,7 @@ const initialState: LocalState = {
 
 const stateFile = new File(Paths.document, 'nexcode-v15-state.json');
 const MAX_PROGRESS_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const MAX_REWARD_RECEIPTS = 2_000;
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -108,6 +111,7 @@ export type ProgressReward = {
   nexCoins?: number;
   minutes?: number;
   now?: Date;
+  receiptId?: string;
 };
 
 function finiteNumber(value: unknown, fallback: number, minimum = 0, maximum = Number.MAX_SAFE_INTEGER): number {
@@ -126,6 +130,10 @@ function safeProgressTotal(current: unknown, increment: number): number {
 }
 
 export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
+  const receiptId = cleanString(reward.receiptId, '', 160).normalize('NFKC');
+  const existingReceipts = stringList(state.rewardReceiptIds, MAX_REWARD_RECEIPTS);
+  if (receiptId && existingReceipts.includes(receiptId)) return state;
+
   const now = trustedProgressDate(reward.now);
   const active = touchDailyActivity(state, now);
   const minutes = finiteNumber(reward.minutes, 0, 0, 240);
@@ -138,6 +146,9 @@ export function rewardProgress(state: LocalState, reward: ProgressReward): Local
   const shouldGrantGoalBonus = dailyCompleted >= dailyGoal && active.dailyGoalRewardDate !== today;
   const xpAward = xp + (shouldGrantGoalBonus ? 40 : 0);
   const nexCoinAward = nexCoins + (shouldGrantGoalBonus ? 20 : 0);
+  const rewardReceiptIds = receiptId
+    ? [...existingReceipts, receiptId].slice(-MAX_REWARD_RECEIPTS)
+    : existingReceipts;
 
   return {
     ...active,
@@ -146,6 +157,7 @@ export function rewardProgress(state: LocalState, reward: ProgressReward): Local
     nexCoins: safeProgressTotal(active.nexCoins, nexCoinAward),
     dailyCompleted,
     dailyGoalRewardDate: shouldGrantGoalBonus ? today : active.dailyGoalRewardDate,
+    rewardReceiptIds,
     totalLearningMinutes: safeProgressTotal(active.totalLearningMinutes, minutes),
   };
 }
@@ -365,6 +377,7 @@ function normalizeState(value: Partial<LocalState>): LocalState {
     dailyGoal,
     dailyCompleted: finiteInteger(value.dailyCompleted, initialState.dailyCompleted, 0, dailyGoal),
     dailyGoalRewardDate: optionalDateKey(value.dailyGoalRewardDate),
+    rewardReceiptIds: stringList(value.rewardReceiptIds, MAX_REWARD_RECEIPTS),
     totalLearningMinutes: finiteInteger(value.totalLearningMinutes, initialState.totalLearningMinutes),
     downloadedCourses: stringList(value.downloadedCourses),
     downloadedChapters: stringList(value.downloadedChapters),
