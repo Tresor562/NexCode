@@ -40,17 +40,18 @@ export function bindLocalStateOwner(userId: string): void {
   const normalized = normalizeAccountId(userId);
   if (!normalized) return;
   try {
-    if (!ownerFile.exists) ownerFile.create();
-    ownerFile.write(normalized);
-
-    // This marker distinguishes a genuinely old pre-account-scope install from
-    // a modern install whose owner metadata was later deleted or corrupted.
-    // Once account scoping has been initialized, losing owner metadata must not
-    // make another authenticated account inherit the previous learner's state.
+    // Persist the fail-closed marker before the identity itself. A crash or storage
+    // failure between these two writes must never make a partially initialized
+    // modern install look like a pre-account-scope legacy install, otherwise the
+    // next authenticated learner could inherit unproven XP, drafts or mastery.
     if (!ownerBoundMarker.exists) ownerBoundMarker.create();
     ownerBoundMarker.write('1');
+
+    if (!ownerFile.exists) ownerFile.create();
+    ownerFile.write(normalized);
   } catch {
-    // Cloud hydration can still continue; the next launch will fail safe again.
+    // Cloud hydration can still continue. Because the initialized marker is written
+    // first, a missing/corrupt owner file fails closed on the next scope decision.
   }
 }
 
