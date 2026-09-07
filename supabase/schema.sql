@@ -69,11 +69,64 @@ alter table public.projects enable row level security;
 alter table public.project_files enable row level security;
 alter table public.learning_events enable row level security;
 
+drop policy if exists "profiles own row" on public.profiles;
 create policy "profiles own row" on public.profiles for all using (auth.uid() = id) with check (auth.uid() = id);
+
+drop policy if exists "progress own row" on public.user_progress;
 create policy "progress own row" on public.user_progress for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "projects own rows" on public.projects;
 create policy "projects own rows" on public.projects for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "project files own rows" on public.project_files for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
-create policy "learning events own rows" on public.learning_events for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "project files own rows" on public.project_files;
+create policy "project files own rows" on public.project_files
+for all
+using (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.projects project
+    where project.id = project_id
+      and project.user_id = auth.uid()
+  )
+)
+with check (
+  auth.uid() = user_id
+  and exists (
+    select 1
+    from public.projects project
+    where project.id = project_id
+      and project.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "learning events own rows" on public.learning_events;
+create policy "learning events own rows" on public.learning_events
+for all
+using (
+  auth.uid() = user_id
+  and (
+    project_id is null
+    or exists (
+      select 1
+      from public.projects project
+      where project.id = project_id
+        and project.user_id = auth.uid()
+    )
+  )
+)
+with check (
+  auth.uid() = user_id
+  and (
+    project_id is null
+    or exists (
+      select 1
+      from public.projects project
+      where project.id = project_id
+        and project.user_id = auth.uid()
+    )
+  )
+);
 
 create or replace function public.handle_new_user()
 returns trigger
