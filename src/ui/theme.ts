@@ -89,9 +89,10 @@ export const theme = {
     black: '900' as const,
   },
   control: {
-    // Keep compact controls at a minimum 44pt touch target so shared navigation
-    // and icon actions stay comfortably tappable on dense mobile layouts.
-    heightSm: 44,
+    // Shared icon controls are repeated constantly across Lab and learning flows.
+    // Keep even the compact size at 48pt so the visible target itself is generous
+    // on phones instead of relying on invisible hitSlop to rescue a tiny control.
+    heightSm: 48,
     heightMd: 48,
     heightLg: 54,
   },
