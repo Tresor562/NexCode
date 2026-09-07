@@ -42,6 +42,7 @@ const PROGRAMMING_IDENTITY_TERMS = new Set([
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_REVIEW_URGENCY_BONUS = 35;
+const MAX_DUE_SKILL_BREADTH_BONUS = 12;
 const RECOMMENDATION_PREREQUISITE_GATE = 55;
 const MAX_PREREQUISITE_PENALTY = 90;
 const COMPLETED_NOT_DUE_PENALTY = 80;
@@ -94,6 +95,11 @@ function reviewUrgencyBonus(nextReviewAt: string | undefined, now: Date) {
   return Math.min(MAX_REVIEW_URGENCY_BONUS, 12 + Math.floor(Math.log2(overdueDays + 1) * 6));
 }
 
+function dueSkillBreadthBonus(dueSkillCount: number) {
+  if (!Number.isFinite(dueSkillCount) || dueSkillCount <= 1) return 0;
+  return Math.min(MAX_DUE_SKILL_BREADTH_BONUS, (Math.floor(dueSkillCount) - 1) * 4);
+}
+
 function boundedMasteryScore(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.max(0, Math.min(100, value))
@@ -135,10 +141,11 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
   const reviewUrgency = dueStates.length
     ? Math.max(...dueStates.map((state) => reviewUrgencyBonus(state.nextReviewAt, now)))
     : 0;
+  const dueBreadth = dueSkillBreadthBonus(dueStates.length);
 
   let score = 1;
   if (!isCompleted) score += 45;
-  if (dueReview) score += 70 + reviewUrgency;
+  if (dueReview) score += 70 + reviewUrgency + dueBreadth;
   if (isCompleted && !dueReview) score -= COMPLETED_NOT_DUE_PENALTY;
   score += Math.round((100 - weakestSkill) * 0.2);
 
