@@ -7,6 +7,10 @@ assert.match(source, /useMotionPreferences\(\)/, 'Bottom nav glyphs must share t
 assert.match(source, /reduceMotion \|\| !appActive/, 'Bottom nav motion must stop for reduced motion or background state');
 assert.match(source, /emphasis\.stopAnimation\(\)/, 'Bottom nav animations must stop before state changes and cleanup');
 assert.match(source, /useNativeDriver:\s*true/, 'Bottom nav emphasis should remain native-driver friendly');
+assert.match(source, /overshootClamping:\s*true/, 'Bottom nav emphasis must not overshoot its intended premium scale');
+assert.match(source, /isInteraction:\s*false/, 'Decorative nav motion must not block interaction-driven rendering work');
+const clampedInterpolations = source.match(/extrapolate:\s*'clamp'/g) ?? [];
+assert.ok(clampedInterpolations.length >= 4, 'Nav emphasis opacity and scale interpolations must clamp their visual bounds');
 
 assert.match(source, /accessible=\{false\}/, 'Decorative nav glyphs must stay hidden from accessibility focus');
 assert.match(source, /accessibilityElementsHidden/, 'Decorative nav glyph descendants must stay hidden from screen readers');
@@ -24,4 +28,4 @@ for (const glyph of ['home', 'learn', 'lab', 'projects']) {
 }
 assert.match(source, /styles\.head/, 'Profile glyph must remain implemented');
 
-console.log('Bottom nav glyph audit OK: premium active halo, shared motion lifecycle, native animation and decorative accessibility are protected.');
+console.log('Bottom nav glyph audit OK: bounded premium motion, shared lifecycle, non-blocking native animation and decorative accessibility are protected.');
