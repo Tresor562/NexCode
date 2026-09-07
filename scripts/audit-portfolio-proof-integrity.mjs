@@ -31,6 +31,17 @@ assert.match(source, /projectCount: projectIds\.size/, 'portfolio coverage must 
 assert.doesNotMatch(source, /projectsBySkill\.get\(skillId\)/, 'raw skill-id spelling must not split coverage after cross-device sync');
 assert.doesNotMatch(source, /covered\.set\(skillId, \(covered\.get\(skillId\) \?\? 0\) \+ 1\)/, 'raw proof-row counting must not inflate skill coverage after sync duplication');
 
+assert.match(progressSource, /const MAX_PORTFOLIO_SKILL_ID_LENGTH = 160;/, 'reward persistence must bound restored portfolio skill identities');
+assert.match(progressSource, /function canonicalPortfolioSkillIds\(value: unknown\): string\[\] \| null/, 'reward persistence must validate skill evidence before canonicalization');
+assert.match(progressSource, /if \(!Array\.isArray\(value\)\) return null;/, 'malformed non-array skill evidence must be rejected instead of crashing during persistence');
+assert.match(progressSource, /if \(typeof raw !== 'string'\) return null;/, 'non-string restored skill identities must be rejected');
+assert.match(progressSource, /skillId\.length > MAX_PORTFOLIO_SKILL_ID_LENGTH/, 'oversized restored skill identities must not enter the portfolio ledger');
+assert.match(progressSource, /\[\\u0000-\\u001f\\u007f\]/, 'control characters must not survive in persisted portfolio skill identities');
+assert.match(progressSource, /skillId\.normalize\('NFKC'\)\.toLowerCase\(\)/, 'portfolio skill identity comparisons must collapse unicode compatibility aliases and case aliases');
+assert.match(progressSource, /if \(seen\.has\(identity\)\) return null;/, 'duplicate or aliased skill evidence must invalidate the restored proof rather than inflate coverage');
+assert.match(progressSource, /const skillIds = canonicalPortfolioSkillIds\(proof\.skillIds\);/, 'reward validation must inspect skill evidence before accepting a proof');
+assert.match(progressSource, /&& skillIds !== null/, 'proofs with malformed skill evidence must not reach the reward path');
+assert.match(progressSource, /skillIds: canonicalPortfolioSkillIds\(proof\.skillIds\) \?\? \[\]/, 'persisted portfolio skill evidence must use the same canonical representation checked at the reward boundary');
 assert.match(progressSource, /function canonicalizePortfolioProof\(proof: PortfolioProof, project: GuidedProject\): PortfolioProof/, 'reward persistence must canonicalize validated portfolio proofs before storing them');
 assert.match(progressSource, /projectId: project\.id/, 'stored portfolio proof identity must use the canonical registered project id');
 assert.match(progressSource, /title: project\.title\.trim\(\)/, 'stored portfolio proof title must come from canonical product data');
@@ -42,4 +53,4 @@ assert.match(progressSource, /index === existingIndex \? canonicalProof : item/,
 assert.match(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, canonicalProof\]/, 'first-time portfolio rewards must persist only canonical proof identity');
 assert.doesNotMatch(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, proof\]/, 'raw validated proof payloads must never be appended to the reward ledger');
 
-console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, normalized skill/project identity, reward deduplication, and distinct-project coverage are canonicalized before persistence or counting.');
+console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, restored skill evidence, normalized identities, reward deduplication, and distinct-project coverage are canonicalized before persistence or counting.');
