@@ -89,25 +89,66 @@ export function nextCurriculumActivity(course: Course, lessonId: string) {
 
 export function curriculumStructureIssues(course: Course): string[] {
   const issues: string[] = [];
-  const seen = new Set<string>();
-  const referenced = new Set<string>();
+  const knownLessonIds = new Set<string>();
+  const knownChapterIds = new Set<string>();
+  const knownUnitIds = new Set<string>();
+  const stagedChapterIds = new Set<string>();
+  const lessonLocations = new Map<string, string[]>();
+
+  for (const lesson of course.starterLessons) {
+    if (knownLessonIds.has(lesson.id)) issues.push(`${lesson.id}: identifiant d’activité dupliqué`);
+    knownLessonIds.add(lesson.id);
+  }
+
+  for (const chapter of course.chapters) {
+    if (knownChapterIds.has(chapter.id)) issues.push(`${chapter.id}: identifiant de chapitre dupliqué`);
+    knownChapterIds.add(chapter.id);
+  }
+
   for (const stage of course.stages) {
     if (stage.chapterIds.length === 0) issues.push(`${stage.id}: stage vide`);
+    const chapterIdsInStage = new Set<string>();
     for (const chapterId of stage.chapterIds) {
-      if (seen.has(chapterId)) issues.push(`${chapterId}: chapitre présent dans plusieurs stages`);
-      seen.add(chapterId);
-      if (!course.chapters.some((chapter) => chapter.id === chapterId)) issues.push(`${chapterId}: chapitre introuvable`);
+      if (chapterIdsInStage.has(chapterId)) issues.push(`${stage.id}: chapitre ${chapterId} répété dans le stage`);
+      chapterIdsInStage.add(chapterId);
+      if (stagedChapterIds.has(chapterId)) issues.push(`${chapterId}: chapitre présent dans plusieurs stages`);
+      stagedChapterIds.add(chapterId);
+      if (!knownChapterIds.has(chapterId)) issues.push(`${chapterId}: chapitre introuvable`);
     }
   }
+
   for (const chapter of course.chapters) {
+    if (!stagedChapterIds.has(chapter.id)) issues.push(`${chapter.id}: chapitre orphelin hors stages`);
     if (chapter.units.length === 0) issues.push(`${chapter.id}: aucune unité`);
+
     for (const unit of chapter.units) {
+      if (knownUnitIds.has(unit.id)) issues.push(`${unit.id}: identifiant d’unité dupliqué`);
+      knownUnitIds.add(unit.id);
       if (unit.lessonIds.length === 0) issues.push(`${unit.id}: aucune activité`);
-      unit.lessonIds.forEach((id) => referenced.add(id));
+
+      const lessonIdsInUnit = new Set<string>();
+      for (const lessonId of unit.lessonIds) {
+        if (lessonIdsInUnit.has(lessonId)) issues.push(`${unit.id}: activité ${lessonId} répétée dans l’unité`);
+        lessonIdsInUnit.add(lessonId);
+
+        const location = `${chapter.id}/${unit.id}`;
+        lessonLocations.set(lessonId, [...(lessonLocations.get(lessonId) ?? []), location]);
+        if (!knownLessonIds.has(lessonId)) issues.push(`${lessonId}: activité introuvable référencée par ${location}`);
+      }
     }
   }
+
   for (const lesson of course.starterLessons) {
-    if (!referenced.has(lesson.id)) issues.push(`${lesson.id}: activité orpheline hors unités`);
+    const locations = lessonLocations.get(lesson.id) ?? [];
+    if (locations.length === 0) {
+      issues.push(`${lesson.id}: activité orpheline hors unités`);
+      continue;
+    }
+    const uniqueLocations = [...new Set(locations)];
+    if (uniqueLocations.length > 1) {
+      issues.push(`${lesson.id}: activité présente dans plusieurs unités (${uniqueLocations.join(', ')})`);
+    }
   }
+
   return issues;
 }
