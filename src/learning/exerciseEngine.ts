@@ -55,6 +55,13 @@ const AUTOMATIC_GATE_REQUIRED_KINDS = new Set<ExerciseKind>([
   'refactor',
 ]);
 
+const CODE_EVIDENCE_KINDS = new Set<ExerciseKind>([
+  'fill-code',
+  'debug',
+  'write-code',
+  'refactor',
+]);
+
 function normalize(value: ExerciseAnswer) {
   return Array.isArray(value) ? value.join('\n').trim() : String(value).trim();
 }
@@ -108,6 +115,11 @@ function testSource(source: string, test: ExerciseTest) {
   return false;
 }
 
+function sourceForExerciseTests(exercise: RichExercise, answerText: string) {
+  if (!CODE_EVIDENCE_KINDS.has(exercise.kind)) return answerText;
+  return stripCodeComments(answerText);
+}
+
 function misconceptionTag(test: ExerciseTest) {
   if (test.kind === 'ordered-fragments') return `structure:${test.id}`;
   if (test.kind === 'not-contains') return `remove:${test.id}`;
@@ -123,7 +135,8 @@ export function evaluateExercise(exercise: RichExercise, answer: ExerciseAnswer)
   const accepted = [exercise.expectedAnswer, ...(exercise.acceptedAnswers ?? [])].filter((item): item is ExerciseAnswer => item !== undefined);
   const hasDirectGate = accepted.length > 0;
   const directPassed = !hasDirectGate || accepted.some((item) => normalize(item) === answerText);
-  const results = (exercise.tests ?? []).map((test) => ({ test, passed: testSource(answerText, test) }));
+  const evidenceSource = sourceForExerciseTests(exercise, answerText);
+  const results = (exercise.tests ?? []).map((test) => ({ test, passed: testSource(evidenceSource, test) }));
   const visibleResults = results.filter(({ test }) => !test.hidden).map(({ test, passed }) => ({ id: test.id, passed, description: test.description }));
   const hidden = results.filter(({ test }) => test.hidden);
   const hiddenPassed = hidden.filter((item) => item.passed).length;
