@@ -23,6 +23,8 @@ export type ProjectReview = {
 };
 
 const DEFAULT_PROJECT_READINESS_GATE = 55;
+const MAX_PROJECT_SKILL_ID_LENGTH = 96;
+const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/;
 
 function boundedPercent(value: unknown, fallback = 0): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
@@ -36,14 +38,22 @@ function projectReadinessGate(value: unknown): number {
   return value;
 }
 
+function canonicalProjectSkillId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.normalize('NFKC').trim();
+  if (!normalized || normalized.length > MAX_PROJECT_SKILL_ID_LENGTH || CONTROL_CHARACTER_PATTERN.test(normalized)) {
+    return undefined;
+  }
+  return normalized;
+}
+
 function canonicalProjectSkills(project: GuidedProject): string[] {
   const seen = new Set<string>();
   const skills: string[] = [];
   const rawSkills: unknown[] = Array.isArray(project.skills) ? project.skills : [];
 
   for (const rawSkill of rawSkills) {
-    if (typeof rawSkill !== 'string') continue;
-    const skillId = rawSkill.trim();
+    const skillId = canonicalProjectSkillId(rawSkill);
     if (!skillId || seen.has(skillId)) continue;
     seen.add(skillId);
     skills.push(skillId);
