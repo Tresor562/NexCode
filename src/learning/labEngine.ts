@@ -211,7 +211,7 @@ function containsLikelySecret(files: Record<string, string>) {
   return /(bot[_-]?token|api[_-]?key|secret)\s*[=:]\s*["']?(?!replace|your|example|test|changeme)[A-Za-z0-9_-]{12,}/i.test(text);
 }
 
-function meaningfulEvidenceSource(content: string, filename: string) {
+function sourceWithoutComments(content: string, filename: string) {
   const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
   const supportsHashComments = /\.(?:py|pyw|sh|bash|zsh|fish|ya?ml|toml|ini|cfg|conf)$/i.test(normalizedName);
   const supportsSqlComments = /\.sql$/i.test(normalizedName);
@@ -226,8 +226,11 @@ function meaningfulEvidenceSource(content: string, filename: string) {
       if (supportsSqlComments && /^\s*--(?:\s|$)/.test(line)) return false;
       return true;
     })
-    .join('\n')
-    .replace(/\s+/g, '');
+    .join('\n');
+}
+
+function meaningfulEvidenceSource(content: string, filename: string) {
+  return sourceWithoutComments(content, filename).replace(/\s+/g, '');
 }
 
 function meaningfulChange(mission: LabMission, files: Record<string, string>) {
@@ -257,14 +260,21 @@ function meaningfulChange(mission: LabMission, files: Record<string, string>) {
   return false;
 }
 
+function structureEvidenceFiles(files: Record<string, string>) {
+  return Object.fromEntries(
+    Object.entries(files).map(([filename, content]) => [filename, sourceWithoutComments(content, filename)]),
+  );
+}
+
 function languageStructureCheck(language: LabMission['language'], files: Record<string, string>) {
-  const joined = Object.values(files).join('\n');
+  const evidenceFiles = structureEvidenceFiles(files);
+  const joined = Object.values(evidenceFiles).join('\n');
   const lower = joined.toLowerCase();
   if (language === 'HTML/CSS') {
-    const htmlPath = resolveWorkspaceFilename(files, 'index.html');
-    const cssPath = resolveWorkspaceFilename(files, 'styles.css');
-    const html = htmlPath ? files[htmlPath] ?? '' : joined;
-    const css = cssPath ? files[cssPath] ?? '' : joined;
+    const htmlPath = resolveWorkspaceFilename(evidenceFiles, 'index.html');
+    const cssPath = resolveWorkspaceFilename(evidenceFiles, 'styles.css');
+    const html = htmlPath ? evidenceFiles[htmlPath] ?? '' : joined;
+    const css = cssPath ? evidenceFiles[cssPath] ?? '' : joined;
     return /<([a-z][\w-]*)(\s[^>]*)?>[\s\S]*<\/\1>/i.test(html) && /[.#]?[a-z][\w-]*\s*\{[^}]+\}/i.test(css);
   }
   if (language === 'JavaScript') {
