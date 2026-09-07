@@ -35,9 +35,14 @@ requirePattern(
   'Owner-binding metadata lookup must fail closed when the filesystem cannot prove account ownership state.',
 );
 requirePattern(
-  /export function bindLocalStateOwner\(userId: string\): void \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return;[\s\S]*ownerFile\.write\(normalized\);[\s\S]*ownerBoundMarker\.write\('1'\);/,
-  'Binding an authenticated learner must validate and persist both the owner identity and the initialized marker.',
+  /export function bindLocalStateOwner\(userId: string\): void \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return;[\s\S]*ownerBoundMarker\.write\('1'\);[\s\S]*ownerFile\.write\(normalized\);/,
+  'Binding must persist the fail-closed initialized marker before owner identity so interrupted writes cannot reopen legacy state adoption.',
 );
+const markerWriteIndex = source.indexOf("ownerBoundMarker.write('1')");
+const ownerWriteIndex = source.indexOf('ownerFile.write(normalized)');
+if (markerWriteIndex < 0 || ownerWriteIndex < 0 || markerWriteIndex >= ownerWriteIndex) {
+  throw new Error('Owner binding must commit the initialized marker before writing owner identity.');
+}
 requirePattern(
   /export function scopeLocalStateForUser\(local: LocalState, userId: string\): LocalState \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return freshState\(\);/,
   'A malformed authenticated user id must never inherit existing local learning state.',
@@ -55,4 +60,4 @@ requirePattern(
   'Fresh account state must clear progression, currency, projects, mastery, and Lab drafts together.',
 );
 
-console.log('Account scope audit OK: Supabase UUIDs are canonicalized and validated, legacy migration stays one-time, lost ownership metadata fails closed, and cross-account learning state remains isolated.');
+console.log('Account scope audit OK: ownership initialization is fail-closed across interrupted writes, Supabase UUIDs are canonicalized, legacy migration stays one-time, and cross-account learning state remains isolated.');
