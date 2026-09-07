@@ -17,7 +17,14 @@ new Function('require', 'exports', 'module', compiled)(() => ({}), exports, modu
 
 const { beginnerCourseDepthPolicy, estimatedConceptCapacity } = module.exports;
 assert.equal(typeof estimatedConceptCapacity, 'function', 'estimatedConceptCapacity must stay exported');
-assert.equal(estimatedConceptCapacity(beginnerCourseDepthPolicy), 50, 'the default premium learning policy must preserve its 50-concept capacity');
+assert.equal(beginnerCourseDepthPolicy.targetActivitiesPerCourse, 180, 'premium course depth must stay intentionally compact instead of drifting back to filler-scale volume');
+assert.deepEqual(beginnerCourseDepthPolicy.preferredChapterCount, { min: 12, max: 18 }, 'premium courses must keep a focused chapter envelope');
+assert.deepEqual(beginnerCourseDepthPolicy.preferredActivitiesPerChapter, { min: 9, max: 16 }, 'chapters must stay dense without becoming oversized activity feeds');
+assert.equal(estimatedConceptCapacity(beginnerCourseDepthPolicy), 18, 'the compact premium policy must preserve an 18-concept authored capacity');
+assert.ok(
+  beginnerCourseDepthPolicy.rules.some((rule) => /quota|artificiellement|répéter/i.test(rule)),
+  'the pedagogy policy must explicitly reject quota-driven filler activities',
+);
 
 const policy = (targetActivitiesPerCourse, minOccurrences) => ({
   targetActivitiesPerCourse,
@@ -33,4 +40,4 @@ assert.equal(estimatedConceptCapacity(policy(500, [])), 0, 'a policy without lea
 assert.equal(estimatedConceptCapacity(policy(500, [0, -3, Number.NaN])), 0, 'non-positive or non-finite phase occurrence counts must not create fake capacity');
 assert.equal(estimatedConceptCapacity(policy(500.9, [2.9, 3.2])), 100, 'fractional telemetry/config values must be normalized to whole authored activities');
 
-console.log('Pedagogy capacity audit OK: malformed course-depth policies fail closed and valid policies keep deterministic whole-activity capacity.');
+console.log('Pedagogy capacity audit OK: premium course depth stays compact and filler-resistant while malformed policies fail closed deterministically.');
