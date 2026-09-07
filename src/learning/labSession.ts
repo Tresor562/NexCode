@@ -150,6 +150,48 @@ function resolvePreviewWorkspaceFile(draft: LabDraft, normalizedPath: string) {
   return Object.keys(draft.files).find((filename) => workspaceCollisionKey(filename) === collisionKey);
 }
 
+function resolvePreviewModuleFile(draft: LabDraft, reference: string, sourcePath: string) {
+  const normalizedPath = normalizePreviewAssetPath(reference, sourcePath);
+  if (!normalizedPath) return undefined;
+  const candidates = [normalizedPath];
+  if (!/\.[^/]+$/.test(normalizedPath)) {
+    candidates.push(`${normalizedPath}.js`, `${normalizedPath}.mjs`, `${normalizedPath}/index.js`);
+  }
+  for (const candidate of candidates) {
+    if (!/\.(?:m?js)$/i.test(candidate)) continue;
+    const path = resolvePreviewWorkspaceFile(draft, candidate);
+    if (path) return path;
+  }
+  return undefined;
+}
+
+function rewriteLocalModuleImports(source: string, draft: LabDraft, sourcePath: string, ancestry = new Set<string>()): string {
+  const currentKey = workspaceCollisionKey(sourcePath);
+  const branch = new Set(ancestry);
+  branch.add(currentKey);
+
+  const moduleDataUri = (reference: string) => {
+    const path = resolvePreviewModuleFile(draft, reference, sourcePath);
+    if (!path) return undefined;
+    const key = workspaceCollisionKey(path);
+    if (branch.has(key)) return undefined;
+    const dependency = draft.files[path];
+    if (dependency === undefined) return undefined;
+    const rewrittenDependency = rewriteLocalModuleImports(dependency, draft, path, branch);
+    return `data:text/javascript;charset=utf-8,${encodeURIComponent(rewrittenDependency)}`;
+  };
+
+  const rewrite = (match: string, prefix: string, quote: string, reference: string, suffix = '') => {
+    const dataUri = moduleDataUri(reference);
+    return dataUri ? `${prefix}${quote}${dataUri}${quote}${suffix}` : match;
+  };
+
+  let output = source.replace(/\b((?:import|export)\s+[^;\n]*?\s+from\s*)(["'])([^"']+)\2/g, rewrite);
+  output = output.replace(/\b(import\s*)(["'])([^"']+)\2/g, rewrite);
+  output = output.replace(/\b(import\s*\(\s*)(["'])([^"']+)\2(\s*\))/g, rewrite);
+  return output;
+}
+
 function svgPreviewDataUri(source: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
 }
@@ -213,8 +255,10 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
     const source = draft.files[path];
     if (source === undefined) return tag;
     inlinedScripts.add(path);
+    const type = previewAttribute(tag, 'type')?.trim().toLowerCase();
+    const previewSource = type === 'module' ? rewriteLocalModuleImports(source, draft, path) : source;
     const typeAttribute = optionalPreviewAttribute(tag, 'type');
-    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}"${typeAttribute}>${escapeInlineClosingTag(source, 'script')}<\/script>`;
+    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}"${typeAttribute}>${escapeInlineClosingTag(previewSource, 'script')}<\/script>`;
   });
 
   return { document: output, inlinedStyles, inlinedScripts };
@@ -239,7 +283,7 @@ const previewContentSecurityPolicy = [
   "img-src data: blob:",
   "media-src data: blob:",
   "style-src 'unsafe-inline'",
-  "script-src 'unsafe-inline'",
+  "script-src 'unsafe-inline' data:",
   "connect-src 'none'",
   "font-src data:",
   "frame-src 'none'",
