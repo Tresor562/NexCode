@@ -14,20 +14,37 @@ export type ReviewItem = {
 };
 
 const DAY_MS = 86_400_000;
+const MAX_IDENTITY_LENGTH = 160;
+const UNSAFE_IDENTITY_CONTROLS = /[\u0000-\u001F\u007F]/;
 // recordSkillAttempt currently schedules at most 21 days ahead. Keep one day of
 // tolerance for timezone/device-boundary effects, but fail closed if restored or
 // cloud state tries to postpone a review beyond any interval NexCode can mint.
 const MAX_REVIEW_HORIZON_MS = 22 * DAY_MS;
 
 function canonicalSkillIds(skillIds: string[] | undefined) {
-  return [...new Set((skillIds ?? []).map((id) => id.trim()).filter(Boolean))];
+  const canonical: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of Array.isArray(skillIds) ? skillIds : []) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.normalize('NFKC').trim();
+    if (!value || value.length > MAX_IDENTITY_LENGTH || UNSAFE_IDENTITY_CONTROLS.test(value) || seen.has(value)) continue;
+    seen.add(value);
+    canonical.push(value);
+  }
+  return canonical;
 }
 
 function canonicalErrorTags(errorTags: unknown[]) {
-  return [...new Set(errorTags
-    .filter((tag): tag is string => typeof tag === 'string')
-    .map((tag) => tag.trim().toLocaleLowerCase())
-    .filter(Boolean))];
+  const canonical: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of Array.isArray(errorTags) ? errorTags : []) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.normalize('NFKC').trim().toLocaleLowerCase();
+    if (!value || value.length > MAX_IDENTITY_LENGTH || UNSAFE_IDENTITY_CONTROLS.test(value) || seen.has(value)) continue;
+    seen.add(value);
+    canonical.push(value);
+  }
+  return canonical;
 }
 
 function validNow(now: Date): Date {
