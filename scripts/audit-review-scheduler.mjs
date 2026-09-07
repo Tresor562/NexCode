@@ -4,10 +4,13 @@ import assert from 'node:assert/strict';
 const sourceUrl = new URL('../src/learning/reviewScheduler.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
 
+assert.match(source, /const MAX_IDENTITY_LENGTH = 160;/, 'review identities must have a bounded size');
+assert.match(source, /const UNSAFE_IDENTITY_CONTROLS = \/\[\\u0000-\\u001F\\u007F\]\//, 'review identities must reject control characters');
 assert.match(source, /function canonicalSkillIds\(/, 'review scheduling must canonicalize skill identity');
-assert.match(source, /new Set\(\(skillIds \?\? \[\]\)\.map\(\(id\) => id\.trim\(\)\)\.filter\(Boolean\)\)/, 'skill ids must be trimmed, emptied values removed and duplicates collapsed');
+assert.match(source, /raw\.normalize\('NFKC'\)\.trim\(\)/, 'skill ids must normalize Unicode compatibility forms before deduplication');
+assert.match(source, /value\.length > MAX_IDENTITY_LENGTH \|\| UNSAFE_IDENTITY_CONTROLS\.test\(value\) \|\| seen\.has\(value\)/, 'skill ids must reject oversized, unsafe and duplicate identities');
 assert.match(source, /function canonicalErrorTags\(errorTags: unknown\[\]\)/, 'review urgency must canonicalize misconception identity across every skill in a lesson');
-assert.match(source, /tag\.trim\(\)\.toLocaleLowerCase\(\)/, 'misconception tags must ignore casing and surrounding whitespace before deduplication');
+assert.match(source, /raw\.normalize\('NFKC'\)\.trim\(\)\.toLocaleLowerCase\(\)/, 'misconception tags must ignore Unicode compatibility aliases, casing and surrounding whitespace');
 assert.match(source, /canonicalErrorTags\(states\.flatMap\(\(state\) => state\.errorTags \?\? \[\]\)\)\.length/, 'one misconception shared by multiple skills must contribute only once to lesson urgency');
 assert.doesNotMatch(source, /states\.reduce\(\(total, state\) => total \+ new Set\(state\?\.errorTags \?\? \[\]\)\.size/, 'per-skill error tag totals must not re-inflate duplicate misconceptions');
 assert.match(source, /function validNow\(now: Date\): Date/, 'review scheduling must centralize reference-date validation');
@@ -29,4 +32,4 @@ assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2\) continue;/, 
 assert.match(source, /Never relax the skill repetition cap/, 'fallback filling must document the pedagogical invariant');
 assert.match(source, /if \(skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'fallback filling must keep the skill repetition cap instead of silently reverting to blocked practice');
 
-console.log('Review scheduler audit OK: canonical identities, bounded review clocks, safe urgency math, unique lessons and skill-diverse interleaving are enforced.');
+console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, finite urgency, unique lessons and skill-diverse interleaving are enforced.');
