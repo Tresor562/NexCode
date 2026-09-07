@@ -8,6 +8,8 @@ type MotionSnapshot = {
 
 type NativeSubscription = { remove: () => void };
 
+const HYDRATION_RETRY_DELAYS_MS = [1200, 3000, 8000] as const;
+
 let snapshot: MotionSnapshot = {
   // useSyncExternalStore reads once before subscribe() installs native listeners.
   // Start fail-safe so the very first render can never animate before the OS
@@ -79,17 +81,19 @@ function hydrateReduceMotion(generation: number, attempt = 0) {
         reduceMotionKnown = false;
         publish({ reduceMotion: true });
 
-        // A single transient native failure should not disable premium motion for
-        // the rest of the foreground session. Stay fail-safe while the preference
-        // is unknown, then retry once with the same generation/revision guards.
-        if (attempt === 0) {
+        // Stay fail-safe while the OS preference is unknown, but recover from a
+        // short native bridge outage without requiring the learner to background
+        // and reopen NexCode. Retries are bounded and progressively spaced so a
+        // persistent platform failure cannot create a hot loop or battery drain.
+        const retryDelay = HYDRATION_RETRY_DELAYS_MS[attempt];
+        if (retryDelay !== undefined) {
           clearHydrationRetry();
           hydrationRetryTimer = setTimeout(() => {
             hydrationRetryTimer = null;
             if (canHydrateReduceMotion(generation, hydrationRevision)) {
-              hydrateReduceMotion(generation, 1);
+              hydrateReduceMotion(generation, attempt + 1);
             }
-          }, 1200);
+          }, retryDelay);
         }
       }
     });
