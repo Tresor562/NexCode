@@ -23,7 +23,7 @@ export type LocalState = {
   dailyGoal: number;
   dailyCompleted: number;
   dailyGoalRewardDate?: string;
-  rewardReceiptIds: string[];
+  rewardReceiptIds?: string[];
   totalLearningMinutes: number;
   downloadedCourses: string[];
   downloadedChapters: string[];
