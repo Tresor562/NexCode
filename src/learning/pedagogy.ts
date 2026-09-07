@@ -41,7 +41,17 @@ export const beginnerCourseDepthPolicy: CourseDepthPolicy = {
   ],
 };
 
+function finitePositiveInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value);
+}
+
 export function estimatedConceptCapacity(policy = beginnerCourseDepthPolicy) {
-  const activitiesPerConcept = policy.phases.reduce((sum, phase) => sum + phase.minOccurrences, 0);
-  return Math.floor(policy.targetActivitiesPerCourse / activitiesPerConcept);
+  const targetActivities = finitePositiveInteger(policy.targetActivitiesPerCourse);
+  const activitiesPerConcept = policy.phases.reduce(
+    (sum, phase) => sum + finitePositiveInteger(phase.minOccurrences),
+    0,
+  );
+  if (!targetActivities || !activitiesPerConcept) return 0;
+  return Math.floor(targetActivities / activitiesPerConcept);
 }

@@ -22,14 +22,52 @@ export type ProjectReview = {
   feedback: string[];
 };
 
-export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = 55): ProjectReadiness {
-  const missingSkills = project.skills.filter((skillId) => !mastery[skillId]);
-  const weakSkills = project.skills.filter((skillId) => mastery[skillId] && (mastery[skillId]?.score ?? 0) < gate);
-  const masteredScore = project.skills.length
-    ? Math.round(project.skills.reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0) / project.skills.length)
+const DEFAULT_PROJECT_READINESS_GATE = 55;
+
+function boundedPercent(value: unknown, fallback = 0): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(100, value));
+}
+
+function projectReadinessGate(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100) {
+    return DEFAULT_PROJECT_READINESS_GATE;
+  }
+  return value;
+}
+
+function canonicalProjectSkills(project: GuidedProject): string[] {
+  const seen = new Set<string>();
+  const skills: string[] = [];
+  const rawSkills: unknown[] = Array.isArray(project.skills) ? project.skills : [];
+
+  for (const rawSkill of rawSkills) {
+    if (typeof rawSkill !== 'string') continue;
+    const skillId = rawSkill.trim();
+    if (!skillId || seen.has(skillId)) continue;
+    seen.add(skillId);
+    skills.push(skillId);
+  }
+
+  return skills;
+}
+
+export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = DEFAULT_PROJECT_READINESS_GATE): ProjectReadiness {
+  // A malformed runtime gate must never make a project easier to unlock.
+  // Fall back to the product default rather than coercing invalid input to 0.
+  const safeGate = projectReadinessGate(gate);
+  const skills = canonicalProjectSkills(project);
+  const hasPrerequisites = skills.length > 0;
+  const missingSkills = skills.filter((skillId) => !mastery[skillId]);
+  const weakSkills = skills.filter((skillId) => mastery[skillId] && boundedPercent(mastery[skillId]?.score) < safeGate);
+  const masteredScore = hasPrerequisites
+    ? Math.round(skills.reduce((sum, id) => sum + boundedPercent(mastery[id]?.score), 0) / skills.length)
     : 0;
   return {
-    ready: missingSkills.length === 0 && weakSkills.length === 0,
+    // A guided project with no usable skill prerequisites is malformed content.
+    // Fail closed instead of exposing a premium project without evidence that
+    // the learner has acquired the concepts it is supposed to consolidate.
+    ready: hasPrerequisites && missingSkills.length === 0 && weakSkills.length === 0,
     score: masteredScore,
     missingSkills,
     weakSkills,
@@ -54,11 +92,36 @@ export function reviewProject(project: GuidedProject, achievedRubricIds: string[
   return { score, passed: score >= 70 && achieved.has('functionality') && achieved.has('understanding'), rubric, feedback };
 }
 
+function restoredCompletedSteps(progress: number, stepCount: number): number {
+  if (stepCount <= 0) return 0;
+
+  // Guided-project progress is persisted as an integer percentage. A legitimate
+  // milestone such as 1/3 is therefore stored as 33%, while 2/3 is stored as
+  // 67%. Reconstruct completion from those canonical rounded boundaries rather
+  // than rounding the raw ratio itself: Math.round(13% * 4) incorrectly turns
+  // a partial first step into a completed one.
+  let completed = 0;
+  for (let step = 1; step <= stepCount; step += 1) {
+    const boundary = Math.round((step / stepCount) * 100);
+    if (progress < boundary) break;
+    completed = step;
+  }
+  return completed;
+}
+
 export function nextProjectStep(project: GuidedProject, progress: number) {
-  const completed = Math.min(project.steps.length, Math.floor((Math.max(0, progress) / 100) * project.steps.length));
+  const safeProgress = typeof progress === 'number' && Number.isFinite(progress)
+    ? Math.max(0, Math.min(100, progress))
+    : 0;
+  const stepCount = project.steps.length;
+  const complete = safeProgress >= 100;
+  const restoredCompleted = restoredCompletedSteps(safeProgress, stepCount);
+  const completed = stepCount
+    ? Math.min(complete ? stepCount : Math.max(0, stepCount - 1), restoredCompleted)
+    : 0;
   return {
     completedSteps: completed,
-    nextStep: project.steps[Math.min(completed, project.steps.length - 1)],
-    complete: progress >= 100,
+    nextStep: complete || stepCount === 0 ? undefined : project.steps[completed],
+    complete,
   };
 }
