@@ -11,6 +11,8 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
   const robotScale = useRef(new Animated.Value(0.7)).current;
   const robotBlink = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+  const taglineY = useRef(new Animated.Value(8)).current;
   const completed = useRef(false);
   const onDoneRef = useRef(onDone);
   const completionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -32,6 +34,8 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       robotScale.stopAnimation();
       robotBlink.stopAnimation();
       glow.stopAnimation();
+      taglineOpacity.stopAnimation();
+      taglineY.stopAnimation();
     };
 
     const clearCompletionTimer = () => {
@@ -64,6 +68,8 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       robotScale.setValue(1);
       robotBlink.setValue(1);
       glow.setValue(0.35);
+      taglineOpacity.setValue(1);
+      taglineY.setValue(0);
       completionTimer.current = setTimeout(finish, 180);
       return () => {
         clearCompletionTimer();
@@ -77,6 +83,8 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
     robotScale.setValue(0.7);
     robotBlink.setValue(1);
     glow.setValue(0);
+    taglineOpacity.setValue(0);
+    taglineY.setValue(8);
 
     const blinkSequence = Animated.sequence([
       Animated.delay(90),
@@ -101,6 +109,10 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
           Animated.timing(glow, { toValue: 0.35, duration: 280, useNativeDriver: true }),
         ]),
         blinkSequence,
+        Animated.parallel([
+          Animated.timing(taglineOpacity, { toValue: 1, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+          Animated.timing(taglineY, { toValue: 0, duration: 320, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        ]),
       ]),
       Animated.delay(260),
     ]);
@@ -114,7 +126,7 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
       clearCompletionTimer();
       stopAnimations();
     };
-  }, [appActive, glow, nX, reduceMotion, restOpacity, restX, robotBlink, robotScale]);
+  }, [appActive, glow, nX, reduceMotion, restOpacity, restX, robotBlink, robotScale, taglineOpacity, taglineY]);
 
   return (
     <View style={styles.root} accessibilityViewIsModal>
@@ -136,7 +148,12 @@ export function LaunchScreen({ onDone }: { onDone: () => void }) {
           <Text style={styles.letters}>de</Text>
         </Animated.View>
       </View>
-      <Text style={styles.tagline}>Learn • Practice • Build • Master</Text>
+      <Animated.Text
+        accessibilityLabel="Learn, Practice, Build, Master"
+        style={[styles.tagline, { opacity: taglineOpacity, transform: [{ translateY: taglineY }] }]}
+      >
+        Learn • Practice • Build • Master
+      </Animated.Text>
     </View>
   );
 }
