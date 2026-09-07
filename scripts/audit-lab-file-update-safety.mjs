@@ -46,6 +46,18 @@ assert(
   'updateLabFile must preserve the original draft and timestamp when an edit does not change content.',
 );
 assert(
+  updateBody.includes('if (content.length > MAX_MUTABLE_FILE_CHARS) return draft;'),
+  'Lab edits must reject a single file that cannot survive workspace persistence.',
+);
+assert(
+  updateBody.includes('workspaceCharacterCount(draft.files) - previousLength + content.length'),
+  'Lab edits must compute the resulting workspace size rather than the raw incoming file size only.',
+);
+assert(
+  updateBody.includes('if (nextWorkspaceLength > MAX_MUTABLE_WORKSPACE_CHARS) return draft;'),
+  'Lab edits must reject workspace growth beyond the persisted workspace budget.',
+);
+assert(
   !updateBody.includes('return changed ?'),
   'No-op Lab edits must not flow through a timestamp-refreshing draft path.',
 );
