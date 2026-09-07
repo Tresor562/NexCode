@@ -129,9 +129,35 @@ function safeProgressTotal(current: unknown, increment: number): number {
   return Math.min(Number.MAX_SAFE_INTEGER, normalizedCurrent + normalizedIncrement);
 }
 
+function cleanString(value: unknown, fallback: string, maxLength = 240): string {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  return normalized ? normalized.slice(0, maxLength) : fallback;
+}
+
+function normalizeRewardReceiptId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return cleanString(value.normalize('NFKC'), '', 160);
+}
+
+function normalizeRewardReceiptIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const receipts: string[] = [];
+  const seen = new Set<string>();
+  // Only the newest bounded window can influence future idempotency. Limiting the
+  // scan prevents a corrupted local payload from turning startup into unbounded work.
+  for (const raw of value.slice(-(MAX_REWARD_RECEIPTS * 2))) {
+    const receiptId = normalizeRewardReceiptId(raw);
+    if (!receiptId || seen.has(receiptId)) continue;
+    seen.add(receiptId);
+    receipts.push(receiptId);
+  }
+  return receipts.slice(-MAX_REWARD_RECEIPTS);
+}
+
 export function rewardProgress(state: LocalState, reward: ProgressReward): LocalState {
-  const receiptId = cleanString(reward.receiptId, '', 160).normalize('NFKC');
-  const existingReceipts = stringList(state.rewardReceiptIds, MAX_REWARD_RECEIPTS);
+  const receiptId = normalizeRewardReceiptId(reward.receiptId);
+  const existingReceipts = normalizeRewardReceiptIds(state.rewardReceiptIds);
   if (receiptId && existingReceipts.includes(receiptId)) return state;
 
   const now = trustedProgressDate(reward.now);
@@ -160,12 +186,6 @@ export function rewardProgress(state: LocalState, reward: ProgressReward): Local
     rewardReceiptIds,
     totalLearningMinutes: safeProgressTotal(active.totalLearningMinutes, minutes),
   };
-}
-
-function cleanString(value: unknown, fallback: string, maxLength = 240): string {
-  if (typeof value !== 'string') return fallback;
-  const normalized = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
-  return normalized ? normalized.slice(0, maxLength) : fallback;
 }
 
 function optionalDateKey(value: unknown): string | undefined {
@@ -377,7 +397,7 @@ function normalizeState(value: Partial<LocalState>): LocalState {
     dailyGoal,
     dailyCompleted: finiteInteger(value.dailyCompleted, initialState.dailyCompleted, 0, dailyGoal),
     dailyGoalRewardDate: optionalDateKey(value.dailyGoalRewardDate),
-    rewardReceiptIds: stringList(value.rewardReceiptIds, MAX_REWARD_RECEIPTS),
+    rewardReceiptIds: normalizeRewardReceiptIds(value.rewardReceiptIds),
     totalLearningMinutes: finiteInteger(value.totalLearningMinutes, initialState.totalLearningMinutes),
     downloadedCourses: stringList(value.downloadedCourses),
     downloadedChapters: stringList(value.downloadedChapters),
