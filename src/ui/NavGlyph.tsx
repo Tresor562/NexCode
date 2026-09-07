@@ -37,18 +37,20 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
       damping: 18,
       stiffness: 230,
       mass: 0.65,
+      overshootClamping: true,
+      isInteraction: false,
       useNativeDriver: true,
     }).start();
     return () => emphasis.stopAnimation();
   }, [active, appActive, emphasis, reduceMotion]);
 
   const motionStyle = {
-    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] }),
-    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08] }) }],
+    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1], extrapolate: 'clamp' }),
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08], extrapolate: 'clamp' }) }],
   };
   const haloStyle = {
-    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, 1] }),
-    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] }) }],
+    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1], extrapolate: 'clamp' }) }],
   };
 
   if (name === 'home') {
