@@ -9,6 +9,7 @@ const PROJECT_STEP_REWARD = Object.freeze({ xp: 15, nexCoins: 3, minutes: 3 });
 const PORTFOLIO_PROOF_REWARD = Object.freeze({ xp: 50, nexCoins: 10, minutes: 5 });
 const PORTFOLIO_PASS_SCORE = 70;
 const MAX_FUTURE_PROOF_SKEW_MS = 5 * 60 * 1000;
+const MAX_PORTFOLIO_SKILL_ID_LENGTH = 160;
 
 function safePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -23,6 +24,22 @@ function canonicalProject(projectId: unknown): GuidedProject | undefined {
   const id = projectId.trim();
   if (!id) return undefined;
   return guidedProjects.find((project) => project.id === id);
+}
+
+function canonicalPortfolioSkillIds(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') return null;
+    const skillId = raw.trim();
+    if (!skillId || skillId.length > MAX_PORTFOLIO_SKILL_ID_LENGTH || /[\u0000-\u001f\u007f]/.test(skillId)) return null;
+    const identity = skillId.normalize('NFKC').toLowerCase();
+    if (seen.has(identity)) return null;
+    seen.add(identity);
+    canonical.push(skillId);
+  }
+  return canonical;
 }
 
 function completedProjectSteps(project: GuidedProject, progress: number): number {
@@ -62,9 +79,7 @@ function canonicalizePortfolioProof(proof: PortfolioProof, project: GuidedProjec
     title: project.title.trim(),
     completedAt: new Date(completedAt).toISOString(),
     score: proof.score,
-    skillIds: [...new Set(proof.skillIds
-      .map((id) => typeof id === 'string' ? id.trim() : '')
-      .filter(Boolean))],
+    skillIds: canonicalPortfolioSkillIds(proof.skillIds) ?? [],
     rubricIds: [...new Set(proof.rubricIds
       .map((id) => typeof id === 'string' ? id.trim() : '')
       .filter(Boolean))],
@@ -77,6 +92,7 @@ function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProjec
   const title = typeof proof.title === 'string' ? proof.title.trim() : '';
   const evidenceSummary = typeof proof.evidenceSummary === 'string' ? proof.evidenceSummary.trim() : '';
   const completedAt = typeof proof.completedAt === 'string' ? Date.parse(proof.completedAt) : Number.NaN;
+  const skillIds = canonicalPortfolioSkillIds(proof.skillIds);
   const rubricIds = Array.isArray(proof.rubricIds)
     ? proof.rubricIds.map((id) => typeof id === 'string' ? id.trim() : '').filter(Boolean)
     : [];
@@ -87,6 +103,7 @@ function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProjec
   return projectId === project.id
     && title === project.title.trim()
     && Boolean(evidenceSummary)
+    && skillIds !== null
     && typeof proof.score === 'number'
     && Number.isFinite(proof.score)
     && proof.score >= PORTFOLIO_PASS_SCORE
