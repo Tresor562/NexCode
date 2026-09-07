@@ -100,6 +100,29 @@ const masteryState = (htmlScore, cssScore) => ({
 }
 
 {
+  const compatibilityProject = {
+    ...project,
+    skills: ['ｈｔｍｌ', 'css', 'html'],
+  };
+  const result = projectReadiness(compatibilityProject, masteryState(80, 60), 55);
+  assert.equal(result.ready, true, 'Unicode compatibility forms must resolve to the same canonical skill id');
+  assert.deepEqual(result.missingSkills, []);
+  assert.deepEqual(result.weakSkills, []);
+  assert.equal(result.score, 70, 'Unicode-equivalent prerequisites must not be double-counted');
+}
+
+{
+  const unsafeIdentityProject = {
+    ...project,
+    skills: ['html\u0000shadow', 'x'.repeat(97), 'css'],
+  };
+  const result = projectReadiness(unsafeIdentityProject, masteryState(80, 60), 55);
+  assert.equal(result.ready, true, 'control-character and oversized prerequisite identities must be discarded');
+  assert.equal(result.score, 60, 'only the remaining safe prerequisite may affect readiness');
+  assert.deepEqual(result.missingSkills, []);
+}
+
+{
   const duplicatedWeakProject = {
     ...project,
     skills: ['html', 'html', 'css'],
@@ -135,6 +158,10 @@ const masteryState = (htmlScore, cssScore) => ({
   assert.equal(result.score, 0);
 }
 
+assert.match(source, /const MAX_PROJECT_SKILL_ID_LENGTH = 96;/);
+assert.match(source, /const CONTROL_CHARACTER_PATTERN = \/\[\\u0000-\\u001F\\u007F-\\u009F\]\//);
+assert.match(source, /value\.normalize\('NFKC'\)\.trim\(\)/);
+assert.match(source, /normalized\.length > MAX_PROJECT_SKILL_ID_LENGTH \|\| CONTROL_CHARACTER_PATTERN\.test\(normalized\)/);
 assert.match(source, /const rawSkills: unknown\[\] = Array\.isArray\(project\.skills\) \? project\.skills : \[\];/);
 assert.match(source, /ready: hasPrerequisites && missingSkills\.length === 0 && weakSkills\.length === 0/);
 
