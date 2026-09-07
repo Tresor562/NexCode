@@ -274,7 +274,7 @@ export function Pill({ label, tone = 'neutral' }: { label: string; tone?: PillTo
 
 export function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <View style={styles.stat}>
+    <View style={styles.stat} accessible accessibilityLabel={hint ? `${label}: ${value}. ${hint}` : `${label}: ${value}`}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
       {hint ? <Text style={styles.statHint}>{hint}</Text> : null}
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.space.lg,
     ...shadows.control,
   },
-  secondaryButtonText: { color: theme.colors.text, fontSize: 13, fontWeight: theme.weight.bold },
+  secondaryButtonText: { color: theme.colors.text, fontSize: theme.type.body, fontWeight: theme.weight.bold },
   buttonRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: theme.space.sm },
   disabled: { opacity: 0.4 },
   pressedReducedMotion: { opacity: 0.76 },
@@ -393,7 +393,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderControl,
   },
   iconButtonActive: { backgroundColor: theme.colors.primaryGlass, borderColor: theme.colors.primaryBorderStrong },
-  iconButtonText: { color: theme.colors.textSecondary, fontSize: 17, fontWeight: theme.weight.black },
+  iconButtonText: { color: theme.colors.textSecondary, fontSize: theme.type.title, fontWeight: theme.weight.black },
   iconButtonTextActive: { color: theme.colors.primaryText },
   pill: {
     alignSelf: 'flex-start',
@@ -420,9 +420,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderSubtle,
     padding: theme.space.md,
   },
-  statValue: { color: theme.colors.text, fontSize: 19, fontWeight: theme.weight.black },
+  statValue: { color: theme.colors.text, fontSize: theme.type.title, fontWeight: theme.weight.black },
   statLabel: { color: theme.colors.textSecondary, fontSize: theme.type.caption, marginTop: 3 },
-  statHint: { color: theme.colors.textMuted, fontSize: 9.5, marginTop: theme.space.xxs },
+  statHint: { color: theme.colors.textMuted, fontSize: theme.type.caption, lineHeight: 15, marginTop: theme.space.xxs },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -437,5 +437,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.space.sm,
     marginHorizontal: -theme.space.sm,
   },
-  sectionAction: { color: theme.colors.primaryTextSoft, fontSize: 11.5, fontWeight: theme.weight.bold },
+  sectionAction: { color: theme.colors.primaryTextSoft, fontSize: theme.type.label, fontWeight: theme.weight.bold },
 });
