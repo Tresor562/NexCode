@@ -42,6 +42,10 @@ function escapeHtmlText(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function javascriptStringLiteral(value: string): string {
+  return JSON.stringify(value).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
+}
+
 function meaningfulEvidenceText(value: unknown, filename = ''): string {
   const extension = filename.trim().toLowerCase().split('.').pop() ?? '';
   return canonicalText(value)
@@ -73,10 +77,13 @@ function projectStarterFiles(project: GuidedProject): Record<string, string> {
     'schema.sql': '-- Définis les tables du projet\nCREATE TABLE example (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\n',
     'queries.sql': '-- Écris tes requêtes ici\nSELECT * FROM example;\n',
   };
-  if (tech.includes('node') || tech.includes('api') || tech.includes('bot') || tech.includes('javascript')) return {
-    'index.js': `// ${project.title}\nfunction main() {\n  console.log('NexCode project ready');\n}\n\nmain();\n`,
-    'README.md': `# ${project.title}\n\n${project.description}\n`,
-  };
+  if (tech.includes('node') || tech.includes('api') || tech.includes('bot') || tech.includes('javascript')) {
+    const projectName = javascriptStringLiteral(project.title);
+    return {
+      'index.js': `'use strict';\n\nconst PROJECT_NAME = ${projectName};\n\nfunction createApp({ logger = console } = {}) {\n  const state = { status: 'idle' };\n\n  return {\n    state,\n    start() {\n      if (state.status === 'running') return state;\n      state.status = 'running';\n      logger.info(\`${'${PROJECT_NAME}'} ready\`);\n      return state;\n    },\n  };\n}\n\nconst app = createApp();\napp.start();\n`,
+      'README.md': `# ${project.title}\n\n${project.description}\n\n## Structure\n\n- \`index.js\` : point d'entrée et cycle de démarrage testable.\n- \`createApp()\` : isole l'état et les dépendances pour faire évoluer le projet sans couplage global.\n`,
+    };
+  }
   return { 'main.txt': `${project.title}\n\n${project.description}\n` };
 }
 
