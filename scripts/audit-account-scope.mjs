@@ -44,6 +44,14 @@ if (markerWriteIndex < 0 || ownerWriteIndex < 0 || markerWriteIndex >= ownerWrit
   throw new Error('Owner binding must commit the initialized marker before writing owner identity.');
 }
 requirePattern(
+  /import \{ sanitizeLocalState, type LocalState \} from '\.\/localState';/,
+  'Fresh account state must come from the canonical local-state sanitizer/default boundary.',
+);
+requirePattern(
+  /function freshState\(\): LocalState \{[\s\S]*return sanitizeLocalState\(\{\}\);[\s\S]*\}/,
+  'Cross-account resets must derive every current and future progression field from canonical defaults instead of duplicating the schema.',
+);
+requirePattern(
   /export function scopeLocalStateForUser\(local: LocalState, userId: string\): LocalState \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return freshState\(\);/,
   'A malformed authenticated user id must never inherit existing local learning state.',
 );
@@ -55,9 +63,8 @@ requirePattern(
   /return ownerId === normalized \? local : freshState\(\);/,
   'A known local snapshot must be reused only by its exact authenticated owner.',
 );
-requirePattern(
-  /xp: 0,[\s\S]*nexCoins: 0,[\s\S]*rewardReceiptIds: \[\],[\s\S]*projectProgress: \{\},[\s\S]*projectDrafts: \{\},[\s\S]*mastery: \{\},[\s\S]*labDrafts: \{\}/,
-  'Fresh account state must clear progression, currency, reward idempotency receipts, projects, mastery, and Lab drafts together.',
-);
+if (/function freshState\(\)[\s\S]*xp: 0,[\s\S]*nexCoins: 0,[\s\S]*projectDrafts: \{\}/.test(source)) {
+  throw new Error('Fresh account state must not duplicate progression defaults locally; schema drift would weaken future account isolation.');
+}
 
-console.log('Account scope audit OK: ownership initialization is fail-closed, Supabase UUIDs are canonicalized, legacy migration stays one-time, reward receipt history resets with account state, and cross-account learning data remains isolated.');
+console.log('Account scope audit OK: ownership initialization is fail-closed, Supabase UUIDs are canonicalized, legacy migration stays one-time, cross-account resets share canonical local defaults, and learner progression remains isolated as the state schema evolves.');
