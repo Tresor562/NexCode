@@ -211,16 +211,32 @@ function fileBadge(filename: string) {
   return (filename.split('.').pop() ?? 'TXT').toUpperCase().slice(0, 3);
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function starterFiles(project: GuidedProject): Record<string, string> {
   const tech = `${project.tech} ${project.track}`.toLowerCase();
+  const safeTitle = escapeHtml(project.title);
   if (tech.includes('html') || tech.includes('css') || tech.includes('web')) return {
-    'index.html': `<!doctype html>\n<html lang="fr">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  <title>${project.title}</title>\n  <link rel="stylesheet" href="style.css" />\n</head>\n<body>\n  <main id="app">\n    <h1>${project.title}</h1>\n    <p>Commence ton projet ici.</p>\n  </main>\n  <script src="script.js"></script>\n</body>\n</html>`,
-    'style.css': 'body {\n  font-family: system-ui, sans-serif;\n  margin: 0;\n  padding: 24px;\n  background: #0b1020;\n  color: #f7f8ff;\n}\n',
-    'script.js': "const app = document.querySelector('#app');\nconsole.log('NexCode project ready', app);\n",
+    'index.html': `<!doctype html>\n<html lang="fr">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />\n  <meta name="color-scheme" content="dark" />\n  <title>${safeTitle}</title>\n  <link rel="stylesheet" href="style.css" />\n</head>\n<body>\n  <header class="site-header">\n    <span class="eyebrow">NexCode Project</span>\n    <h1>${safeTitle}</h1>\n  </header>\n  <main id="app" class="project-shell">\n    <section class="project-card" aria-labelledby="project-heading">\n      <h2 id="project-heading">Construis ton expérience</h2>\n      <p>Transforme ce starter en un produit clair, responsive et accessible.</p>\n      <button id="primary-action" type="button">Tester l’interaction</button>\n      <p id="status" role="status" aria-live="polite"></p>\n    </section>\n  </main>\n  <script src="script.js" defer></script>\n</body>\n</html>`,
+    'style.css': `:root {\n  color-scheme: dark;\n  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;\n  background: #080c16;\n  color: #f7f8ff;\n}\n\n* { box-sizing: border-box; }\n\nbody {\n  margin: 0;\n  min-height: 100vh;\n  min-height: 100dvh;\n  padding: max(24px, env(safe-area-inset-top)) 20px max(32px, env(safe-area-inset-bottom));\n  background: radial-gradient(circle at top, #172149 0, #080c16 52%);\n}\n\n.site-header,\n.project-shell {\n  width: min(100%, 720px);\n  margin-inline: auto;\n}\n\n.eyebrow {\n  color: #9aa8ff;\n  font-size: .72rem;\n  font-weight: 800;\n  letter-spacing: .12em;\n  text-transform: uppercase;\n}\n\nh1 {\n  margin: 8px 0 24px;\n  font-size: clamp(2rem, 8vw, 3.6rem);\n  line-height: 1.02;\n}\n\n.project-card {\n  padding: clamp(20px, 6vw, 34px);\n  border: 1px solid rgba(255,255,255,.12);\n  border-radius: 24px;\n  background: rgba(13, 19, 38, .82);\n  box-shadow: 0 24px 80px rgba(0,0,0,.28);\n}\n\n.project-card p {\n  color: #c5cbe0;\n  line-height: 1.65;\n}\n\nbutton {\n  min-height: 48px;\n  border: 0;\n  border-radius: 14px;\n  padding: 0 18px;\n  background: #7180ff;\n  color: #fff;\n  font: inherit;\n  font-weight: 800;\n  cursor: pointer;\n}\n\nbutton:focus-visible {\n  outline: 3px solid #b9c1ff;\n  outline-offset: 3px;\n}\n`,
+    'script.js': `const app = document.querySelector('#app');\nconst action = document.querySelector('#primary-action');\nconst status = document.querySelector('#status');\n\nfunction setStatus(message) {\n  if (status) status.textContent = message;\n}\n\naction?.addEventListener('click', () => {\n  setStatus('Interaction prête — à toi de construire la suite.');\n  console.info('Project interaction verified');\n});\n\nconsole.log('NexCode web project ready', { appReady: Boolean(app) });\n`,
   };
   if (tech.includes('python')) return { 'main.py': `# ${project.title}\n\ndef main():\n    print("NexCode project ready")\n\nif __name__ == "__main__":\n    main()\n` };
   if (tech.includes('sql') || tech.includes('donnée')) return { 'schema.sql': '-- Définis les tables du projet\nCREATE TABLE example (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\n', 'queries.sql': '-- Écris tes requêtes ici\nSELECT * FROM example;\n' };
-  if (tech.includes('node') || tech.includes('api') || tech.includes('bot') || tech.includes('javascript')) return { 'index.js': `// ${project.title}\nfunction main() {\n  console.log('NexCode project ready');\n}\n\nmain();\n`, 'README.md': `# ${project.title}\n\n${project.description}\n` };
+  if (tech.includes('node') || tech.includes('api') || tech.includes('bot') || tech.includes('javascript')) {
+    const projectName = JSON.stringify(project.title);
+    return {
+      'index.js': `'use strict';\n\nconst PROJECT_NAME = ${projectName};\n\nfunction createApp({ logger = console } = {}) {\n  let started = false;\n\n  return {\n    start() {\n      if (started) return { started: false, reason: 'already-started' };\n      started = true;\n      logger.log(\`NexCode project ready: \${PROJECT_NAME}\`);\n      return { started: true, project: PROJECT_NAME };\n    },\n    getState() {\n      return { started };\n    },\n  };\n}\n\nif (typeof module !== 'undefined' && module.exports) {\n  module.exports = { createApp };\n}\n\ncreateApp().start();\n`,
+      'README.md': `# ${project.title}\n\n${project.description}\n\n## Architecture\n\n- \`createApp()\` contient le cœur testable du projet.\n- Les dépendances externes, comme le logger, sont injectables.\n- \`start()\` est idempotent pour éviter les doubles démarrages accidentels.\n\nDéveloppe les fonctionnalités autour de cette base plutôt que de tout placer dans le scope global.\n`,
+    };
+  }
   return { 'main.txt': `${project.title}\n\n${project.description}\n` };
 }
 
