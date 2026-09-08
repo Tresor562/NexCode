@@ -20,6 +20,7 @@ export function GlassCard({ children, style }: { children: React.ReactNode; styl
 
 export function ProgressBar({ value, label = 'Progression' }: { value: number; label?: string }) {
   const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+  const roundedValue = Math.round(safeValue);
   const { reduceMotion, appActive } = useMotionPreferences();
   const animatedValue = useRef(new Animated.Value(safeValue)).current;
 
@@ -46,9 +47,9 @@ export function ProgressBar({ value, label = 'Progression' }: { value: number; l
   return (
     <View
       accessible
-      accessibilityLabel={`${label} ${Math.round(safeValue)} %`}
+      accessibilityLabel={label}
       accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: Math.round(safeValue) }}
+      accessibilityValue={{ min: 0, max: 100, now: roundedValue, text: `${roundedValue} %` }}
       style={styles.progressTrack}
     >
       <Animated.View style={[styles.progressValue, { width }]} />
