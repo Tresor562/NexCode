@@ -33,6 +33,15 @@ function canonicalText(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\r\n/g, '\n') : '';
 }
 
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function meaningfulEvidenceText(value: unknown, filename = ''): string {
   const extension = filename.trim().toLowerCase().split('.').pop() ?? '';
   return canonicalText(value)
@@ -51,11 +60,14 @@ function meaningfulEvidenceText(value: unknown, filename = ''): string {
 
 function projectStarterFiles(project: GuidedProject): Record<string, string> {
   const tech = `${project.tech} ${project.track}`.toLowerCase();
-  if (tech.includes('html') || tech.includes('css') || tech.includes('web')) return {
-    'index.html': `<!doctype html>\n<html lang="fr">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1" />\n  <title>${project.title}</title>\n  <link rel="stylesheet" href="style.css" />\n</head>\n<body>\n  <main id="app">\n    <h1>${project.title}</h1>\n    <p>Commence ton projet ici.</p>\n  </main>\n  <script src="script.js"></script>\n</body>\n</html>`,
-    'style.css': 'body {\n  font-family: system-ui, sans-serif;\n  margin: 0;\n  padding: 24px;\n  background: #0b1020;\n  color: #f7f8ff;\n}\n',
-    'script.js': "const app = document.querySelector('#app');\nconsole.log('NexCode project ready', app);\n",
-  };
+  if (tech.includes('html') || tech.includes('css') || tech.includes('web')) {
+    const safeTitle = escapeHtmlText(project.title);
+    return {
+      'index.html': `<!doctype html>\n<html lang="fr">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />\n  <meta name="color-scheme" content="dark light" />\n  <title>${safeTitle}</title>\n  <link rel="stylesheet" href="style.css" />\n</head>\n<body>\n  <main id="app" class="app-shell">\n    <header class="hero">\n      <p class="eyebrow">Projet NexCode</p>\n      <h1>${safeTitle}</h1>\n      <p>Transforme ce point de départ en une expérience claire, responsive et interactive.</p>\n    </header>\n    <section class="workspace" aria-label="Zone principale du projet">\n      <p>Commence par définir la première fonctionnalité utile de ton projet.</p>\n    </section>\n  </main>\n  <script src="script.js" defer></script>\n</body>\n</html>`,
+      'style.css': `* {\n  box-sizing: border-box;\n}\n\n:root {\n  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;\n  color: #f7f8ff;\n  background: #0b1020;\n}\n\nbody {\n  margin: 0;\n  min-width: 320px;\n  min-height: 100vh;\n  background: #0b1020;\n  color: #f7f8ff;\n}\n\n.app-shell {\n  width: min(100% - 32px, 960px);\n  margin-inline: auto;\n  padding-block: 48px;\n}\n\n.hero {\n  max-width: 680px;\n}\n\n.eyebrow {\n  font-size: 0.8rem;\n  font-weight: 700;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n}\n\n.workspace {\n  margin-top: 32px;\n}\n`,
+      'script.js': `const app = document.querySelector('#app');\n\nif (app) {\n  app.dataset.ready = 'true';\n}\n`,
+    };
+  }
   if (tech.includes('python')) return { 'main.py': `# ${project.title}\n\ndef main():\n    print("NexCode project ready")\n\nif __name__ == "__main__":\n    main()\n` };
   if (tech.includes('sql') || tech.includes('donnée')) return {
     'schema.sql': '-- Définis les tables du projet\nCREATE TABLE example (\n  id INTEGER PRIMARY KEY,\n  name TEXT NOT NULL\n);\n',
