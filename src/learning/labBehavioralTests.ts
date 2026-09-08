@@ -26,7 +26,7 @@ function normalizeSource(content: string): string {
     .replace(/\n+$/g, '');
 }
 
-function executableEvidenceSource(content: string, filename: string): string {
+function meaningfulEvidenceSource(content: string, filename: string): string {
   const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
   const supportsHashComments = /\.(?:py|pyw|sh|bash|zsh|fish|ya?ml|toml|ini|cfg|conf)$/i.test(normalizedName);
   const supportsSqlComments = /\.sql$/i.test(normalizedName);
@@ -40,17 +40,8 @@ function executableEvidenceSource(content: string, filename: string): string {
       if (supportsSqlComments && /^\s*--(?:\s|$)/.test(line)) return false;
       return true;
     })
-    .join('\n');
-}
-
-function meaningfulEvidenceSource(content: string, filename: string): string {
-  return executableEvidenceSource(content, filename).replace(/\s+/g, '');
-}
-
-function executableWorkspaceSource(draft: LabDraft): string {
-  return Object.entries(draft.files)
-    .map(([filename, content]) => executableEvidenceSource(content, filename))
-    .join('\n');
+    .join('\n')
+    .replace(/\s+/g, '');
 }
 
 function portableWorkspaceKey(filename: string): string {
@@ -61,12 +52,6 @@ function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
   const key = portableWorkspaceKey(filename);
   const actualName = Object.keys(draft.files).find((candidate) => portableWorkspaceKey(candidate) === key);
   return actualName ? draft.files[actualName] ?? '' : '';
-}
-
-function resolveExecutableDraftFile(draft: LabDraft, filename: string): string {
-  const key = portableWorkspaceKey(filename);
-  const actualName = Object.keys(draft.files).find((candidate) => portableWorkspaceKey(candidate) === key);
-  return actualName ? executableEvidenceSource(draft.files[actualName] ?? '', actualName) : '';
 }
 
 function starterFilenameFor(language: LabMission['language']): string {
@@ -144,7 +129,7 @@ export function defaultBehavioralTests(mission: LabMission): BehavioralTest[] {
     {
       id: 'non-empty-work',
       label: 'Le workspace contient un travail non vide et explicable',
-      run: (draft) => Object.entries(draft.files).some(([filename, content]) => meaningfulEvidenceSource(content, filename).length >= 20),
+      run: (draft) => Object.values(draft.files).some((content) => content.trim().length >= 20),
     },
     {
       id: 'starter-delta',
@@ -155,21 +140,21 @@ export function defaultBehavioralTests(mission: LabMission): BehavioralTest[] {
   ];
   if (language === 'HTML/CSS') {
     tests.push(
-      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolveExecutableDraftFile(draft, 'index.html')) },
-      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: (draft) => /[^{}]+\{[^}]+\}/.test(resolveExecutableDraftFile(draft, 'styles.css')) },
+      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolvePortableDraftFile(draft, 'index.html')) },
+      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: (draft) => /[^{}]+\{[^}]+\}/.test(resolvePortableDraftFile(draft, 'styles.css')) },
     );
   } else if (language === 'JavaScript') {
-    tests.push({ id: 'js-logic', label: 'Le code contient une déclaration ou une fonction', run: (draft) => /\b(const|let|var|function|class)\b/.test(executableWorkspaceSource(draft)) });
+    tests.push({ id: 'js-logic', label: 'Le code contient une déclaration ou une fonction', run: (draft) => /\b(const|let|var|function|class)\b/.test(Object.values(draft.files).join('\n')) });
   } else if (language === 'Python') {
-    tests.push({ id: 'py-statement', label: 'Le code contient une instruction Python structurée', run: (draft) => /^(\s*)(def|class|if|for|while|print|[A-Za-z_]\w*\s*=)/m.test(executableWorkspaceSource(draft)) });
+    tests.push({ id: 'py-statement', label: 'Le code contient une instruction Python structurée', run: (draft) => /^(\s*)(def|class|if|for|while|print|[A-Za-z_]\w*\s*=)/m.test(Object.values(draft.files).join('\n')) });
   } else if (language === 'SQL') {
-    tests.push({ id: 'sql-operation', label: 'Une opération SQL cohérente est présente', run: (draft) => /\b(select|insert|update|delete|create)\b/i.test(executableWorkspaceSource(draft)) });
+    tests.push({ id: 'sql-operation', label: 'Une opération SQL cohérente est présente', run: (draft) => /\b(select|insert|update|delete|create)\b/i.test(Object.values(draft.files).join('\n')) });
   } else if (language === 'Git') {
-    tests.push({ id: 'git-command', label: 'Au moins une commande Git pertinente est présente', run: (draft) => /^\s*git\s+(status|add|commit|branch|switch|merge|rebase|log|diff|restore|reset)\b/m.test(executableWorkspaceSource(draft)) });
+    tests.push({ id: 'git-command', label: 'Au moins une commande Git pertinente est présente', run: (draft) => /^\s*git\s+(status|add|commit|branch|switch|merge|rebase|log|diff|restore|reset)\b/m.test(Object.values(draft.files).join('\n')) });
   } else if (language === 'Node/API') {
-    tests.push({ id: 'api-shape', label: 'Le workspace contient une structure de serveur ou de route', run: (draft) => /(express|http|listen\s*\(|req\b|res\b|request|response)/i.test(executableWorkspaceSource(draft)) });
+    tests.push({ id: 'api-shape', label: 'Le workspace contient une structure de serveur ou de route', run: (draft) => /(express|http|listen\s*\(|req\b|res\b|request|response)/i.test(Object.values(draft.files).join('\n')) });
   } else if (language === 'Bots') {
-    tests.push({ id: 'bot-event', label: 'Le bot traite un événement, une commande ou un message', run: (draft) => /(message|update|interaction|command|handler|reply|send|client\.|bot\.)/i.test(executableWorkspaceSource(draft)) });
+    tests.push({ id: 'bot-event', label: 'Le bot traite un événement, une commande ou un message', run: (draft) => /(message|update|interaction|command|handler|reply|send|client\.|bot\.)/i.test(Object.values(draft.files).join('\n')) });
   }
   return tests;
 }
