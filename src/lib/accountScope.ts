@@ -63,6 +63,7 @@ function freshState(): LocalState {
     bestStreak: 0,
     dailyGoal: 20,
     dailyCompleted: 0,
+    rewardReceiptIds: [],
     totalLearningMinutes: 0,
     downloadedCourses: [],
     downloadedChapters: [],
