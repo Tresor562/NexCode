@@ -66,15 +66,22 @@ function freshState(): LocalState {
 export function scopeLocalStateForUser(local: LocalState, userId: string): LocalState {
   const normalized = normalizeAccountId(userId);
   if (!normalized) return freshState();
+
+  // Re-enter the canonical state boundary at the ownership handoff too. Startup
+  // normally provides an already-sanitized snapshot, but account switching and
+  // cloud hydration are security/reliability boundaries: a malformed in-memory or
+  // restored payload must not bypass the same XP, streak, draft and mastery guards
+  // merely because its owner id is valid.
+  const safeLocal = sanitizeLocalState(local);
   const ownerId = readOwnerId();
 
   // Existing installs predate owner binding. They may adopt their snapshot once
   // only when there is no evidence account scoping was ever initialized.
   if (!ownerId) {
-    return ownerBindingWasInitialized() ? freshState() : local;
+    return ownerBindingWasInitialized() ? freshState() : safeLocal;
   }
 
   // Once an owner is known, never merge that learner's local XP, projects,
   // drafts or mastery into another authenticated account.
-  return ownerId === normalized ? local : freshState();
+  return ownerId === normalized ? safeLocal : freshState();
 }
