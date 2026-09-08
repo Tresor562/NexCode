@@ -107,6 +107,15 @@ export const theme = {
     pressedDepth: 2,
     springSpeed: 32,
     springBounciness: 3,
+    // Bottom navigation is one of the most repeated interactions in the app.
+    // Keep its emphasis restrained and centralize the spring so every glyph feels
+    // like the same product instead of carrying component-local animation tuning.
+    navInactiveOpacity: 0.82,
+    navActiveScale: 1.06,
+    navHaloRestScale: 0.76,
+    navSpringDamping: 18,
+    navSpringStiffness: 230,
+    navSpringMass: 0.65,
   },
 } as const;
 
