@@ -45,26 +45,29 @@ if (markerWriteIndex < 0 || ownerWriteIndex < 0 || markerWriteIndex >= ownerWrit
 }
 requirePattern(
   /import \{ sanitizeLocalState, type LocalState \} from '\.\/localState';/,
-  'Fresh account state must come from the canonical local-state sanitizer/default boundary.',
+  'Account ownership decisions must use the canonical local-state sanitizer/default boundary.',
 );
 requirePattern(
   /function freshState\(\): LocalState \{[\s\S]*return sanitizeLocalState\(\{\}\);[\s\S]*\}/,
   'Cross-account resets must derive every current and future progression field from canonical defaults instead of duplicating the schema.',
 );
 requirePattern(
-  /export function scopeLocalStateForUser\(local: LocalState, userId: string\): LocalState \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return freshState\(\);/,
-  'A malformed authenticated user id must never inherit existing local learning state.',
+  /export function scopeLocalStateForUser\(local: LocalState, userId: string\): LocalState \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return freshState\(\);[\s\S]*const safeLocal = sanitizeLocalState\(local\);/,
+  'Valid owner handoffs must re-sanitize retained local state so malformed restored XP, streak, Lab or mastery data cannot bypass startup guards.',
 );
 requirePattern(
-  /if \(!ownerId\) \{[\s\S]*return ownerBindingWasInitialized\(\) \? freshState\(\) : local;[\s\S]*\}/,
-  'Missing owner metadata may migrate a legacy snapshot only before account scoping has ever been initialized.',
+  /if \(!ownerId\) \{[\s\S]*return ownerBindingWasInitialized\(\) \? freshState\(\) : safeLocal;[\s\S]*\}/,
+  'Missing owner metadata may migrate only a canonically sanitized legacy snapshot before account scoping has ever been initialized.',
 );
 requirePattern(
-  /return ownerId === normalized \? local : freshState\(\);/,
-  'A known local snapshot must be reused only by its exact authenticated owner.',
+  /return ownerId === normalized \? safeLocal : freshState\(\);/,
+  'A known local snapshot must be reused only by its exact authenticated owner and only after canonical state sanitization.',
 );
 if (/function freshState\(\)[\s\S]*xp: 0,[\s\S]*nexCoins: 0,[\s\S]*projectDrafts: \{\}/.test(source)) {
   throw new Error('Fresh account state must not duplicate progression defaults locally; schema drift would weaken future account isolation.');
 }
+if (/ownerId === normalized \? local : freshState\(\)/.test(source) || /\? freshState\(\) : local/.test(source)) {
+  throw new Error('Account scope must never return a retained snapshot without passing it through sanitizeLocalState first.');
+}
 
-console.log('Account scope audit OK: ownership initialization is fail-closed, Supabase UUIDs are canonicalized, legacy migration stays one-time, cross-account resets share canonical local defaults, and learner progression remains isolated as the state schema evolves.');
+console.log('Account scope audit OK: ownership initialization is fail-closed, Supabase UUIDs are canonicalized, retained snapshots are re-sanitized at the ownership boundary, legacy migration stays one-time, and cross-account resets share canonical local defaults.');
