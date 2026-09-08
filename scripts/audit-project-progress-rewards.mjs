@@ -18,12 +18,13 @@ expect(/Math\.max\(previousProgress,\s*safePercent\(requestedProgress\)\)/, 'Pro
 expect(/newlyCompletedSteps\s*=\s*Math\.max\(0,\s*nextSteps\s*-\s*previousSteps\)/, 'Project rewards must be derived from newly completed construction steps.');
 expect(/PROJECT_STEP_REWARD\.xp\s*\*\s*newlyCompletedSteps/, 'XP must scale with newly crossed project steps, not button presses.');
 expect(/PROJECT_STEP_REWARD\.nexCoins\s*\*\s*newlyCompletedSteps/, 'NexCoins must scale with newly crossed project steps.');
+expect(/receiptId:\s*`project:\$\{registeredProject\.id\}:steps:\$\{previousSteps \+ 1\}-\$\{nextSteps\}`/, 'Project step rewards must carry a deterministic receipt across cloud/device replay.');
 expect(/const PORTFOLIO_PASS_SCORE\s*=\s*70/, 'Portfolio rewards must preserve the project review passing threshold.');
 expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Project reward timestamps need a small bounded clock-skew tolerance.');
 expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Project rewards must sanitize their canonical reward clock against the actual system clock.');
 expect(/const clockSkewMs\s*=\s*value\.getTime\(\)\s*-\s*trustedSystemNow\.getTime\(\);/, 'Project reward clock sanitization must measure signed device clock drift.');
 expect(/Math\.abs\(clockSkewMs\)\s*<=\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied clock must not distort project rewards in either the future or backward direction.');
-expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);\s*return rewardProgress\(progressed, \{[\s\S]*?now:\s*rewardTime,[\s\S]*?\}\);/, 'Project step XP, NexCoins and streak accounting must use the trusted reward clock.');
+expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);\s*return rewardProgress\(progressed, \{[\s\S]*?now:\s*rewardTime,[\s\S]*?receiptId:[\s\S]*?\}\);/, 'Project step XP, NexCoins, streak accounting and idempotency must use the trusted reward boundary.');
 expect(/function portfolioProofTimestamp\(proof:\s*PortfolioProof \| undefined\):\s*number \| null/, 'Portfolio proof updates need a central persisted-version timestamp parser.');
 expect(/Date\.parse\(proof\.completedAt\)/, 'Portfolio proof versioning must parse persisted completion timestamps.');
 expect(/function canonicalizePortfolioProof\(proof:\s*PortfolioProof,\s*project:\s*GuidedProject\):\s*PortfolioProof/, 'Validated portfolio evidence must be canonicalized before entering the reward ledger.');
@@ -52,7 +53,7 @@ expect(/if \(existingCompletedAt !== null && incomingCompletedAt <= existingComp
 expect(/if \(existingIndex\s*>=\s*0\)[\s\S]*?portfolioProofs:\s*state\.portfolioProofs\.map/, 'Existing portfolio proofs must be replaceable without granting another reward.');
 expect(/index\s*===\s*existingIndex\s*\?\s*canonicalProof\s*:\s*item/, 'A newer proof update must replace only the matching project evidence with canonical data.');
 expect(/safePercent\(state\.projectProgress\[project\.id\]\)\s*<\s*100/, 'A first portfolio reward must require canonical 100% project completion evidence.');
-expect(/const rewarded = rewardProgress\(state, \{ \.\.\.PORTFOLIO_PROOF_REWARD, now: rewardTime \}\);/, 'Only a first valid proof for a completed canonical project may enter the reward path.');
+expect(/const rewarded = rewardProgress\(state, \{[\s\S]*?\.\.\.PORTFOLIO_PROOF_REWARD,[\s\S]*?now:\s*rewardTime,[\s\S]*?receiptId:\s*`project:\$\{project\.id\}:portfolio`,[\s\S]*?\}\);/, 'Only a first valid proof for a completed canonical project may enter the durable reward path.');
 expect(/portfolioProofs:\s*\[\.\.\.rewarded\.portfolioProofs,\s*canonicalProof\]/, 'A first valid portfolio proof must persist canonical evidence after rewarding.');
 
 const completedStepsBody = source.match(/function completedProjectSteps\([\s\S]*?\n\}/)?.[0] ?? '';
@@ -88,6 +89,9 @@ if (!progressRewardSection) {
 if (/\bnow,/.test(progressRewardSection)) {
   throw new Error('Project step rewards must never pass the caller clock directly into rewardProgress.');
 }
+if (!/receiptId:\s*`project:\$\{registeredProject\.id\}:steps:/.test(progressRewardSection)) {
+  throw new Error('Project step rewards must never lose their durable receipt identity.');
+}
 
 const existingProofBranch = source.match(/if \(existingIndex\s*>=\s*0\)\s*\{([\s\S]*?)\n\s*\}\n\n\s*\/\/ A passing rubric/)?.[1];
 if (!existingProofBranch) {
@@ -107,9 +111,10 @@ const canonicalGateIndex = source.indexOf('const project = canonicalProject(proo
 const validationGateIndex = source.indexOf('if (!project || !isRewardablePortfolioProof(proof, project, rewardTime)) return state;');
 const canonicalizationIndex = source.indexOf('const canonicalProof = canonicalizePortfolioProof(proof, project);');
 const completionGateIndex = source.indexOf('if (safePercent(state.projectProgress[project.id]) < 100) return state;');
-const firstRewardIndex = source.indexOf('const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now: rewardTime });');
-if (canonicalGateIndex < 0 || validationGateIndex < 0 || canonicalizationIndex < 0 || completionGateIndex < 0 || firstRewardIndex < 0 || canonicalGateIndex > validationGateIndex || validationGateIndex > canonicalizationIndex || canonicalizationIndex > completionGateIndex || completionGateIndex > firstRewardIndex) {
-  throw new Error('Canonical lookup, evidence validation, proof normalization and project completion must all execute before the one-time reward path.');
+const firstRewardIndex = source.indexOf('const rewarded = rewardProgress(state, {');
+const portfolioReceiptIndex = source.indexOf('receiptId: `project:${project.id}:portfolio`');
+if (canonicalGateIndex < 0 || validationGateIndex < 0 || canonicalizationIndex < 0 || completionGateIndex < 0 || firstRewardIndex < 0 || portfolioReceiptIndex < 0 || canonicalGateIndex > validationGateIndex || validationGateIndex > canonicalizationIndex || canonicalizationIndex > completionGateIndex || completionGateIndex > firstRewardIndex || firstRewardIndex > portfolioReceiptIndex) {
+  throw new Error('Canonical lookup, evidence validation, proof normalization, project completion and durable receipt binding must all execute before portfolio persistence.');
 }
 
 console.log('Project progression reward audit passed.');
