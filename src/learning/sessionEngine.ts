@@ -145,7 +145,15 @@ export function rewardLearningCompletion(state: LocalState, lesson: Lesson, now 
   if (safeAttemptCount(state.lessonAttempts[lesson.id]) < 1) return state;
   if (!hasLatestCorrectLessonEvidence(state, lesson, rewardTime)) return state;
   const reward = learningCompletionReward(lesson);
-  const rewarded = rewardProgress(state, { ...reward, now: rewardTime });
+  const rewarded = rewardProgress(state, {
+    ...reward,
+    now: rewardTime,
+    // completedLessons is the product-level completion guard, while the receipt
+    // is the durable accounting guard. Keeping both means a partially restored
+    // or migrated completion list cannot pay the same lesson twice, and the
+    // receipt survives cloud reconciliation independently of UI navigation.
+    receiptId: `learning:${lesson.id}`,
+  });
   return {
     ...rewarded,
     completedLessons: [...rewarded.completedLessons, lesson.id],
