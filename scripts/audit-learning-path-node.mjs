@@ -15,11 +15,30 @@ const forbidPattern = (pattern, message) => {
 requireSnippet("import { createLearningFeedbackGate } from './learningFeedback';", 'Learning path nodes must use the shared learning feedback gate.');
 requireSnippet("import { useMotionPreferences } from './motionPreferences';", 'Learning path nodes must use the shared motion lifecycle.');
 requireSnippet("import { theme } from './theme';", 'Learning path nodes must use shared design tokens.');
-requireSnippet('const AMBIENT_PULSE_ITERATIONS = 3;', 'Recommended-node pulse must stay bounded.');
-requireSnippet('const AMBIENT_SHIMMER_ITERATIONS = 2;', 'Recommended-node shimmer must stay bounded.');
-requireSnippet('const COMPLETION_TRAIL_DURATION_MS = 420;', 'Completion trail must stay short and bounded.');
-requireSnippet('const COMPLETION_HALO_IN_MS = 160;', 'Completion halo entrance must stay short and bounded.');
-requireSnippet('const COMPLETION_HALO_OUT_MS = 260;', 'Completion halo exit must stay short and bounded.');
+
+const motionTokenUsages = [
+  'theme.motion.pathPressDepth',
+  'theme.motion.pathPressedScale',
+  'theme.motion.pathPressSpringSpeed',
+  'theme.motion.pathPressSpringBounciness',
+  'theme.motion.pathArrivalDuration',
+  'theme.motion.pathArrivalScale',
+  'theme.motion.pathArrivalOffset',
+  'theme.motion.pathArrivalOvershoot',
+  'theme.motion.pathPulseDuration',
+  'theme.motion.pathPulseIterations',
+  'theme.motion.pathShimmerDelay',
+  'theme.motion.pathShimmerDuration',
+  'theme.motion.pathShimmerRest',
+  'theme.motion.pathShimmerIterations',
+  'theme.motion.pathCompletionSpringSpeed',
+  'theme.motion.pathCompletionSpringBounciness',
+  'theme.motion.pathCompletionTrailDuration',
+  'theme.motion.pathCompletionHaloIn',
+  'theme.motion.pathCompletionHaloOut',
+];
+for (const token of motionTokenUsages) requireSnippet(token, `Learning path motion must stay centralized on shared token ${token}.`);
+
 requireSnippet('if (!isCurrent || reduceMotion || !appActive)', 'Ambient motion must stop for reduced motion and background state.');
 requireSnippet("const becameDone = previous !== 'done' && state === 'done';", 'Completion motion must only run on a real state transition.');
 requireSnippet("completionTrail.setValue(state === 'done' ? 1 : 0);", 'Reduced-motion/background completion must resolve immediately to a stable trail state.');
@@ -59,9 +78,10 @@ const tokenUsages = [
 ];
 for (const token of tokenUsages) requireSnippet(token, `Learning path states must keep using shared token ${token}.`);
 
+forbidPattern(/const\s+(AMBIENT_|COMPLETION_|PATH_)[A-Z0-9_]+\s*=\s*\d/, 'Learning path motion tuning must stay in theme.motion, not drift back into component-local constants.');
 forbidPattern(/expo-haptics/, 'Learning path nodes must not bypass the shared feedback gate with direct expo-haptics calls.');
 forbidPattern(/Haptics\./, 'Learning path nodes must not own direct haptic calls.');
 forbidPattern(/#[0-9A-Fa-f]{3,8}/, 'Learning path state colors must come from the design system, not hard-coded hex values.');
 forbidPattern(/rgba?\s*\(/, 'Learning path visuals must use shared design tokens, not local rgb/rgba literals.');
 
-console.log('Learning path node audit OK: bounded ambient/completion motion, shared lifecycle-aware haptics, accessibility, and fully tokenized visual states.');
+console.log('Learning path node audit OK: bounded tokenized motion, shared lifecycle-aware haptics, accessibility, and fully tokenized visual states.');
