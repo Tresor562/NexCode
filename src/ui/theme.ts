@@ -26,7 +26,10 @@ export const theme = {
     // Muted copy is still functional UI throughout lessons, Lab counters and
     // navigation hints, so keep it comfortably readable on dark surfaces.
     textMuted: '#8793AD',
-    primary: '#7282FF',
+    // Primary actions carry white text throughout the shared mobile UI. Keep the
+    // brand indigo vivid while meeting normal-text contrast instead of relying on
+    // font weight or glow to make core learning CTAs readable.
+    primary: '#5367E8',
     primaryBright: '#94A1FF',
     primarySoft: '#222E66',
     primaryGlass: 'rgba(114,130,255,.17)',
