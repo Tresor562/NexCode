@@ -74,10 +74,10 @@ export const theme = {
     xxxl: 40,
   },
   type: {
-    // 11pt is the floor for recurring compact learning UI. Counters, pills and
-    // metadata appear throughout long practice sessions, so they should remain
-    // comfortably readable instead of drifting into decorative micro-text.
-    caption: 11,
+    // 12pt is the floor for recurring compact learning UI. Counters, pills and
+    // metadata carry real learning context throughout long practice sessions, so
+    // keep them readable at a glance instead of treating them as decorative text.
+    caption: 12,
     label: 12,
     body: 14,
     bodyLarge: 16,
