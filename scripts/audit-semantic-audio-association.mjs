@@ -65,7 +65,17 @@ if (!/sharedSemanticAudioAssociationOpen && sharedLastNotificationFeedbackAt !==
   process.exit(1);
 }
 
-if (!/function supersedeAudio\(\): number \{[\s\S]{0,260}sharedSemanticAudioAssociationOpen = false;[\s\S]{0,100}sharedLastNotificationFeedbackAt = undefined;/.test(source)) {
+const supersedeAudioStart = source.indexOf('function supersedeAudio(): number {');
+const supersedeAudioEnd = supersedeAudioStart >= 0
+  ? source.indexOf('\n}\n\nAppState.addEventListener', supersedeAudioStart)
+  : -1;
+const supersedeAudioBody = supersedeAudioStart >= 0 && supersedeAudioEnd > supersedeAudioStart
+  ? source.slice(supersedeAudioStart, supersedeAudioEnd)
+  : '';
+if (
+  !supersedeAudioBody.includes('sharedSemanticAudioAssociationOpen = false;') ||
+  !supersedeAudioBody.includes('sharedLastNotificationFeedbackAt = undefined;')
+) {
   console.error('Semantic audio association audit failed: lifecycle/new-audio supersession must close stale semantic notification state.');
   process.exit(1);
 }
