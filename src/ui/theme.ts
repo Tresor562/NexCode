@@ -116,6 +116,29 @@ export const theme = {
     navSpringDamping: 18,
     navSpringStiffness: 230,
     navSpringMass: 0.65,
+    // Learning-path motion follows one compact vocabulary: a short arrival,
+    // restrained finite emphasis, and a quick completion confirmation. Keeping
+    // these values here prevents individual nodes from drifting into a different
+    // motion language as the curriculum UI evolves.
+    pathPressDepth: 4,
+    pathPressedScale: 0.965,
+    pathPressSpringSpeed: 34,
+    pathPressSpringBounciness: 0,
+    pathArrivalDuration: 360,
+    pathArrivalScale: 0.9,
+    pathArrivalOffset: 7,
+    pathArrivalOvershoot: 1.18,
+    pathPulseDuration: 1500,
+    pathPulseIterations: 3,
+    pathShimmerDelay: 380,
+    pathShimmerDuration: 920,
+    pathShimmerRest: 1100,
+    pathShimmerIterations: 2,
+    pathCompletionSpringSpeed: 20,
+    pathCompletionSpringBounciness: 8,
+    pathCompletionTrailDuration: 420,
+    pathCompletionHaloIn: 160,
+    pathCompletionHaloOut: 260,
   },
 } as const;
 
