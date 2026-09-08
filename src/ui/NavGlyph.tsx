@@ -34,9 +34,9 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
     }
     Animated.spring(emphasis, {
       toValue: target,
-      damping: 18,
-      stiffness: 230,
-      mass: 0.65,
+      damping: theme.motion.navSpringDamping,
+      stiffness: theme.motion.navSpringStiffness,
+      mass: theme.motion.navSpringMass,
       overshootClamping: true,
       isInteraction: false,
       useNativeDriver: true,
@@ -45,12 +45,12 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
   }, [active, appActive, emphasis, reduceMotion]);
 
   const motionStyle = {
-    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1], extrapolate: 'clamp' }),
-    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, 1.08], extrapolate: 'clamp' }) }],
+    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.navInactiveOpacity, 1], extrapolate: 'clamp' }),
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, theme.motion.navActiveScale], extrapolate: 'clamp' }) }],
   };
   const haloStyle = {
     opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
-    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1], extrapolate: 'clamp' }) }],
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.navHaloRestScale, 1], extrapolate: 'clamp' }) }],
   };
 
   if (name === 'home') {
