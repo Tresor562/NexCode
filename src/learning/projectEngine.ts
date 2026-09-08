@@ -24,6 +24,7 @@ export type ProjectReview = {
 
 const DEFAULT_PROJECT_READINESS_GATE = 55;
 const MAX_PROJECT_SKILL_ID_LENGTH = 96;
+const MAX_PROJECT_RUBRIC_ID_LENGTH = 64;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/;
 
 function boundedPercent(value: unknown, fallback = 0): number {
@@ -62,6 +63,21 @@ function canonicalProjectSkills(project: GuidedProject): string[] {
   return skills;
 }
 
+function canonicalAchievedRubricIds(value: unknown, rubric: ProjectReviewRubric[]): Set<string> {
+  const allowed = new Set(rubric.map((item) => item.id));
+  const achieved = new Set<string>();
+  if (!Array.isArray(value)) return achieved;
+
+  for (const rawId of value) {
+    if (typeof rawId !== 'string') continue;
+    const normalized = rawId.normalize('NFKC').trim();
+    if (!normalized || normalized.length > MAX_PROJECT_RUBRIC_ID_LENGTH || CONTROL_CHARACTER_PATTERN.test(normalized)) continue;
+    if (allowed.has(normalized)) achieved.add(normalized);
+  }
+
+  return achieved;
+}
+
 export function projectReadiness(project: GuidedProject, mastery: MasteryMap, gate = DEFAULT_PROJECT_READINESS_GATE): ProjectReadiness {
   // A malformed runtime gate must never make a project easier to unlock.
   // Fall back to the product default rather than coercing invalid input to 0.
@@ -85,18 +101,20 @@ export function projectReadiness(project: GuidedProject, mastery: MasteryMap, ga
 }
 
 export function defaultProjectRubric(project: GuidedProject): ProjectReviewRubric[] {
+  const stepCount = Array.isArray(project.steps) ? project.steps.length : 0;
   return [
     { id: 'functionality', title: 'Fonctionnement', description: 'Le résultat répond au besoin principal sans comportement cassé évident.', weight: 30 },
     { id: 'understanding', title: 'Compréhension', description: 'Le développeur peut expliquer les décisions et le rôle des compétences utilisées.', weight: 25 },
     { id: 'quality', title: 'Qualité du code', description: 'Les noms, la structure et la lisibilité permettent de maintenir le projet.', weight: 20 },
     { id: 'resilience', title: 'Cas limites', description: 'Les entrées invalides et principaux échecs sont anticipés.', weight: 15 },
-    { id: 'delivery', title: 'Livraison', description: `${project.steps.length} étapes sont revues et le projet possède une trace claire de ce qui a été construit.`, weight: 10 },
+    { id: 'delivery', title: 'Livraison', description: `${stepCount} étapes sont revues et le projet possède une trace claire de ce qui a été construit.`, weight: 10 },
   ];
 }
 
-export function reviewProject(project: GuidedProject, achievedRubricIds: string[]): ProjectReview {
-  const achieved = new Set(achievedRubricIds);
-  const rubric = defaultProjectRubric(project).map((item) => ({ ...item, achieved: achieved.has(item.id) }));
+export function reviewProject(project: GuidedProject, achievedRubricIds: unknown): ProjectReview {
+  const baseRubric = defaultProjectRubric(project);
+  const achieved = canonicalAchievedRubricIds(achievedRubricIds, baseRubric);
+  const rubric = baseRubric.map((item) => ({ ...item, achieved: achieved.has(item.id) }));
   const score = rubric.reduce((sum, item) => sum + (item.achieved ? item.weight : 0), 0);
   const feedback = rubric.filter((item) => !item.achieved).map((item) => `${item.title} : ${item.description}`);
   return { score, passed: score >= 70 && achieved.has('functionality') && achieved.has('understanding'), rubric, feedback };
