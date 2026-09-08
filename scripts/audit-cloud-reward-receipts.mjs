@@ -4,6 +4,7 @@ import process from 'node:process';
 
 const cloudSource = fs.readFileSync(path.join(process.cwd(), 'src/lib/cloudAccount.ts'), 'utf8');
 const localSource = fs.readFileSync(path.join(process.cwd(), 'src/lib/localState.ts'), 'utf8');
+const sessionSource = fs.readFileSync(path.join(process.cwd(), 'src/learning/sessionEngine.ts'), 'utf8');
 
 function requirePattern(source, pattern, message) {
   if (!pattern.test(source)) throw new Error(message);
@@ -55,5 +56,10 @@ requirePattern(
   /rewardReceiptIds: normalizeRewardReceiptIds\(value\.rewardReceiptIds\)/,
   'Local state restoration must canonicalize legacy reward receipt history before it can be reused.',
 );
+requirePattern(
+  sessionSource,
+  /rewardProgress\(state, \{[\s\S]*receiptId: `learning:\$\{lesson\.id\}`,[\s\S]*\}\)/,
+  'Every lesson completion reward must carry a deterministic receipt independent of the completedLessons UI guard.',
+);
 
-console.log('Reward receipt audit OK: receipt identities are canonicalized, bounded, deduplicated locally and synchronized with Supabase progress.');
+console.log('Reward receipt audit OK: receipt identities are canonicalized, bounded, deduplicated locally, attached to lesson rewards and synchronized with Supabase progress.');
