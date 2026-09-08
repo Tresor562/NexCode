@@ -42,7 +42,7 @@ assert.ok(rewardStart >= 0 && rewardStart < attemptStart, 'completion reward bou
 const rewardSection = source.slice(rewardStart, attemptStart);
 assert.match(rewardSection, /state\.completedLessons\.includes\(lesson\.id\)/, 'completion rewards must remain idempotent by lesson id');
 assert.match(rewardSection, /const rewardTime = trustedCompletionTime\(now\);/, 'completion rewards must bind caller time to the trusted reward clock before evidence checks');
-assert.match(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'only the completion boundary should mint the learning reward through the trusted clock');
+assert.match(rewardSection, /rewardProgress\(state, \{[\s\S]*\.\.\.reward,[\s\S]*now: rewardTime,[\s\S]*receiptId: `learning:\$\{lesson\.id\}`,[\s\S]*\}\)/, 'only the completion boundary should mint the learning reward through the trusted clock and durable lesson receipt');
 assert.doesNotMatch(rewardSection, /rewardProgress\(state, \{ \.\.\.reward, now \}\)/, 'raw caller time must never reach the progression reward boundary');
 
-console.log('Session attempt audit OK: attempts, clocks and restored diagnostic tags are bounded before mastery/progression state is persisted.');
+console.log('Session attempt audit OK: attempts, clocks, restored diagnostic tags and durable reward receipts are bounded before mastery/progression state is persisted.');
