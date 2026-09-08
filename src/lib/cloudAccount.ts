@@ -161,8 +161,6 @@ export async function signUpWithPassword(email: string, password: string, displa
 }
 
 function shouldDiscardSessionAfterRefreshFailure(status: number): boolean {
-  // A rejected refresh token is terminal. Throttling and server/network failures
-  // are transient and must not log the learner out or destroy offline continuity.
   return status === 400 || status === 401 || status === 403;
 }
 
@@ -175,28 +173,18 @@ async function performCloudSessionRefresh(session: CloudSession): Promise<CloudS
     body: JSON.stringify({ refresh_token: session.refreshToken }),
   });
   if (!response.ok) {
-    // A refresh can finish after the learner has already switched accounts. Never
-    // let a stale request sign the newly active learner out.
     if (shouldDiscardSessionAfterRefreshFailure(response.status) && sessionIsStillCurrent(session)) {
       saveCloudSession(null);
     }
     throw await parseError(response);
   }
   const refreshed = toSession(await response.json());
-
-  // Supabase refresh tokens rotate, but an old account refresh may resolve after
-  // another account has signed in. Persist only when the same session is still
-  // active so an in-flight request cannot resurrect the previous account.
   if (sessionIsStillCurrent(session)) saveCloudSession(refreshed);
   return refreshed;
 }
 
 export async function refreshCloudSession(session: CloudSession): Promise<CloudSession> {
   if (session.expiresAt - Date.now() > SESSION_REFRESH_WINDOW_MS) return session;
-
-  // Supabase refresh tokens rotate. Two concurrent refresh calls using the same
-  // token can invalidate one another and produce random sign-outs. Share one
-  // request per refresh token and let all callers reuse the resulting session.
   if (refreshFlight?.refreshToken === session.refreshToken) return refreshFlight.promise;
 
   const promise = performCloudSessionRefresh(session);
@@ -272,6 +260,25 @@ function validIsoTimestamp(value: unknown): number {
   return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }
 
+function mergeDraftRecord(remote: unknown, local: LocalState['labDrafts']): LocalState['labDrafts'] {
+  const merged: LocalState['labDrafts'] = { ...local };
+  if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
+
+  for (const [draftId, raw] of Object.entries(remote as Record<string, unknown>)) {
+    if (!draftId.trim() || !raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const remoteDraft = raw as Partial<LocalState['labDrafts'][string]>;
+    const remoteAt = validIsoTimestamp(remoteDraft.updatedAt);
+    if (!Number.isFinite(remoteAt)) continue;
+
+    const localDraft = local[draftId];
+    if (!localDraft || remoteAt > validIsoTimestamp(localDraft.updatedAt)) {
+      merged[draftId] = remoteDraft as LocalState['labDrafts'][string];
+    }
+  }
+
+  return merged;
+}
+
 function mergeMastery(remote: unknown, local: LocalState['mastery']): LocalState['mastery'] {
   const merged: LocalState['mastery'] = { ...local };
   if (!remote || typeof remote !== 'object' || Array.isArray(remote)) return merged;
@@ -339,13 +346,6 @@ function mergePortfolioProofs(remote: unknown, local: LocalState['portfolioProof
     }
     const remoteAt = validIsoTimestamp(proof.completedAt);
     const currentAt = validIsoTimestamp(current.completedAt);
-
-    // Portfolio proof identity is versioned by completion time everywhere else
-    // in the product. Keep the same monotonic rule at the Supabase boundary: a
-    // delayed device must not resurrect an older proof merely because that old
-    // rubric happened to score higher. Equal versions keep the local snapshot to
-    // avoid needless cross-device churn; an invalid local clock can still recover
-    // from a valid remote proof.
     if (remoteAt > currentAt) {
       byProject.set(proof.projectId, proof as LocalState['portfolioProofs'][number]);
     }
@@ -379,9 +379,6 @@ function mergeDailyProgress(local: LocalState, progress: Record<string, unknown>
   const remoteStreak = finiteCloudNumber(progress?.streak, 0, 0, 100_000);
   const lastActiveDate = laterDateKey(localDate, remoteDate);
 
-  // Daily counters and the current streak describe a specific activity day. A
-  // stale cloud snapshot must never revive yesterday's completed goal or streak
-  // after this device has already moved to a newer local day.
   if (localDate && (!remoteDate || localDate > remoteDate)) {
     return { lastActiveDate: localDate, dailyCompleted: local.dailyCompleted, streak: local.streak };
   }
@@ -422,15 +419,12 @@ function mergeRemoteState(local: LocalState, profile: Record<string, unknown> | 
     lessonAttempts: mergeMaxNumberRecord(progress?.lesson_attempts, local.lessonAttempts),
     lessonErrorTags: mergeErrorTagRecord(progress?.lesson_error_tags, local.lessonErrorTags),
     projectProgress: mergeMaxNumberRecord(progress?.project_progress, local.projectProgress, 100),
+    projectDrafts: mergeDraftRecord(settings.projectDrafts, local.projectDrafts),
+    labDrafts: mergeDraftRecord(settings.labDrafts, local.labDrafts),
     portfolioProofs: mergePortfolioProofs(progress?.portfolio_proofs, local.portfolioProofs),
     onboardingComplete: local.onboardingComplete || Boolean(profile?.display_name),
   };
 
-  // Supabase JSON is an external persistence boundary. Run the merged snapshot
-  // through the same fail-safe normalizer used for local disk restores before it
-  // can reach mastery, streak, projects or UI state. This prevents malformed or
-  // stale cloud JSON from reintroducing NaN, impossible dates or invalid evidence
-  // that local storage already knows how to reject.
   return sanitizeLocalState(merged);
 }
 
@@ -486,6 +480,8 @@ export async function pushCloudState(session: CloudSession, state: LocalState): 
           totalLearningMinutes: state.totalLearningMinutes,
           dailyGoalRewardDate: state.dailyGoalRewardDate ?? null,
           rewardReceiptIds: state.rewardReceiptIds ?? [],
+          projectDrafts: state.projectDrafts,
+          labDrafts: state.labDrafts,
         },
         updated_at: updatedAt,
       }),
