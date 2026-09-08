@@ -41,7 +41,7 @@ assert.match(source, /if \(state\.completedLessons\.includes\(lesson\.id\)\) ret
 assert.match(source, /const rewardTime = trustedCompletionTime\(now\);/, 'completion must normalize caller time before scanning reward evidence');
 assert.match(source, /if \(safeAttemptCount\(state\.lessonAttempts\[lesson\.id\]\) < 1\) return state;/, 'lesson completion rewards must require a recorded attempt');
 assert.match(source, /if \(!hasLatestCorrectLessonEvidence\(state, lesson, rewardTime\)\) return state;/, 'a failed, mismatched or future-dated retry must not unlock completion XP or NexCoins');
-assert.match(source, /rewardProgress\(state, \{ \.\.\.reward, now: rewardTime \}\)/, 'learning completion must pass the same trusted timestamp through the streak/daily-goal reward engine');
+assert.match(source, /rewardProgress\(state, \{[\s\S]*\.\.\.reward,[\s\S]*now: rewardTime,[\s\S]*receiptId: `learning:\$\{lesson\.id\}`,[\s\S]*\}\)/, 'learning completion must pass the trusted timestamp and deterministic lesson receipt through the streak/daily-goal reward engine');
 assert.match(source, /completedLessons: \[\.\.\.rewarded\.completedLessons, lesson\.id\]/, 'rewarded lessons must be persisted as completed atomically with the reward state');
 
 const completionFunction = source.slice(source.indexOf('export function rewardLearningCompletion'), source.indexOf('export function recordLessonOutcome'));
@@ -72,4 +72,4 @@ assert.doesNotMatch(localStateSource, /xp: active\.xp \+ xp/, 'raw cumulative XP
 assert.doesNotMatch(localStateSource, /nexCoins: active\.nexCoins \+ nexCoins/, 'raw cumulative NexCoin addition must not bypass safe integer bounds');
 assert.doesNotMatch(localStateSource, /Math\.max\(0, reward\.(?:xp|nexCoins|minutes) \?\? 0\)/, 'raw Math.max sanitization must not reintroduce NaN poisoning');
 
-console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, bidirectional system-bound latest-correct evidence, bidirectional trusted progression clocks, saturating totals and idempotence are enforced.');
+console.log('Learning rewards audit OK: reward balance, bounded minutes, safe answer indices, bidirectional system-bound latest-correct evidence, bidirectional trusted progression clocks, saturating totals, deterministic receipts and idempotence are enforced.');
