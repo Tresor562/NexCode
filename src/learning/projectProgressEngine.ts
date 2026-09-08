@@ -167,6 +167,7 @@ export function advanceProjectProgress(
     nexCoins: PROJECT_STEP_REWARD.nexCoins * newlyCompletedSteps,
     minutes: PROJECT_STEP_REWARD.minutes * newlyCompletedSteps,
     now: rewardTime,
+    receiptId: `project:${registeredProject.id}:steps:${previousSteps + 1}-${nextSteps}`,
   });
 }
 
@@ -217,7 +218,11 @@ export function recordPortfolioProof(
   const finalStepCount = Math.max(1, project.steps.length);
   if (!hasProjectWorkspaceEvidence(project, state.projectDrafts[project.id], finalStepCount)) return state;
 
-  const rewarded = rewardProgress(state, { ...PORTFOLIO_PROOF_REWARD, now: rewardTime });
+  const rewarded = rewardProgress(state, {
+    ...PORTFOLIO_PROOF_REWARD,
+    now: rewardTime,
+    receiptId: `project:${project.id}:portfolio`,
+  });
   return {
     ...rewarded,
     portfolioProofs: [...rewarded.portfolioProofs, canonicalProof],
