@@ -7,13 +7,6 @@ import { theme } from './theme';
 
 export type LearningPathNodeState = 'done' | 'current' | 'available' | 'locked';
 
-const AMBIENT_PULSE_ITERATIONS = 3;
-const AMBIENT_SHIMMER_ITERATIONS = 2;
-const COMPLETION_TRAIL_DURATION_MS = 420;
-const COMPLETION_HALO_IN_MS = 160;
-const COMPLETION_HALO_OUT_MS = 260;
-const CURRENT_ARRIVAL_DURATION_MS = 360;
-
 export function LearningPathNode({
   title,
   meta,
@@ -44,10 +37,10 @@ export function LearningPathNode({
   const { reduceMotion, appActive } = useMotionPreferences();
   const disabled = state === 'locked';
   const isCurrent = state === 'current';
-  const translateY = press.interpolate({ inputRange: [0, 1], outputRange: [0, 4] });
-  const nodeScale = press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.965] });
-  const arrivalScale = currentArrival.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] });
-  const arrivalY = currentArrival.interpolate({ inputRange: [0, 1], outputRange: [7, 0] });
+  const translateY = press.interpolate({ inputRange: [0, 1], outputRange: [0, theme.motion.pathPressDepth] });
+  const nodeScale = press.interpolate({ inputRange: [0, 1], outputRange: [1, theme.motion.pathPressedScale] });
+  const arrivalScale = currentArrival.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.pathArrivalScale, 1] });
+  const arrivalY = currentArrival.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.pathArrivalOffset, 0] });
   const ringScale = focusPulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.2] });
   const ringOpacity = focusPulse.interpolate({ inputRange: [0, 0.45, 1], outputRange: [0.16, 0.34, 0] });
   const shimmerX = shimmer.interpolate({ inputRange: [0, 1], outputRange: [-54, 70] });
@@ -70,27 +63,27 @@ export function LearningPathNode({
       Animated.sequence([
         Animated.timing(focusPulse, {
           toValue: 1,
-          duration: 1500,
+          duration: theme.motion.pathPulseDuration,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
         Animated.timing(focusPulse, { toValue: 0, duration: 0, useNativeDriver: true }),
       ]),
-      { iterations: AMBIENT_PULSE_ITERATIONS },
+      { iterations: theme.motion.pathPulseIterations },
     );
     const shimmerLoop = Animated.loop(
       Animated.sequence([
-        Animated.delay(380),
+        Animated.delay(theme.motion.pathShimmerDelay),
         Animated.timing(shimmer, {
           toValue: 1,
-          duration: 920,
+          duration: theme.motion.pathShimmerDuration,
           easing: Easing.inOut(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(shimmer, { toValue: 0, duration: 0, useNativeDriver: true }),
-        Animated.delay(1100),
+        Animated.delay(theme.motion.pathShimmerRest),
       ]),
-      { iterations: AMBIENT_SHIMMER_ITERATIONS },
+      { iterations: theme.motion.pathShimmerIterations },
     );
 
     pulseLoop.start();
@@ -115,8 +108,8 @@ export function LearningPathNode({
     currentArrival.setValue(0);
     const arrivalAnimation = Animated.timing(currentArrival, {
       toValue: 1,
-      duration: CURRENT_ARRIVAL_DURATION_MS,
-      easing: Easing.out(Easing.back(1.18)),
+      duration: theme.motion.pathArrivalDuration,
+      easing: Easing.out(Easing.back(theme.motion.pathArrivalOvershoot)),
       useNativeDriver: true,
     });
     arrivalAnimation.start();
@@ -144,25 +137,25 @@ export function LearningPathNode({
     const popAnimation = Animated.spring(completionPop, {
       toValue: 1,
       useNativeDriver: true,
-      speed: 20,
-      bounciness: 8,
+      speed: theme.motion.pathCompletionSpringSpeed,
+      bounciness: theme.motion.pathCompletionSpringBounciness,
     });
     const trailAnimation = Animated.timing(completionTrail, {
       toValue: 1,
-      duration: COMPLETION_TRAIL_DURATION_MS,
+      duration: theme.motion.pathCompletionTrailDuration,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     });
     const haloAnimation = Animated.sequence([
       Animated.timing(completionHalo, {
         toValue: 1,
-        duration: COMPLETION_HALO_IN_MS,
+        duration: theme.motion.pathCompletionHaloIn,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
       Animated.timing(completionHalo, {
         toValue: 0,
-        duration: COMPLETION_HALO_OUT_MS,
+        duration: theme.motion.pathCompletionHaloOut,
         easing: Easing.in(Easing.quad),
         useNativeDriver: true,
       }),
@@ -192,8 +185,8 @@ export function LearningPathNode({
     Animated.spring(press, {
       toValue,
       useNativeDriver: true,
-      speed: 34,
-      bounciness: 0,
+      speed: theme.motion.pathPressSpringSpeed,
+      bounciness: theme.motion.pathPressSpringBounciness,
     }).start();
   };
 
