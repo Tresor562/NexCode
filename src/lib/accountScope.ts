@@ -1,5 +1,5 @@
 import { File, Paths } from 'expo-file-system';
-import type { LocalState } from './localState';
+import { sanitizeLocalState, type LocalState } from './localState';
 
 const ownerFile = new File(Paths.document, 'nexcode-local-owner.txt');
 const ownerBoundMarker = new File(Paths.document, 'nexcode-local-owner-bound-v1');
@@ -56,31 +56,11 @@ export function bindLocalStateOwner(userId: string): void {
 }
 
 function freshState(): LocalState {
-  return {
-    xp: 0,
-    nexCoins: 0,
-    streak: 0,
-    bestStreak: 0,
-    dailyGoal: 20,
-    dailyCompleted: 0,
-    rewardReceiptIds: [],
-    totalLearningMinutes: 0,
-    downloadedCourses: [],
-    downloadedChapters: [],
-    installedOfflinePacks: [],
-    completedLessons: [],
-    projectProgress: {},
-    projectDrafts: {},
-    portfolioProofs: [],
-    mastery: {},
-    lessonAttempts: {},
-    lessonErrorTags: {},
-    labDrafts: {},
-    onboardingComplete: false,
-    name: '',
-    learningGoal: 'Créer des sites Web',
-    recentCourseId: 'html-foundations',
-  };
+  // Account isolation must evolve with the canonical local-state schema. Building
+  // the empty account through the same sanitizer/default boundary used at startup
+  // prevents newly introduced progression fields from being forgotten here and
+  // accidentally surviving an account switch or becoming undefined after one.
+  return sanitizeLocalState({});
 }
 
 export function scopeLocalStateForUser(local: LocalState, userId: string): LocalState {
