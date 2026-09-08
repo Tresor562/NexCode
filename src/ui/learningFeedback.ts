@@ -59,6 +59,11 @@ function openSemanticAudioAssociationWindow() {
 
 function supersedeAudio(): number {
   clearSemanticAudioProtection();
+  // Any newer audio/lifecycle request terminates the semantic notification turn.
+  // Keeping that permit alive after a superseding request could let a foregrounded
+  // app or a later interaction inherit success/error priority from stale feedback.
+  sharedSemanticAudioAssociationOpen = false;
+  sharedLastNotificationFeedbackAt = undefined;
   sharedAudioRequestGeneration = sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER
     ? 1
     : sharedAudioRequestGeneration + 1;
@@ -137,7 +142,12 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       }
 
       const current = now();
-      if (!Number.isFinite(current)) return;
+      if (!Number.isFinite(current)) {
+        // A malformed/rolled-over clock must not leave an older async seek eligible
+        // to play later. Treat this request as a lifecycle boundary and invalidate it.
+        supersedeAudio();
+        return;
+      }
 
       if (sharedSemanticAudioProtectedFrom !== undefined && sharedSemanticAudioProtectedUntil !== undefined) {
         if (
