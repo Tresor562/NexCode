@@ -56,8 +56,8 @@ requirePattern(
   'A known local snapshot must be reused only by its exact authenticated owner.',
 );
 requirePattern(
-  /xp: 0,[\s\S]*nexCoins: 0,[\s\S]*projectProgress: \{\},[\s\S]*projectDrafts: \{\},[\s\S]*mastery: \{\},[\s\S]*labDrafts: \{\}/,
-  'Fresh account state must clear progression, currency, projects, mastery, and Lab drafts together.',
+  /xp: 0,[\s\S]*nexCoins: 0,[\s\S]*rewardReceiptIds: \[\],[\s\S]*projectProgress: \{\},[\s\S]*projectDrafts: \{\},[\s\S]*mastery: \{\},[\s\S]*labDrafts: \{\}/,
+  'Fresh account state must clear progression, currency, reward idempotency receipts, projects, mastery, and Lab drafts together.',
 );
 
-console.log('Account scope audit OK: ownership initialization is fail-closed across interrupted writes, Supabase UUIDs are canonicalized, legacy migration stays one-time, and cross-account learning state remains isolated.');
+console.log('Account scope audit OK: ownership initialization is fail-closed, Supabase UUIDs are canonicalized, legacy migration stays one-time, reward receipt history resets with account state, and cross-account learning data remains isolated.');
