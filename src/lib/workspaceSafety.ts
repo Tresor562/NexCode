@@ -140,12 +140,12 @@ export function restoreWorkspaceDraft({
   const fresh = (): LabDraft => ({
     missionId: expectedMissionId,
     language: expectedLanguage,
-    files: fallbackFiles,
+    files: { ...fallbackFiles },
     activeFile: fallbackActive,
     updatedAt: now.toISOString(),
   });
 
-  if (!stored || (stored.missionId && stored.missionId !== expectedMissionId)) {
+  if (!stored || stored.missionId !== expectedMissionId) {
     return { draft: fresh(), repaired: Boolean(stored) };
   }
 
