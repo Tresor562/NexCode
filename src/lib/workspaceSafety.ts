@@ -34,6 +34,7 @@ const LIKELY_SECRET_PATTERNS = [
 const WINDOWS_RESERVED_BASENAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 const WINDOWS_INVALID_SEGMENT_CHARS = /[<>:"|?*]/;
 const UNSAFE_INVISIBLE_PATH_CHARS = /[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/;
+const OBJECT_META_SEGMENTS = new Set(['__proto__', 'prototype', 'constructor']);
 const MAX_WORKSPACE_PATH_CHARS = 240;
 const MAX_WORKSPACE_SEGMENT_CHARS = 120;
 const MAX_WORKSPACE_DEPTH = 12;
@@ -45,10 +46,12 @@ const MAX_VALIDATION_CRITERION_CHARS = 240;
 const MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 function portableWorkspaceSegment(segment: string): boolean {
+  const identity = segment.normalize('NFC').toLocaleLowerCase('en-US');
   return Boolean(segment)
     && segment.length <= MAX_WORKSPACE_SEGMENT_CHARS
     && segment !== '.'
     && segment !== '..'
+    && !OBJECT_META_SEGMENTS.has(identity)
     && !/[\u0000-\u001f\u007f]/.test(segment)
     && !UNSAFE_INVISIBLE_PATH_CHARS.test(segment)
     && !WINDOWS_INVALID_SEGMENT_CHARS.test(segment)
