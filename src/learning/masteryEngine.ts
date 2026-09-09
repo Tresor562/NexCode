@@ -32,6 +32,20 @@ function boundedPercent(value: unknown, fallback = 0) {
     : fallback;
 }
 
+function canonicalSkillIds(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const skillIds: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const skillId = item.trim();
+    if (!skillId || seen.has(skillId)) continue;
+    seen.add(skillId);
+    skillIds.push(skillId);
+  }
+  return skillIds;
+}
+
 function usableEvidence(value: unknown): AttemptEvidence[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is AttemptEvidence => {
@@ -151,7 +165,7 @@ export function skillIsMastered(skillId: string, mastery: MasteryMap, now = new 
 
 export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, required = 70, now = new Date()): GateResult {
   const normalizedRequired = boundedPercent(required, 100);
-  const snapshots = skillIds.map((id) => masterySnapshot(id, mastery, now));
+  const snapshots = canonicalSkillIds(skillIds).map((id) => masterySnapshot(id, mastery, now));
   const confidenceRequired = Math.min(70, normalizedRequired);
   const missingSkills = snapshots.filter((item) => item.rawScore === 0).map((item) => item.skillId);
   const weakSkills = snapshots
@@ -183,7 +197,7 @@ export function evaluateSkillGate(skillIds: string[], mastery: MasteryMap, requi
 }
 
 export function courseMasterySnapshot(course: Course, mastery: MasteryMap, now = new Date()) {
-  const snapshots = course.skillIds.map((id) => masterySnapshot(id, mastery, now));
+  const snapshots = canonicalSkillIds(course.skillIds).map((id) => masterySnapshot(id, mastery, now));
   const score = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
   const mastered = snapshots.filter(snapshotIsMastered).length;
   const dueForReview = snapshots.filter((item) => item.needsReview).length;
