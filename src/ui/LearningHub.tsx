@@ -36,6 +36,16 @@ function modeTone(mode: PracticeMode): 'primary' | 'success' | 'warning' | undef
   return 'primary';
 }
 
+function lessonExperienceLabels(lesson: Lesson) {
+  const labels: string[] = [];
+  if (lesson.retrievalPrompt) labels.push('Rappel actif');
+  if (lesson.transferPrompt) labels.push('Transfert');
+  if (lesson.labMission) labels.push('Lab guidé');
+  const exerciseCount = lesson.exercises?.length ?? 0;
+  if (exerciseCount > 1) labels.push(`${exerciseCount} défis`);
+  return labels.slice(0, 3);
+}
+
 function DailyMomentumCard({ state }: { state: LocalState }) {
   const goal = Math.max(1, state.dailyGoal);
   const completed = Math.max(0, Math.min(goal, state.dailyCompleted));
@@ -157,6 +167,7 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
   const recommendedCourse = recommended ? courses.find((course) => course.id === recommended.courseId) : undefined;
   const recommendedLesson = recommendedCourse?.starterLessons.find((lesson) => lesson.id === recommended?.lessonId);
   const recommendedReward = recommendedLesson ? learningCompletionReward(recommendedLesson) : null;
+  const recommendedExperiences = recommendedLesson ? lessonExperienceLabels(recommendedLesson) : [];
   const sessionMessage = recommendedSessionMessage(session);
   const recentCourse = courses.find((course) => course.id === state.recentCourseId) ?? courses[0];
 
@@ -191,6 +202,11 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
           </View>
           <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
           <Text style={styles.meta}>{recommendedCourse.title} • +{recommendedReward.xp} XP • +{recommendedReward.nexCoins} NexCoins</Text>
+          {recommendedExperiences.length > 0 ? (
+            <View style={styles.recommendationPills} accessibilityLabel={`Expérience pédagogique : ${recommendedExperiences.join(', ')}`}>
+              {recommendedExperiences.map((label) => <Pill key={label} label={label} tone="success" />)}
+            </View>
+          ) : null}
           <View style={styles.whyCard}>
             <Text style={styles.whyKicker}>POURQUOI NEX TE PROPOSE ÇA</Text>
             <Text style={styles.whyText}>{recommended.reason}</Text>
@@ -302,160 +318,126 @@ function CourseJourney({ course, state, onBack, onOpenLesson, onToggleChapterOff
               <View style={styles.rowBetween}>
                 <View style={styles.offlineCopy}>
                   <Text style={styles.offlineTitle} numberOfLines={1}>{chapter.title}</Text>
-                  <Text style={styles.offlineMeta}>{chapter.estimatedMinutes} min • {chapter.lessonIds.length} étapes</Text>
+                  <Text style={styles.offlineMeta}>{chapter.estimatedMinutes} min · {chapter.lessonIds.length} étapes</Text>
                 </View>
-                <Pill label={installed ? 'Hors ligne' : 'En ligne'} tone={installed ? 'success' : 'primary'} />
+                <Pill label={installed ? (installedKind === 'light' ? 'Light' : 'Complet') : 'Cloud'} tone={installed ? 'success' : undefined} />
               </View>
               <View style={styles.offlineActions}>
-                {(['lite', 'standard', 'full'] as OfflinePackKind[]).map((kind) => {
-                  const active = installedKind === kind;
-                  const label = kind === 'lite' ? 'Essentiel' : kind === 'standard' ? 'Standard' : 'Complet';
-                  return (
-                    <Pressable
-                      key={kind}
-                      accessibilityRole="button"
-                      accessibilityLabel={`${active ? 'Retirer' : 'Télécharger'} ${chapter.title}, pack ${label}`}
-                      accessibilityState={{ selected: active }}
-                      onPress={() => onToggleChapterOffline(chapter.id, kind)}
-                      style={({ pressed }) => [styles.offlineAction, active && styles.offlineActionActive, pressed && styles.pressed]}
-                    >
-                      <Text style={[styles.offlineActionText, active && styles.offlineActionTextActive]}>{active ? `✓ ${label}` : label}</Text>
-                    </Pressable>
-                  );
-                })}
+                <Pressable accessibilityRole="button" accessibilityLabel={`Télécharger ${chapter.title} en pack léger`} onPress={() => onToggleChapterOffline(chapter.id, 'light')} style={({ pressed }) => [styles.offlineAction, pressed && styles.pressed]}>
+                  <Text style={styles.offlineActionText}>{installedKind === 'light' ? 'Retirer Light' : 'Pack Light'}</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Télécharger ${chapter.title} en pack complet`} onPress={() => onToggleChapterOffline(chapter.id, 'full')} style={({ pressed }) => [styles.offlineAction, pressed && styles.pressed]}>
+                  <Text style={styles.offlineActionText}>{installedKind === 'full' ? 'Retirer complet' : 'Pack complet'}</Text>
+                </Pressable>
               </View>
             </Card>
           );
         })}
       </View>
 
-      <View style={styles.pathIntro}>
-        <View style={styles.pathIntroLine} />
-        <Text style={styles.pathHint}>AVANCE ÉTAPE PAR ÉTAPE</Text>
-        <View style={styles.pathIntroLine} />
-      </View>
-
-      <View style={styles.path}>
-        {lessons.slice(0, 28).map((lesson, index) => {
-          const done = state.completedLessons.includes(lesson.id);
-          const current = index === firstIncompleteIndex && !done;
-          const locked = index > firstIncompleteIndex + 2;
-          const offset = index % 6 === 1 ? 32 : index % 6 === 2 ? 72 : index % 6 === 3 ? 92 : index % 6 === 4 ? 58 : index % 6 === 5 ? 18 : 0;
-          const kindIcon = lesson.activityKind === 'lab' ? '</>' : lesson.activityKind === 'checkpoint' ? '★' : lesson.exercises?.some((exercise) => exercise.kind === 'debug') ? '!' : '›';
-          const nodeState: LearningPathNodeState = done ? 'done' : current ? 'current' : locked ? 'locked' : 'available';
-
+      <SectionHeader title="Chemin d’apprentissage" action={`${lessons.length} étapes`} />
+      <View style={styles.pathWrap}>
+        {lessons.map((lesson, index) => {
+          const isCompleted = state.completedLessons.includes(lesson.id);
+          const unlocked = index <= firstIncompleteIndex || isCompleted;
+          const next = !isCompleted && index === firstIncompleteIndex;
+          const nodeState: LearningPathNodeState = isCompleted ? 'completed' : next ? 'next' : unlocked ? 'available' : 'locked';
           return (
             <LearningPathNode
               key={lesson.id}
-              title={lesson.title}
-              meta={`${lesson.durationMin ?? 5} min • ${lesson.activityKind ?? 'leçon'}`}
-              icon={kindIcon}
+              lesson={lesson}
+              index={index}
               state={nodeState}
-              offset={offset}
-              showConnector={index < Math.min(lessons.length, 28) - 1}
-              onPress={() => onOpenLesson(lesson)}
+              courseColor={course.color}
+              onPress={() => unlocked && onOpenLesson(lesson)}
             />
           );
         })}
       </View>
-
-      {lessons.length > 28 ? (
-        <Card style={styles.moreCard}>
-          <Text style={styles.moreTitle}>+ {lessons.length - 28} étapes dans ce parcours</Text>
-          <Text style={styles.meta}>Elles apparaîtront au fur et à mesure de ta progression.</Text>
-        </Card>
-      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10, marginBottom: 8 },
-  eyebrow: { color: '#98A5FF', fontSize: 10, fontWeight: '900', letterSpacing: 1.4, marginBottom: 8 },
-  title: { color: theme.colors.text, fontSize: 30, fontWeight: '900', lineHeight: 35, letterSpacing: -.7 },
-  lead: { color: theme.colors.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 6 },
-  nexOrb: { width: 72, height: 72, borderRadius: 27, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(109,124,255,.14)', borderWidth: 1, borderColor: 'rgba(177,187,255,.26)' },
-  nexFace: { width: 38, height: 26, borderRadius: 12, borderWidth: 2, borderColor: '#BAC3FF', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: 'rgba(9,14,25,.86)' },
-  nexEye: { width: 5, height: 7, borderRadius: 99, backgroundColor: '#7FE5FF' },
-  nexLabel: { color: '#B9C1FF', fontSize: 8, fontWeight: '900', letterSpacing: 1.5, marginTop: 5 },
-  momentumCard: { marginTop: 10, marginBottom: 2 },
-  momentumKicker: { color: '#7FE5FF', fontSize: 8.5, fontWeight: '900', letterSpacing: 1.1 },
-  momentumTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '900', lineHeight: 21, marginTop: 4 },
-  streakBadge: { minWidth: 65, height: 40, paddingHorizontal: 10, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: 'rgba(255,196,95,.08)', borderWidth: 1, borderColor: 'rgba(255,196,95,.22)' },
-  streakIcon: { color: '#FFC45F', fontSize: 10 },
-  streakValue: { color: '#FFD487', fontSize: 16, fontWeight: '900' },
-  streakUnit: { color: '#DDBE84', fontSize: 9, fontWeight: '800', marginTop: 3 },
-  momentumProgress: { marginTop: 14 },
-  momentumProgressHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 },
-  momentumProgressLabel: { color: theme.colors.textSecondary, fontSize: 10.5, fontWeight: '800' },
-  momentumProgressValue: { color: '#B7C0FF', fontSize: 10.5, fontWeight: '900' },
-  momentumStats: { minHeight: 58, flexDirection: 'row', alignItems: 'center', marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(255,255,255,.065)', backgroundColor: 'rgba(255,255,255,.022)' },
-  momentumStat: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 2 },
-  momentumStatValue: { color: theme.colors.text, fontSize: 14, fontWeight: '900' },
-  momentumStatLabel: { color: theme.colors.textMuted, fontSize: 7.5, lineHeight: 10, fontWeight: '700', marginTop: 2, textAlign: 'center' },
-  momentumStatDivider: { width: 1, height: 25, backgroundColor: 'rgba(255,255,255,.07)' },
-  goalRewardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-  goalRewardText: { color: '#93F1C8', fontSize: 10.5, fontWeight: '800' },
-  momentumHint: { color: theme.colors.textMuted, fontSize: 10, lineHeight: 15, marginTop: 11 },
-  sessionLengthCard: { minHeight: 74, marginTop: 10, paddingHorizontal: 13, paddingVertical: 11, borderRadius: 18, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,.07)', backgroundColor: 'rgba(255,255,255,.028)' },
-  sessionLengthKicker: { color: '#98A5FF', fontSize: 8, fontWeight: '900', letterSpacing: 1.05 },
-  sessionLengthHint: { color: theme.colors.textMuted, fontSize: 9.5, lineHeight: 14, marginTop: 3 },
-  sessionLengthOptions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sessionLengthOption: { minWidth: 50, minHeight: 42, paddingHorizontal: 9, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,.08)', backgroundColor: 'rgba(255,255,255,.035)' },
-  sessionLengthOptionSelected: { borderColor: 'rgba(152,165,255,.72)', backgroundColor: 'rgba(109,124,255,.2)' },
-  sessionLengthOptionPressed: { opacity: .78 },
-  sessionLengthOptionText: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '900' },
-  sessionLengthOptionTextSelected: { color: '#D6DBFF' },
-  recommended: { marginTop: 10 },
-  emptySessionCard: { marginTop: 10 },
-  emptySessionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900', lineHeight: 23, marginTop: 14 },
-  emptySessionText: { color: theme.colors.textSecondary, fontSize: 12.5, lineHeight: 19, marginTop: 7 },
-  emptySessionHint: { color: theme.colors.textMuted, fontSize: 10.5, lineHeight: 16, marginTop: 8, marginBottom: 14 },
-  rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  recommendationPills: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  mini: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '800' },
-  recommendedTitle: { color: theme.colors.text, fontSize: 20, fontWeight: '900', lineHeight: 25, marginTop: 15 },
-  meta: { color: theme.colors.textMuted, fontSize: 10.5, lineHeight: 16, marginTop: 4, marginBottom: 13 },
-  whyCard: { marginBottom: 13, padding: 13, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(152,165,255,.18)', backgroundColor: 'rgba(99,117,255,.07)' },
-  whyKicker: { color: '#9BA7FF', fontSize: 8.5, fontWeight: '900', letterSpacing: 1.05 },
-  whyText: { color: theme.colors.text, fontSize: 12.5, lineHeight: 19, fontWeight: '700', marginTop: 6 },
-  sessionText: { color: theme.colors.textSecondary, fontSize: 11.5, lineHeight: 18, marginTop: 7 },
-  sessionStats: { minHeight: 54, flexDirection: 'row', alignItems: 'center', marginBottom: 14, borderRadius: 15, borderWidth: 1, borderColor: 'rgba(255,255,255,.07)', backgroundColor: 'rgba(255,255,255,.025)' },
-  sessionStat: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  sessionStatValue: { color: theme.colors.text, fontSize: 15, fontWeight: '900' },
-  sessionStatLabel: { color: theme.colors.textMuted, fontSize: 8.5, fontWeight: '700', marginTop: 2 },
-  sessionStatDivider: { width: 1, height: 24, backgroundColor: 'rgba(255,255,255,.08)' },
-  courseGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  courseTile: { width: '48.4%', minHeight: 156, borderRadius: 22, backgroundColor: 'rgba(255,255,255,.04)', borderWidth: 1, borderColor: 'rgba(255,255,255,.07)', padding: 13 },
-  courseBadge: { width: 44, height: 44, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  courseBadgeSmall: { width: 43, height: 43, borderRadius: 15, borderWidth: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,.035)' },
-  courseBadgeText: { fontSize: 13, fontWeight: '900' },
-  courseTitle: { color: theme.colors.text, fontSize: 14, fontWeight: '900', lineHeight: 18, marginTop: 13, minHeight: 36 },
-  courseMeta: { color: theme.colors.textMuted, fontSize: 9.5, fontWeight: '700', marginBottom: 8 },
-  pressed: { opacity: .76, transform: [{ scale: .985 }] },
-  journeyHeader: { flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 8, marginBottom: 14 },
-  backButton: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,.045)', borderWidth: 1, borderColor: 'rgba(255,255,255,.08)' },
-  backIcon: { color: theme.colors.text, fontSize: 26, fontWeight: '700', marginTop: -2 },
-  journeyKicker: { color: '#98A5FF', fontSize: 9, fontWeight: '900', letterSpacing: 1.1 },
-  journeyTitle: { color: theme.colors.text, fontSize: 22, fontWeight: '900', lineHeight: 27, marginTop: 2 },
-  progressLabel: { color: theme.colors.textSecondary, fontSize: 11, fontWeight: '800', marginBottom: 3 },
-  progressHint: { color: theme.colors.textMuted, fontSize: 9.5, fontWeight: '700', marginBottom: 10 },
-  progressValue: { color: '#B7C0FF', fontSize: 18, fontWeight: '900', marginBottom: 9 },
-  offlineList: { gap: 8, marginTop: -4 },
-  offlineCard: { marginBottom: 0 },
-  offlineCopy: { flex: 1, paddingRight: 8 },
-  offlineTitle: { color: theme.colors.text, fontSize: 13, fontWeight: '900' },
-  offlineMeta: { color: theme.colors.textMuted, fontSize: 9.5, fontWeight: '700', marginTop: 3 },
-  offlineActions: { flexDirection: 'row', gap: 7, marginTop: 12 },
-  offlineAction: { flex: 1, minHeight: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,.08)', backgroundColor: 'rgba(255,255,255,.025)' },
-  offlineActionActive: { borderColor: 'rgba(127,229,190,.42)', backgroundColor: 'rgba(84,207,159,.1)' },
-  offlineActionText: { color: theme.colors.textMuted, fontSize: 9, fontWeight: '900' },
-  offlineActionTextActive: { color: '#93F1C8' },
-  pathIntro: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 24, marginBottom: 18 },
-  pathIntroLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,.07)' },
-  pathHint: { color: theme.colors.textMuted, fontSize: 8.5, fontWeight: '900', letterSpacing: 1.2 },
-  path: { paddingBottom: 16, paddingHorizontal: 8, overflow: 'hidden' },
-  moreCard: { marginTop: 4 },
-  moreTitle: { color: theme.colors.text, fontSize: 14, fontWeight: '900' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: theme.space.sm },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space.lg, marginBottom: theme.space.lg },
+  eyebrow: { fontSize: theme.type.micro, fontWeight: '900', letterSpacing: 1.6, color: theme.colors.primary },
+  title: { fontSize: theme.type.display, lineHeight: 38, fontWeight: '900', color: theme.colors.text, marginTop: 4 },
+  lead: { fontSize: theme.type.body, lineHeight: 21, color: theme.colors.muted, marginTop: 8 },
+  nexOrb: { width: 68, height: 68, borderRadius: 34, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primaryBorder, alignItems: 'center', justifyContent: 'center' },
+  nexFace: { flexDirection: 'row', gap: 8, marginBottom: 5 },
+  nexEye: { width: 7, height: 7, borderRadius: 4, backgroundColor: theme.colors.primary },
+  nexLabel: { fontSize: theme.type.micro, fontWeight: '900', letterSpacing: 1.2, color: theme.colors.primary },
+  momentumCard: { marginBottom: theme.space.md },
+  momentumKicker: { fontSize: theme.type.micro, fontWeight: '900', letterSpacing: 1.2, color: theme.colors.success },
+  momentumTitle: { fontSize: theme.type.h3, lineHeight: 23, fontWeight: '900', color: theme.colors.text, marginTop: 4 },
+  streakBadge: { flexDirection: 'row', alignItems: 'baseline', gap: 3, backgroundColor: theme.colors.surfaceRaised, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.pill, paddingHorizontal: 12, paddingVertical: 8 },
+  streakIcon: { fontSize: 12, color: theme.colors.warning },
+  streakValue: { fontSize: theme.type.h3, fontWeight: '900', color: theme.colors.text },
+  streakUnit: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.muted },
+  momentumProgress: { marginTop: theme.space.md },
+  momentumProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 7 },
+  momentumProgressLabel: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.text },
+  momentumProgressValue: { fontSize: theme.type.caption, fontWeight: '900', color: theme.colors.success },
+  momentumStats: { flexDirection: 'row', alignItems: 'stretch', marginTop: theme.space.md, paddingTop: theme.space.md, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  momentumStat: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  momentumStatValue: { fontSize: theme.type.h3, fontWeight: '900', color: theme.colors.text },
+  momentumStatLabel: { fontSize: theme.type.micro, lineHeight: 14, fontWeight: '700', color: theme.colors.muted, marginTop: 3, textAlign: 'center' },
+  momentumStatDivider: { width: 1, backgroundColor: theme.colors.border },
+  goalRewardRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space.sm, marginTop: theme.space.md },
+  goalRewardText: { fontSize: theme.type.caption, fontWeight: '900', color: theme.colors.success },
+  momentumHint: { fontSize: theme.type.caption, lineHeight: 18, color: theme.colors.muted, marginTop: theme.space.md },
+  sessionLengthCard: { flexDirection: 'row', alignItems: 'center', gap: theme.space.md, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.lg, padding: theme.space.md, marginBottom: theme.space.md },
+  sessionLengthKicker: { fontSize: theme.type.micro, fontWeight: '900', letterSpacing: 1.1, color: theme.colors.muted },
+  sessionLengthHint: { fontSize: theme.type.caption, lineHeight: 17, color: theme.colors.muted, marginTop: 3 },
+  sessionLengthOptions: { flexDirection: 'row', gap: 6 },
+  sessionLengthOption: { minHeight: 44, minWidth: 54, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  sessionLengthOptionSelected: { borderColor: theme.colors.primaryBorder, backgroundColor: theme.colors.primarySoft },
+  sessionLengthOptionPressed: { opacity: 0.72 },
+  sessionLengthOptionText: { fontSize: theme.type.caption, fontWeight: '900', color: theme.colors.muted },
+  sessionLengthOptionTextSelected: { color: theme.colors.primary },
+  recommended: { marginBottom: theme.space.lg },
+  recommendationPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  recommendedTitle: { fontSize: theme.type.h2, lineHeight: 28, fontWeight: '900', color: theme.colors.text, marginTop: theme.space.md },
+  meta: { fontSize: theme.type.caption, color: theme.colors.muted, marginTop: 7, marginBottom: theme.space.sm },
+  mini: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.muted },
+  whyCard: { borderRadius: theme.radius.md, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primaryBorder, padding: theme.space.md, marginVertical: theme.space.md },
+  whyKicker: { fontSize: theme.type.micro, fontWeight: '900', letterSpacing: 1.1, color: theme.colors.primary },
+  whyText: { fontSize: theme.type.body, lineHeight: 21, fontWeight: '700', color: theme.colors.text, marginTop: 5 },
+  sessionText: { fontSize: theme.type.caption, lineHeight: 18, color: theme.colors.muted, marginTop: 6 },
+  sessionStats: { flexDirection: 'row', alignItems: 'stretch', borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: theme.space.md, marginBottom: theme.space.md },
+  sessionStat: { flex: 1, alignItems: 'center' },
+  sessionStatValue: { fontSize: theme.type.h3, fontWeight: '900', color: theme.colors.text },
+  sessionStatLabel: { fontSize: theme.type.micro, color: theme.colors.muted, fontWeight: '700', marginTop: 2 },
+  sessionStatDivider: { width: 1, backgroundColor: theme.colors.border },
+  emptySessionCard: { marginBottom: theme.space.lg },
+  emptySessionTitle: { fontSize: theme.type.h3, lineHeight: 23, fontWeight: '900', color: theme.colors.text, marginTop: theme.space.md },
+  emptySessionText: { fontSize: theme.type.body, lineHeight: 21, color: theme.colors.text, marginTop: 8 },
+  emptySessionHint: { fontSize: theme.type.caption, lineHeight: 18, color: theme.colors.muted, marginTop: 8, marginBottom: theme.space.md },
+  courseGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space.sm },
+  courseTile: { width: '48%', minHeight: 154, padding: theme.space.md, borderRadius: theme.radius.lg, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, gap: 9 },
+  courseBadge: { width: 40, height: 40, borderRadius: theme.radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  courseBadgeSmall: { width: 40, height: 40, borderRadius: theme.radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  courseBadgeText: { fontSize: 20, fontWeight: '900' },
+  courseTitle: { fontSize: theme.type.body, lineHeight: 20, fontWeight: '900', color: theme.colors.text },
+  courseMeta: { fontSize: theme.type.caption, color: theme.colors.muted },
+  pressed: { opacity: 0.72 },
+  journeyHeader: { flexDirection: 'row', alignItems: 'center', gap: theme.space.md, marginBottom: theme.space.md },
+  backButton: { width: 48, height: 48, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  backIcon: { fontSize: 30, lineHeight: 34, color: theme.colors.text },
+  journeyKicker: { fontSize: theme.type.micro, letterSpacing: 1.1, fontWeight: '900', color: theme.colors.muted },
+  journeyTitle: { fontSize: theme.type.h2, lineHeight: 28, fontWeight: '900', color: theme.colors.text, marginTop: 2 },
+  progressLabel: { fontSize: theme.type.body, fontWeight: '900', color: theme.colors.text },
+  progressHint: { fontSize: theme.type.caption, color: theme.colors.muted, marginTop: 3, marginBottom: theme.space.md },
+  progressValue: { fontSize: theme.type.h2, fontWeight: '900', color: theme.colors.primary },
+  offlineList: { gap: theme.space.sm },
+  offlineCard: { gap: theme.space.sm },
+  offlineCopy: { flex: 1, paddingRight: theme.space.sm },
+  offlineTitle: { fontSize: theme.type.body, fontWeight: '900', color: theme.colors.text },
+  offlineMeta: { fontSize: theme.type.caption, color: theme.colors.muted, marginTop: 3 },
+  offlineActions: { flexDirection: 'row', gap: 8 },
+  offlineAction: { flex: 1, minHeight: 44, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  offlineActionText: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.text },
+  pathWrap: { paddingVertical: theme.space.md, paddingHorizontal: 4 },
 });
