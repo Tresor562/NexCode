@@ -20,6 +20,10 @@ const MAX_CHAPTER_ID_CHARS = 160;
 const MAX_PACK_CHAPTERS = 200;
 const MAX_ESTIMATED_MB = 100_000;
 
+function isOfflinePackKind(value: unknown): value is OfflinePackKind {
+  return typeof value === 'string' && VALID_PACK_KINDS.includes(value as OfflinePackKind);
+}
+
 function chapterWeight(course: Course, chapter: Chapter) {
   const fraction = course.starterLessons.length ? chapter.lessonIds.length / course.starterLessons.length : 0;
   return Math.max(1, Math.round(course.offlineSizeMb * fraction));
@@ -34,6 +38,7 @@ function packIncludes(kind: OfflinePackKind): OfflinePack['includes'] {
 }
 
 export function buildChapterOfflinePack(course: Course, chapterId: string, kind: OfflinePackKind = 'standard'): OfflinePack | undefined {
+  if (!isOfflinePackKind(kind)) return undefined;
   const chapter = course.chapters.find((item) => item.id === chapterId);
   if (!chapter) return undefined;
   const base = chapterWeight(course, chapter);
@@ -50,6 +55,7 @@ export function buildChapterOfflinePack(course: Course, chapterId: string, kind:
 }
 
 export function buildStageOfflinePack(course: Course, stageId: string, kind: OfflinePackKind = 'standard'): OfflinePack | undefined {
+  if (!isOfflinePackKind(kind)) return undefined;
   const stage = course.stages.find((item) => item.id === stageId);
   if (!stage) return undefined;
 
@@ -75,7 +81,7 @@ export function offlinePackIntegrityIssue(pack: OfflinePack): string | undefined
   if (!pack.id || !pack.courseId) return 'Identité du pack invalide.';
   if (pack.id.trim() !== pack.id || pack.id.length > MAX_PACK_ID_CHARS) return 'Identifiant du pack invalide.';
   if (pack.courseId.trim() !== pack.courseId || pack.courseId.length > MAX_COURSE_ID_CHARS) return 'Identifiant de parcours invalide.';
-  if (!VALID_PACK_KINDS.includes(pack.kind)) return 'Variante de pack inconnue.';
+  if (!isOfflinePackKind(pack.kind)) return 'Variante de pack inconnue.';
   if (!Number.isInteger(pack.curriculumVersion) || pack.curriculumVersion < 1) return 'Version de curriculum invalide.';
   if (!Number.isFinite(pack.estimatedMb) || pack.estimatedMb <= 0 || pack.estimatedMb > MAX_ESTIMATED_MB) return 'Taille du pack invalide.';
   if (!Array.isArray(pack.chapterIds) || !pack.chapterIds.length) return 'Pack sans chapitre.';
