@@ -107,13 +107,42 @@ const lesson = {
   assert.equal(next['js-loops'].lastPracticedAt, '2026-09-04T13:30:00.001Z', 'one learning event must use one coherent timestamp across all affected skills');
 }
 
+{
+  const restored = {
+    'js-arrays': {
+      skillId: 'js-arrays',
+      score: 40,
+      confidence: 44,
+      band: 'learning',
+      attempts: 2,
+      correctAttempts: 1,
+      consecutiveCorrect: 0,
+      lastPracticedAt: '2026-09-04T12:00:00.000Z',
+      nextReviewAt: '2026-09-05T12:00:00.000Z',
+      errorTags: [],
+      evidence: [
+        null,
+        'forged-evidence',
+        { lessonId: 'missing-score-delta', activityKind: 'lab', correct: true, at: '2026-09-04T12:00:00.000Z' },
+        { lessonId: 'valid-review', activityKind: 'review', correct: true, scoreDelta: 8, at: '2026-09-04T12:00:00.000Z' },
+      ],
+    },
+  };
+  const next = recordSkillAttempt(restored, lesson, true, new Date('2026-09-04T13:00:00.000Z'));
+  const state = next['js-arrays'];
+  assert.equal(state.evidence.length, 2, 'malformed restored evidence entries must be discarded before appending the new attempt');
+  assert.equal(state.evidence[0]?.lessonId, 'valid-review', 'valid restored evidence must be preserved');
+  assert.equal(state.evidence[1]?.lessonId, lesson.id, 'the new learning attempt must still be appended after sanitized history');
+}
+
 assert.match(source, /function boundedCount\(value: unknown/, 'restored counters must pass through a bounded normalization helper');
 assert.match(source, /function boundedScore\(value: unknown\)/, 'restored mastery scores must pass through a finite bounded normalization helper');
+assert.match(source, /function usableEvidence\(value: unknown\): AttemptEvidence\[\]/, 'restored evidence must pass through an entry-level sanitation helper');
+assert.match(source, /const previousEvidence = usableEvidence\(previous\.evidence\)/, 'attempt recording must sanitize restored evidence before spreading it');
 assert.match(source, /function latestPracticedTime\(map: MasteryMap, skillIds: string\[\]\)/, 'restored skill timestamps must share a latest-time boundary');
 assert.match(source, /function monotonicAttemptTime\(map: MasteryMap, lesson: Lesson, candidate: Date\)/, 'attempt recording must enforce monotonic chronology');
 assert.match(source, /latestMs \+ 1/, 'equal or stale attempt timestamps must advance beyond the latest stored instant');
 assert.match(source, /const attemptTime = monotonicAttemptTime\(map, lesson, usableAttemptTime\(now\)\)/, 'attempt timestamps must cross both runtime-clock and monotonic-ordering boundaries before serialization');
-assert.match(source, /Array\.isArray\(previous\.evidence\)/, 'restored evidence must be checked before spreading');
 assert.match(source, /Array\.isArray\(previous\.errorTags\)/, 'restored error tags must be checked before spreading');
 
-console.log('Skill attempt integrity audit OK: malformed restored mastery state, invalid clocks and delayed synced attempts cannot poison or rewind progression chronology.');
+console.log('Skill attempt integrity audit OK: malformed restored mastery state and evidence, invalid clocks and delayed synced attempts cannot poison or rewind progression chronology.');
