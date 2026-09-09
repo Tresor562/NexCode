@@ -1,5 +1,5 @@
 import { ActivityKind } from '../data/curriculumCore';
-import { MasteryMap } from './skillGraph';
+import { AttemptEvidence, MasteryMap } from './skillGraph';
 import { masterySnapshot } from './masteryEngine';
 
 export type EvidenceQuality = {
@@ -25,6 +25,7 @@ const validActivityKinds: ReadonlySet<string> = new Set<ActivityKind>([
 ]);
 const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60 * 1000;
 const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
+const MAX_RESTORED_EVIDENCE = 250;
 
 function finitePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -51,6 +52,22 @@ function canonicalEvidenceContext(value: unknown) {
   return context;
 }
 
+function usableEvidence(value: unknown): AttemptEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .slice(-MAX_RESTORED_EVIDENCE)
+    .filter((item): item is AttemptEvidence => {
+      if (!item || typeof item !== 'object') return false;
+      const candidate = item as Partial<AttemptEvidence>;
+      return typeof candidate.lessonId === 'string'
+        && typeof candidate.activityKind === 'string'
+        && typeof candidate.correct === 'boolean'
+        && typeof candidate.scoreDelta === 'number'
+        && Number.isFinite(candidate.scoreDelta)
+        && typeof candidate.at === 'string';
+    });
+}
+
 export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new Date()): EvidenceQuality {
   const state = mastery[skillId];
   const snapshot = masterySnapshot(skillId, mastery, now);
@@ -59,10 +76,10 @@ export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new 
   }
 
   const nowMs = now.getTime();
-  const correct = state.evidence
+  const correct = usableEvidence(state.evidence)
     .filter((item) => item.correct && validActivityKinds.has(item.activityKind))
     .map((item) => ({ item, timestamp: validTimestamp(item.at, nowMs), context: canonicalEvidenceContext(item.lessonId) }))
-    .filter((entry): entry is { item: typeof state.evidence[number]; timestamp: number; context: string } => entry.timestamp !== null && entry.context !== null);
+    .filter((entry): entry is { item: AttemptEvidence; timestamp: number; context: string } => entry.timestamp !== null && entry.context !== null);
   const kinds = [...new Set(correct.map(({ item }) => item.activityKind))];
   const independentContexts = new Set(
     correct
