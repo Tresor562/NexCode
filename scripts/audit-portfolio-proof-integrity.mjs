@@ -32,6 +32,10 @@ assert.doesNotMatch(source, /projectsBySkill\.get\(skillId\)/, 'raw skill-id spe
 assert.doesNotMatch(source, /covered\.set\(skillId, \(covered\.get\(skillId\) \?\? 0\) \+ 1\)/, 'raw proof-row counting must not inflate skill coverage after sync duplication');
 
 assert.match(progressSource, /const MAX_PORTFOLIO_SKILL_ID_LENGTH = 160;/, 'reward persistence must bound restored portfolio skill identities');
+assert.match(progressSource, /const MAX_PORTFOLIO_PROJECT_ID_LENGTH = 160;/, 'reward persistence must bound restored portfolio project identities');
+assert.match(progressSource, /function canonicalPortfolioProjectId\(value: unknown\): string/, 'reward deduplication must validate restored project identities before string operations');
+assert.match(progressSource, /if \(typeof value !== 'string'\) return '';/, 'non-string restored project identities must fail closed before lookup');
+assert.match(progressSource, /projectId\.length > MAX_PORTFOLIO_PROJECT_ID_LENGTH/, 'oversized restored project identities must not enter reward deduplication');
 assert.match(progressSource, /function canonicalPortfolioSkillIds\(value: unknown\): string\[\] \| null/, 'reward persistence must validate skill evidence before canonicalization');
 assert.match(progressSource, /if \(!Array\.isArray\(value\)\) return null;/, 'malformed non-array skill evidence must be rejected instead of crashing during persistence');
 assert.match(progressSource, /if \(typeof raw !== 'string'\) return null;/, 'non-string restored skill identities must be rejected');
@@ -48,7 +52,8 @@ assert.match(progressSource, /title: project\.title\.trim\(\)/, 'stored portfoli
 assert.match(progressSource, /completedAt: new Date\(completedAt\)\.toISOString\(\)/, 'stored portfolio completion timestamps must be normalized before later version comparisons');
 assert.match(progressSource, /evidenceSummary: proof\.evidenceSummary\.trim\(\)/, 'stored portfolio evidence summaries must not retain harmless identity-breaking whitespace');
 assert.match(progressSource, /const canonicalProof = canonicalizePortfolioProof\(proof, project\);/, 'the reward path must canonicalize proof payloads immediately after validation');
-assert.match(progressSource, /findIndex\(\(item\) => item\.projectId\.trim\(\) === project\.id\)/, 'legacy or cloud-restored proofs with surrounding whitespace must still be detected as existing rewards');
+assert.match(progressSource, /findIndex\([\s\S]*canonicalPortfolioProjectId\(item\?\.projectId\) === project\.id[\s\S]*\)/, 'legacy or cloud-restored proofs must be detected through the runtime-safe canonical project identity boundary');
+assert.doesNotMatch(progressSource, /item\.projectId\.trim\(\)/, 'restored untrusted project identities must never receive direct string operations before runtime validation');
 assert.match(progressSource, /index === existingIndex \? canonicalProof : item/, 'proof updates must replace legacy payloads with canonical data');
 assert.match(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, canonicalProof\]/, 'first-time portfolio rewards must persist only canonical proof identity');
 assert.doesNotMatch(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, proof\]/, 'raw validated proof payloads must never be appended to the reward ledger');
