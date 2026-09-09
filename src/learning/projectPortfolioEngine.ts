@@ -140,7 +140,13 @@ export function buildPortfolioProof(
   const safeRubricIds = canonicalAchievedRubricIds(project, achievedRubricIds);
   const review = reviewProject(project, safeRubricIds);
   if (!review.passed) return undefined;
+  const declaredSkills = canonicalProjectSkills(project.skills);
   const skillIds = [...new Set(resolveProjectSkills(project, graph).flatMap((item) => item.skillIds))];
+  // A portfolio proof is meant to demonstrate transferable skills, not merely a
+  // passing self-review. If the project declares skills but the current learning
+  // graph cannot resolve even one of them, fail closed rather than persisting a
+  // skill-less proof that would look complete while contributing no real evidence.
+  if (declaredSkills.length > 0 && skillIds.length === 0) return undefined;
   const rubric = defaultProjectRubric(project);
   const achievedTitles = rubric.filter((item) => safeRubricIds.includes(item.id)).map((item) => item.title);
   return {
