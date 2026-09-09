@@ -33,6 +33,12 @@ function lessonPrerequisitesReady(skills: string[], mastery: MasteryMap, graphBy
   });
 }
 
+function masteryContextLabel(weakest: number, skillCount: number) {
+  const score = Math.max(0, Math.min(100, Math.round(Number.isFinite(weakest) ? weakest : 0)));
+  const scope = skillCount > 1 ? `${skillCount} compétences` : 'la compétence ciblée';
+  return `${scope} · maîtrise la plus fragile ${score}%`;
+}
+
 function scoreLesson(
   course: Course,
   lesson: Lesson,
@@ -49,25 +55,27 @@ function scoreLesson(
   const recurringErrors = new Set(snapshots.flatMap((item) => item.recurringErrors)).size;
   const prereqsReady = lessonPrerequisitesReady(skills, mastery, graphById, now);
   const kind = lesson.activityKind ?? 'learn';
+  const masteryContext = masteryContextLabel(weakest, skills.length);
 
   if (completed && recurringErrors > 0) {
-    return { courseId: course.id, lessonId: lesson.id, mode: 'repair', priority: 140 + recurringErrors * 8 - weakest, reason: 'Erreur récurrente détectée : retravailler la notion avec une variante.', estimatedMinutes: Math.max(4, lesson.durationMin), skillIds: skills };
+    const errorLabel = `${recurringErrors} erreur${recurringErrors > 1 ? 's' : ''} récurrente${recurringErrors > 1 ? 's' : ''}`;
+    return { courseId: course.id, lessonId: lesson.id, mode: 'repair', priority: 140 + recurringErrors * 8 - weakest, reason: `${errorLabel} détectée${recurringErrors > 1 ? 's' : ''}. ${masteryContext}. Nex te fait réparer la notion avec une variante avant d'avancer.`, estimatedMinutes: Math.max(4, lesson.durationMin), skillIds: skills };
   }
   if (completed && due) {
-    return { courseId: course.id, lessonId: lesson.id, mode: 'review', priority: 120 - weakest, reason: 'Révision espacée arrivée à échéance : récupération active avant oubli.', estimatedMinutes: Math.max(3, Math.ceil(lesson.durationMin * 0.65)), skillIds: skills };
+    return { courseId: course.id, lessonId: lesson.id, mode: 'review', priority: 120 - weakest, reason: `Révision espacée arrivée à échéance. ${masteryContext}. Une récupération active maintenant consolide la mémoire avant l'oubli.`, estimatedMinutes: Math.max(3, Math.ceil(lesson.durationMin * 0.65)), skillIds: skills };
   }
   if (!completed && !prereqsReady) return undefined;
   if (!completed && kind === 'lab') {
-    return { courseId: course.id, lessonId: lesson.id, mode: 'lab', priority: 92 + (weakest >= 55 ? 8 : 0), reason: 'Transférer la notion dans le Lab pour produire une preuve pratique.', estimatedMinutes: Math.max(8, lesson.durationMin), skillIds: skills };
+    return { courseId: course.id, lessonId: lesson.id, mode: 'lab', priority: 92 + (weakest >= 55 ? 8 : 0), reason: `Les prérequis sont prêts. ${masteryContext}. Passe au Lab pour transformer la compréhension en preuve pratique.`, estimatedMinutes: Math.max(8, lesson.durationMin), skillIds: skills };
   }
   if (!completed && ['checkpoint', 'boss'].includes(kind)) {
-    return { courseId: course.id, lessonId: lesson.id, mode: 'checkpoint', priority: kind === 'boss' ? 88 : 82, reason: kind === 'boss' ? 'Boss challenge : combiner plusieurs compétences sans guidage.' : 'Checkpoint : vérifier la stabilité avant de continuer.', estimatedMinutes: Math.max(8, lesson.durationMin), skillIds: skills };
+    return { courseId: course.id, lessonId: lesson.id, mode: 'checkpoint', priority: kind === 'boss' ? 88 : 82, reason: kind === 'boss' ? `Boss challenge prêt. ${masteryContext}. Combine plusieurs compétences sans guidage pour prouver ton autonomie.` : `Checkpoint prêt. ${masteryContext}. Vérifie que les acquis restent stables avant d'ouvrir la suite.`, estimatedMinutes: Math.max(8, lesson.durationMin), skillIds: skills };
   }
   if (!completed) {
-    return { courseId: course.id, lessonId: lesson.id, mode: 'learn', priority: 60 - Math.min(20, weakest / 5), reason: 'Nouvelle activité accessible : les prérequis sont suffisamment solides.', estimatedMinutes: lesson.durationMin, skillIds: skills };
+    return { courseId: course.id, lessonId: lesson.id, mode: 'learn', priority: 60 - Math.min(20, weakest / 5), reason: `Les prérequis sont suffisamment solides. ${masteryContext}. Nex ouvre une nouvelle notion courte sans brûler d'étape.`, estimatedMinutes: lesson.durationMin, skillIds: skills };
   }
   if (completed && weakest < 70) {
-    return { courseId: course.id, lessonId: lesson.id, mode: 'interleave', priority: 70 - weakest / 2, reason: 'Interleaving : revoir cette compétence dans un contexte différent.', estimatedMinutes: Math.max(4, Math.ceil(lesson.durationMin * 0.6)), skillIds: skills };
+    return { courseId: course.id, lessonId: lesson.id, mode: 'interleave', priority: 70 - weakest / 2, reason: `${masteryContext}. Revois cette notion dans un contexte différent pour éviter une maîtrise trop dépendante d'un seul exercice.`, estimatedMinutes: Math.max(4, Math.ceil(lesson.durationMin * 0.6)), skillIds: skills };
   }
   return undefined;
 }
