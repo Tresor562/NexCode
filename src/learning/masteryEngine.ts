@@ -1,5 +1,5 @@
 import { Course, Lesson, MasteryBand } from '../data/curriculumCore';
-import { MasteryMap, SkillMastery, masteryBand } from './skillGraph';
+import { AttemptEvidence, MasteryMap, SkillMastery, masteryBand } from './skillGraph';
 
 export type MasteryEvidenceKind = 'lesson' | 'practice' | 'review' | 'lab' | 'checkpoint' | 'boss' | 'project';
 
@@ -32,6 +32,22 @@ function boundedPercent(value: unknown, fallback = 0) {
     : fallback;
 }
 
+function usableEvidence(value: unknown): AttemptEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is AttemptEvidence => {
+    if (!item || typeof item !== 'object') return false;
+    const candidate = item as Partial<AttemptEvidence>;
+    return (
+      typeof candidate.lessonId === 'string' &&
+      typeof candidate.activityKind === 'string' &&
+      typeof candidate.correct === 'boolean' &&
+      typeof candidate.scoreDelta === 'number' &&
+      Number.isFinite(candidate.scoreDelta) &&
+      typeof candidate.at === 'string'
+    );
+  });
+}
+
 function ageDays(iso: string | undefined, now: Date) {
   if (!iso) return Number.POSITIVE_INFINITY;
   const nowMs = now.getTime();
@@ -54,7 +70,7 @@ function retentionFactor(state: SkillMastery, now: Date) {
 
 function recurringErrorTags(state: SkillMastery) {
   const counts = new Map<string, number>();
-  for (const attempt of state.evidence.slice(-12)) {
+  for (const attempt of usableEvidence(state.evidence).slice(-12)) {
     if (attempt.correct || !attempt.errorTag) continue;
     counts.set(attempt.errorTag, (counts.get(attempt.errorTag) ?? 0) + 1);
   }
@@ -72,7 +88,7 @@ function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
 
 function independentEvidenceContextCount(state: SkillMastery) {
   const contexts = new Set<string>();
-  for (const evidence of state.evidence) {
+  for (const evidence of usableEvidence(state.evidence)) {
     if (!evidence.correct || !['lab', 'checkpoint', 'boss', 'project'].includes(evidence.activityKind)) continue;
     contexts.add(`${evidence.activityKind}:${evidence.lessonId}`);
   }
@@ -101,7 +117,7 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
   const rawScore = boundedPercent(state.score);
   const confidence = boundedPercent(state.confidence);
   const effectiveScore = Math.round(rawScore * retentionFactor(state, now));
-  const evidenceKinds = [...new Set(state.evidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
+  const evidenceKinds = [...new Set(usableEvidence(state.evidence).filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
   const recurringErrors = recurringErrorTags(state);
   const independentEvidence = independentEvidenceContextCount(state) >= 2;
   const due = reviewIsDue(state.nextReviewAt, now);
