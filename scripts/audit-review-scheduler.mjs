@@ -20,6 +20,14 @@ assert.match(source, /if \(!Number\.isFinite\(timestamp\)\) return 0;/, 'invalid
 assert.match(source, /const MAX_REVIEW_HORIZON_MS = 22 \* DAY_MS;/, 'review scheduling must bound restored dates to the maximum interval NexCode can mint plus timezone tolerance');
 assert.match(source, /if \(delay > MAX_REVIEW_HORIZON_MS\) return 0;/, 'impossible future review dates must become immediately reviewable instead of suppressing practice');
 assert.match(source, /return delay \/ DAY_MS;/, 'valid review dates inside the scheduling horizon must preserve their real spacing');
+assert.match(source, /const MAX_OVERDUE_AGE_BONUS = 24;/, 'overdue-age influence must be explicitly capped');
+assert.match(source, /function overdueAgeBonus\(daysUntilReview: number\)/, 'review scheduling must distinguish newly-due material from genuinely overdue material');
+assert.match(source, /Math\.floor\(Math\.log2\(overdueDays \+ 1\) \* 6\)/, 'overdue urgency must grow sublinearly so very old material cannot dominate forever');
+assert.match(source, /Math\.min\(MAX_OVERDUE_AGE_BONUS,/, 'overdue urgency must remain bounded');
+assert.match(source, /const overdueBonus = overdueAgeBonus\(nextDays\);/, 'review queue scoring must include bounded overdue age');
+assert.match(source, /\+ overdueBonus \+ recurringErrors \* 6/, 'overdue age must complement rather than replace misconception and mastery signals');
+assert.match(source, /return items\.sort\(\(a, b\) => b\.urgency - a\.urgency\);/, 'equal-urgency reviews must preserve authored curriculum order via stable sorting');
+assert.doesNotMatch(source, /a\.lesson\.id\.localeCompare/, 'review scheduling must not replace pedagogical order with alphabetical lesson ids');
 assert.match(source, /const referenceNow = validNow\(now\);[\s\S]*daysUntil\(state\.nextReviewAt, referenceNow\)/, 'review queue must only use a validated reference date');
 assert.match(source, /Math\.max\(0, Math\.min\(100, Math\.min/, 'mastery scores must be bounded before urgency math');
 assert.match(source, /Math\.max\(0, Math\.min\(160, Math\.round\(value\)\)\)/, 'review urgency must remain finite and bounded');
@@ -32,4 +40,4 @@ assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2\) continue;/, 
 assert.match(source, /Never relax the skill repetition cap/, 'fallback filling must document the pedagogical invariant');
 assert.match(source, /if \(skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'fallback filling must keep the skill repetition cap instead of silently reverting to blocked practice');
 
-console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, finite urgency, unique lessons and skill-diverse interleaving are enforced.');
+console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, bounded overdue-age priority, authored-order ties, finite urgency, unique lessons and skill-diverse interleaving are enforced.');
