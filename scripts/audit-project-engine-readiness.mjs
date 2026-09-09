@@ -162,7 +162,19 @@ const masteryState = (htmlScore, cssScore) => ({
 {
   const review = reviewProject(project, [' functionality ', 'understanding', 'quality', 'functionality', null, 42]);
   assert.equal(review.score, 75, 'only canonical known rubric ids should count toward project review');
-  assert.equal(review.passed, true, 'required canonical rubric evidence should still pass when surrounded by malformed values');
+  assert.equal(review.passed, false, 'a portfolio project must not pass without explicit delivery evidence');
+}
+
+{
+  const review = reviewProject(project, ['functionality', 'understanding', 'quality', 'delivery']);
+  assert.equal(review.score, 85, 'the four portfolio-grade core criteria should award their canonical score');
+  assert.equal(review.passed, true, 'functionality, understanding, code quality and delivery are all required for a passing project');
+}
+
+{
+  const review = reviewProject(project, ['functionality', 'understanding', 'resilience', 'delivery']);
+  assert.equal(review.score, 80, 'resilience cannot substitute for maintainable code quality');
+  assert.equal(review.passed, false, 'a project with broken code-quality evidence must not become portfolio-ready');
 }
 
 {
@@ -182,11 +194,13 @@ const masteryState = (htmlScore, cssScore) => ({
   const malformedStepsProject = { ...project, steps: null };
   const review = reviewProject(malformedStepsProject, ['functionality', 'understanding', 'quality']);
   assert.equal(review.score, 75, 'malformed step metadata must not crash an otherwise valid review');
+  assert.equal(review.passed, false, 'missing delivery evidence must remain blocking even when step metadata is malformed');
   assert.match(review.rubric.find((item) => item.id === 'delivery')?.description ?? '', /^0 étapes/);
 }
 
 assert.match(source, /const MAX_PROJECT_SKILL_ID_LENGTH = 96;/);
 assert.match(source, /const MAX_PROJECT_RUBRIC_ID_LENGTH = 64;/);
+assert.match(source, /const REQUIRED_PROJECT_RUBRIC_IDS = \['functionality', 'understanding', 'quality', 'delivery'\] as const;/);
 assert.match(source, /const CONTROL_CHARACTER_PATTERN = \/\[\\u0000-\\u001F\\u007F-\\u009F\]\//);
 assert.match(source, /value\.normalize\('NFKC'\)\.trim\(\)/);
 assert.match(source, /normalized\.length > MAX_PROJECT_SKILL_ID_LENGTH \|\| CONTROL_CHARACTER_PATTERN\.test\(normalized\)/);
@@ -195,6 +209,8 @@ assert.match(source, /ready: hasPrerequisites && missingSkills\.length === 0 && 
 assert.match(source, /function canonicalAchievedRubricIds\(value: unknown, rubric: ProjectReviewRubric\[\]\): Set<string>/);
 assert.match(source, /if \(!Array\.isArray\(value\)\) return achieved;/);
 assert.match(source, /if \(allowed\.has\(normalized\)\) achieved\.add\(normalized\);/);
+assert.match(source, /const hasCoreEvidence = REQUIRED_PROJECT_RUBRIC_IDS\.every\(\(id\) => achieved\.has\(id\)\);/);
+assert.match(source, /passed: score >= 70 && hasCoreEvidence/);
 assert.match(source, /const stepCount = Array\.isArray\(project\.steps\) \? project\.steps\.length : 0;/);
 
-console.log('Project engine readiness audit OK: mastery, gates, prerequisites and review evidence stay canonical, bounded and fail closed when malformed.');
+console.log('Project engine readiness audit OK: mastery, gates, prerequisites and portfolio-grade review evidence stay canonical, bounded and fail closed when malformed.');
