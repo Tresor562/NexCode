@@ -79,6 +79,14 @@ function nativeAppIsActive(): boolean {
 }
 
 export function createLearningFeedbackGate(now: () => number = Date.now) {
+  function armSemanticAudioAssociation(appActive: boolean) {
+    if (!appActive || !nativeAppIsActive()) return;
+    const current = now();
+    if (!Number.isFinite(current)) return;
+    sharedLastNotificationFeedbackAt = current;
+    openSemanticAudioAssociationWindow();
+  }
+
   function canTrigger(kind: LearningFeedbackKind, appActive: boolean, bypassOwnCooldown = false) {
     if (!appActive || !nativeAppIsActive()) return false;
     const current = now();
@@ -113,10 +121,6 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     }
     sharedLastTriggeredAt.set(kind, current);
     if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;
-    if (kind === 'notification') {
-      sharedLastNotificationFeedbackAt = current;
-      openSemanticAudioAssociationWindow();
-    }
     return true;
   }
 
@@ -126,6 +130,10 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       Haptics.selectionAsync().catch(() => undefined);
     },
     notification(appActive: boolean, tone: LearningNotificationTone) {
+      // Audio semantics must not depend on whether a strong haptic is currently
+      // rate-limited. A fast correct answer after a tap/impact should still get its
+      // success sound; only the vibration is allowed to collapse under cooldown.
+      armSemanticAudioAssociation(appActive);
       if (!canTrigger(SHARED_NOTIFICATION_KIND, appActive)) return;
       const type = tone === 'error' ? Haptics.NotificationFeedbackType.Error : Haptics.NotificationFeedbackType.Success;
       Haptics.notificationAsync(type).catch(() => undefined);
