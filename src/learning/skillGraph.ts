@@ -107,6 +107,22 @@ function boundedScore(value: unknown) {
     : 0;
 }
 
+function usableEvidence(value: unknown): AttemptEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is AttemptEvidence => {
+    if (!item || typeof item !== 'object') return false;
+    const candidate = item as Partial<AttemptEvidence>;
+    return (
+      typeof candidate.lessonId === 'string' &&
+      typeof candidate.activityKind === 'string' &&
+      typeof candidate.correct === 'boolean' &&
+      typeof candidate.scoreDelta === 'number' &&
+      Number.isFinite(candidate.scoreDelta) &&
+      typeof candidate.at === 'string'
+    );
+  });
+}
+
 function usableAttemptTime(now: Date) {
   return Number.isFinite(now.getTime()) ? now : new Date();
 }
@@ -173,7 +189,7 @@ export function recordSkillAttempt(
     const previousConsecutiveCorrect = boundedCount(previous.consecutiveCorrect, previousAttempts);
     const previousScore = boundedScore(previous.score);
     const previousErrorTags = Array.isArray(previous.errorTags) ? previous.errorTags.filter((tag) => typeof tag === 'string') : [];
-    const previousEvidence = Array.isArray(previous.evidence) ? previous.evidence : [];
+    const previousEvidence = usableEvidence(previous.evidence);
     const attempts = previousAttempts + 1;
     const correctAttempts = Math.min(attempts, previousCorrectAttempts + (correct ? 1 : 0));
     const consecutiveCorrect = correct ? Math.min(attempts, previousConsecutiveCorrect + 1) : 0;
@@ -209,19 +225,20 @@ export function recordSkillAttempt(
 }
 
 export function prerequisitesReady(node: SkillNode, mastery: MasteryMap, gate?: number) {
-  const requiredScore = gate ?? node.prerequisiteGate;
-  return node.prerequisiteIds.every((id) => (mastery[id]?.score ?? 0) >= requiredScore);
+  const requiredScore = boundedScore(gate ?? node.prerequisiteGate);
+  return node.prerequisiteIds.every((id) => boundedScore(mastery[id]?.score) >= requiredScore);
 }
 
 export function missingPrerequisites(node: SkillNode, mastery: MasteryMap) {
-  return node.prerequisiteIds.filter((id) => (mastery[id]?.score ?? 0) < node.prerequisiteGate);
+  const requiredScore = boundedScore(node.prerequisiteGate);
+  return node.prerequisiteIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }
 
 export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
   const state = mastery[node.id];
-  if (!state || state.score < 55) return true;
+  if (!state || boundedScore(state.score) < 55) return true;
   const contexts = new Set(
-    state.evidence
+    usableEvidence(state.evidence)
       .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind))
       .map((item) => `${item.activityKind}:${item.lessonId}`),
   );
@@ -230,10 +247,11 @@ export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
 
 export function courseMastery(course: Course, mastery: MasteryMap): number {
   if (course.skillIds.length === 0) return 0;
-  const total = course.skillIds.reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0);
+  const total = course.skillIds.reduce((sum, id) => sum + boundedScore(mastery[id]?.score), 0);
   return Math.round(total / course.skillIds.length);
 }
 
 export function weakSkillIds(course: Course, mastery: MasteryMap, threshold = 55) {
-  return course.skillIds.filter((id) => (mastery[id]?.score ?? 0) < threshold);
+  const requiredScore = boundedScore(threshold);
+  return course.skillIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }
