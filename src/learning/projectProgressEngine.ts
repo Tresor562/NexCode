@@ -10,6 +10,7 @@ const PORTFOLIO_PROOF_REWARD = Object.freeze({ xp: 50, nexCoins: 10, minutes: 5 
 const PORTFOLIO_PASS_SCORE = 70;
 const MAX_FUTURE_PROOF_SKEW_MS = 5 * 60 * 1000;
 const MAX_PORTFOLIO_SKILL_ID_LENGTH = 160;
+const MAX_PORTFOLIO_PROJECT_ID_LENGTH = 160;
 
 function safePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -24,6 +25,13 @@ function canonicalProject(projectId: unknown): GuidedProject | undefined {
   const id = projectId.trim();
   if (!id) return undefined;
   return guidedProjects.find((project) => project.id === id);
+}
+
+function canonicalPortfolioProjectId(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const projectId = value.trim();
+  if (!projectId || projectId.length > MAX_PORTFOLIO_PROJECT_ID_LENGTH || /[\u0000-\u001f\u007f]/.test(projectId)) return '';
+  return projectId;
 }
 
 function canonicalPortfolioSkillIds(value: unknown): string[] | null {
@@ -193,10 +201,13 @@ export function recordPortfolioProof(
 
   // Validation intentionally accepts harmless surrounding whitespace from UI or
   // imported/cloud payloads, but persisted identity must always be canonical.
-  // Otherwise a proof stored as ` project-id ` would not match `project-id` on the
-  // next submission and could re-enter the one-time portfolio reward path.
+  // Runtime-restored arrays can still contain malformed legacy entries before a
+  // later migration/sanitization pass, so identity lookup itself must also fail
+  // closed instead of calling `.trim()` on an untrusted value.
   const canonicalProof = canonicalizePortfolioProof(proof, project);
-  const existingIndex = state.portfolioProofs.findIndex((item) => item.projectId.trim() === project.id);
+  const existingIndex = state.portfolioProofs.findIndex(
+    (item) => canonicalPortfolioProjectId(item?.projectId) === project.id,
+  );
   if (existingIndex >= 0) {
     const existingProof = state.portfolioProofs[existingIndex];
     const existingCompletedAt = portfolioProofTimestamp(existingProof);
