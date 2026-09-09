@@ -19,6 +19,11 @@ export type LearningHubProps = {
 };
 
 const SESSION_OPTIONS = [5, 10, 20] as const;
+const OFFLINE_PACK_OPTIONS: Array<{ kind: OfflinePackKind; label: string; accessibilityLabel: string }> = [
+  { kind: 'lite', label: 'Lite', accessibilityLabel: 'léger' },
+  { kind: 'standard', label: 'Standard', accessibilityLabel: 'standard' },
+  { kind: 'full', label: 'Complet', accessibilityLabel: 'complet' },
+];
 type SessionMinutes = typeof SESSION_OPTIONS[number];
 
 const modeLabels: Record<PracticeMode, string> = {
@@ -81,32 +86,17 @@ function DailyMomentumCard({ state }: { state: LocalState }) {
       </View>
 
       <View style={styles.momentumStats}>
-        <View style={styles.momentumStat}>
-          <Text style={styles.momentumStatValue}>{state.xp}</Text>
-          <Text style={styles.momentumStatLabel}>XP</Text>
-        </View>
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.xp}</Text><Text style={styles.momentumStatLabel}>XP</Text></View>
         <View style={styles.momentumStatDivider} />
-        <View style={styles.momentumStat}>
-          <Text style={styles.momentumStatValue}>{state.nexCoins}</Text>
-          <Text style={styles.momentumStatLabel}>NexCoins</Text>
-        </View>
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.nexCoins}</Text><Text style={styles.momentumStatLabel}>NexCoins</Text></View>
         <View style={styles.momentumStatDivider} />
-        <View style={styles.momentumStat}>
-          <Text style={styles.momentumStatValue}>{state.bestStreak}</Text>
-          <Text style={styles.momentumStatLabel}>record série</Text>
-        </View>
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.bestStreak}</Text><Text style={styles.momentumStatLabel}>record série</Text></View>
         <View style={styles.momentumStatDivider} />
-        <View style={styles.momentumStat}>
-          <Text style={styles.momentumStatValue}>{state.totalLearningMinutes}</Text>
-          <Text style={styles.momentumStatLabel}>min apprises</Text>
-        </View>
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.totalLearningMinutes}</Text><Text style={styles.momentumStatLabel}>min apprises</Text></View>
       </View>
 
       {goalReached ? (
-        <View style={styles.goalRewardRow} accessibilityLabel="Bonus quotidien obtenu : 40 XP et 20 NexCoins">
-          <Pill label="Bonus obtenu" tone="success" />
-          <Text style={styles.goalRewardText}>+40 XP · +20 NexCoins</Text>
-        </View>
+        <View style={styles.goalRewardRow} accessibilityLabel="Bonus quotidien obtenu : 40 XP et 20 NexCoins"><Pill label="Bonus obtenu" tone="success" /><Text style={styles.goalRewardText}>+40 XP · +20 NexCoins</Text></View>
       ) : (
         <Text style={styles.momentumHint}>Termine ton objectif pour débloquer +40 XP et +20 NexCoins aujourd’hui.</Text>
       )}
@@ -117,23 +107,12 @@ function DailyMomentumCard({ state }: { state: LocalState }) {
 function SessionLengthPicker({ value, onChange }: { value: SessionMinutes; onChange: (minutes: SessionMinutes) => void }) {
   return (
     <View style={styles.sessionLengthCard} accessibilityRole="radiogroup" accessibilityLabel="Durée de la session recommandée">
-      <View style={styles.flex}>
-        <Text style={styles.sessionLengthKicker}>TEMPS DISPONIBLE</Text>
-        <Text style={styles.sessionLengthHint}>Nex adapte la séance à ton temps réel.</Text>
-      </View>
+      <View style={styles.flex}><Text style={styles.sessionLengthKicker}>TEMPS DISPONIBLE</Text><Text style={styles.sessionLengthHint}>Nex adapte la séance à ton temps réel.</Text></View>
       <View style={styles.sessionLengthOptions}>
         {SESSION_OPTIONS.map((minutes) => {
           const selected = minutes === value;
           return (
-            <Pressable
-              key={minutes}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              accessibilityLabel={`${minutes} minutes`}
-              onPress={() => onChange(minutes)}
-              hitSlop={6}
-              style={({ pressed }) => [styles.sessionLengthOption, selected && styles.sessionLengthOptionSelected, pressed && styles.sessionLengthOptionPressed]}
-            >
+            <Pressable key={minutes} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={`${minutes} minutes`} onPress={() => onChange(minutes)} hitSlop={6} style={({ pressed }) => [styles.sessionLengthOption, selected && styles.sessionLengthOptionSelected, pressed && styles.sessionLengthOptionPressed]}>
               <Text style={[styles.sessionLengthOptionText, selected && styles.sessionLengthOptionTextSelected]}>{minutes} min</Text>
             </Pressable>
           );
@@ -152,15 +131,7 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
   const selected = courses.find((course) => course.id === selectedCourseId) ?? null;
 
   if (selected) {
-    return (
-      <CourseJourney
-        course={selected}
-        state={state}
-        onBack={() => setSelectedCourseId(null)}
-        onOpenLesson={(lesson) => onOpenLesson(selected, lesson)}
-        onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)}
-      />
-    );
+    return <CourseJourney course={selected} state={state} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)} />;
   }
 
   const recommended = session.activities[0];
@@ -174,18 +145,8 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
   return (
     <View>
       <View style={styles.heroRow}>
-        <View style={styles.flex}>
-          <Text style={styles.eyebrow}>APPRENDRE</Text>
-          <Text style={styles.title}>Continue ton chemin.</Text>
-          <Text style={styles.lead}>Une étape courte, du vrai code, puis un projet qui prouve ce que tu sais faire.</Text>
-        </View>
-        <View style={styles.nexOrb} accessibilityLabel="Nex, mentor NexCode">
-          <View style={styles.nexFace}>
-            <View style={styles.nexEye} />
-            <View style={styles.nexEye} />
-          </View>
-          <Text style={styles.nexLabel}>NEX</Text>
-        </View>
+        <View style={styles.flex}><Text style={styles.eyebrow}>APPRENDRE</Text><Text style={styles.title}>Continue ton chemin.</Text><Text style={styles.lead}>Une étape courte, du vrai code, puis un projet qui prouve ce que tu sais faire.</Text></View>
+        <View style={styles.nexOrb} accessibilityLabel="Nex, mentor NexCode"><View style={styles.nexFace}><View style={styles.nexEye} /><View style={styles.nexEye} /></View><Text style={styles.nexLabel}>NEX</Text></View>
       </View>
 
       <DailyMomentumCard state={state} />
@@ -193,57 +154,27 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
 
       {recommendedCourse && recommendedLesson && recommended && recommendedReward ? (
         <Card tone="primary" style={styles.recommended}>
-          <View style={styles.rowBetween}>
-            <View style={styles.recommendationPills}>
-              <Pill label="Prochaine étape" tone="primary" />
-              <Pill label={modeLabels[recommended.mode]} tone={modeTone(recommended.mode)} />
-            </View>
-            <Text style={styles.mini}>{session.estimatedMinutes || sessionMinutes} min</Text>
-          </View>
+          <View style={styles.rowBetween}><View style={styles.recommendationPills}><Pill label="Prochaine étape" tone="primary" /><Pill label={modeLabels[recommended.mode]} tone={modeTone(recommended.mode)} /></View><Text style={styles.mini}>{session.estimatedMinutes || sessionMinutes} min</Text></View>
           <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
           <Text style={styles.meta}>{recommendedCourse.title} • +{recommendedReward.xp} XP • +{recommendedReward.nexCoins} NexCoins</Text>
-          {recommendedExperiences.length > 0 ? (
-            <View style={styles.recommendationPills} accessibilityLabel={`Expérience pédagogique : ${recommendedExperiences.join(', ')}`}>
-              {recommendedExperiences.map((label) => <Pill key={label} label={label} tone="success" />)}
-            </View>
-          ) : null}
-          <View style={styles.whyCard}>
-            <Text style={styles.whyKicker}>POURQUOI NEX TE PROPOSE ÇA</Text>
-            <Text style={styles.whyText}>{recommended.reason}</Text>
-            <Text style={styles.sessionText}>{sessionMessage}</Text>
-          </View>
+          {recommendedExperiences.length > 0 ? <View style={styles.recommendationPills} accessibilityLabel={`Expérience pédagogique : ${recommendedExperiences.join(', ')}`}>{recommendedExperiences.map((label) => <Pill key={label} label={label} tone="success" />)}</View> : null}
+          <View style={styles.whyCard}><Text style={styles.whyKicker}>POURQUOI NEX TE PROPOSE ÇA</Text><Text style={styles.whyText}>{recommended.reason}</Text><Text style={styles.sessionText}>{sessionMessage}</Text></View>
           <View style={styles.sessionStats}>
-            <View style={styles.sessionStat}>
-              <Text style={styles.sessionStatValue}>{session.activities.length}</Text>
-              <Text style={styles.sessionStatLabel}>activité{session.activities.length > 1 ? 's' : ''}</Text>
-            </View>
+            <View style={styles.sessionStat}><Text style={styles.sessionStatValue}>{session.activities.length}</Text><Text style={styles.sessionStatLabel}>activité{session.activities.length > 1 ? 's' : ''}</Text></View>
             <View style={styles.sessionStatDivider} />
-            <View style={styles.sessionStat}>
-              <Text style={styles.sessionStatValue}>{session.skillCoverage.length}</Text>
-              <Text style={styles.sessionStatLabel}>compétence{session.skillCoverage.length > 1 ? 's' : ''}</Text>
-            </View>
+            <View style={styles.sessionStat}><Text style={styles.sessionStatValue}>{session.skillCoverage.length}</Text><Text style={styles.sessionStatLabel}>compétence{session.skillCoverage.length > 1 ? 's' : ''}</Text></View>
             <View style={styles.sessionStatDivider} />
-            <View style={styles.sessionStat}>
-              <Text style={styles.sessionStatValue}>{session.courseCoverage.length}</Text>
-              <Text style={styles.sessionStatLabel}>parcours</Text>
-            </View>
+            <View style={styles.sessionStat}><Text style={styles.sessionStatValue}>{session.courseCoverage.length}</Text><Text style={styles.sessionStatLabel}>parcours</Text></View>
           </View>
           <PrimaryButton icon="▶" label={recommended.mode === 'repair' ? 'Réparer cette notion' : recommended.mode === 'review' ? 'Faire la révision' : 'Continuer'} onPress={() => onOpenLesson(recommendedCourse, recommendedLesson)} />
         </Card>
       ) : (
         <Card style={styles.emptySessionCard}>
-          <View style={styles.rowBetween}>
-            <Pill label="Séance à ajuster" tone="warning" />
-            <Text style={styles.mini}>{sessionMinutes} min</Text>
-          </View>
+          <View style={styles.rowBetween}><Pill label="Séance à ajuster" tone="warning" /><Text style={styles.mini}>{sessionMinutes} min</Text></View>
           <Text style={styles.emptySessionTitle}>Ton créneau est trop court pour la prochaine étape.</Text>
           <Text style={styles.emptySessionText}>{sessionMessage}</Text>
           <Text style={styles.emptySessionHint}>Nex préfère te faire choisir un créneau réaliste plutôt que de cacher une réparation importante ou de te pousser une nouvelle notion trop tôt.</Text>
-          <PrimaryButton
-            icon="↗"
-            label={sessionMinutes < 20 ? 'Passer à 20 min' : 'Voir le parcours'}
-            onPress={() => sessionMinutes < 20 ? setSessionMinutes(20) : recentCourse && setSelectedCourseId(recentCourse.id)}
-          />
+          <PrimaryButton icon="↗" label={sessionMinutes < 20 ? 'Passer à 20 min' : 'Voir le parcours'} onPress={() => sessionMinutes < 20 ? setSessionMinutes(20) : recentCourse && setSelectedCourseId(recentCourse.id)} />
         </Card>
       )}
 
@@ -252,19 +183,9 @@ export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffli
         {courses.map((course) => {
           const summary = courseNavigationSummary(course, state.completedLessons, state.mastery);
           return (
-            <Pressable
-              key={course.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Ouvrir ${course.title}`}
-              onPress={() => setSelectedCourseId(course.id)}
-              style={({ pressed }) => [styles.courseTile, pressed && styles.pressed]}
-            >
-              <View style={[styles.courseBadge, { borderColor: `${course.color}66`, backgroundColor: `${course.color}12` }]}>
-                <Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text>
-              </View>
-              <Text style={styles.courseTitle} numberOfLines={2}>{course.title}</Text>
-              <Text style={styles.courseMeta}>{summary.progress}% terminé</Text>
-              <ProgressBar value={summary.progress} />
+            <Pressable key={course.id} accessibilityRole="button" accessibilityLabel={`Ouvrir ${course.title}`} onPress={() => setSelectedCourseId(course.id)} style={({ pressed }) => [styles.courseTile, pressed && styles.pressed]}>
+              <View style={[styles.courseBadge, { borderColor: `${course.color}66`, backgroundColor: `${course.color}12` }]}><Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text></View>
+              <Text style={styles.courseTitle} numberOfLines={2}>{course.title}</Text><Text style={styles.courseMeta}>{summary.progress}% terminé</Text><ProgressBar value={summary.progress} />
             </Pressable>
           );
         })}
@@ -284,26 +205,13 @@ function CourseJourney({ course, state, onBack, onOpenLesson, onToggleChapterOff
   return (
     <View>
       <View style={styles.journeyHeader}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Retour aux parcours" onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backIcon}>‹</Text>
-        </Pressable>
-        <View style={styles.flex}>
-          <Text style={styles.journeyKicker}>{course.category.toUpperCase()}</Text>
-          <Text style={styles.journeyTitle}>{course.title}</Text>
-        </View>
-        <View style={[styles.courseBadgeSmall, { borderColor: `${course.color}66` }]}>
-          <Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text>
-        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Retour aux parcours" onPress={onBack} style={styles.backButton}><Text style={styles.backIcon}>‹</Text></Pressable>
+        <View style={styles.flex}><Text style={styles.journeyKicker}>{course.category.toUpperCase()}</Text><Text style={styles.journeyTitle}>{course.title}</Text></View>
+        <View style={[styles.courseBadgeSmall, { borderColor: `${course.color}66` }]}><Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text></View>
       </View>
 
       <GlassCard>
-        <View style={styles.rowBetween}>
-          <View>
-            <Text style={styles.progressLabel}>Progression du parcours</Text>
-            <Text style={styles.progressHint}>{state.completedLessons.filter((id) => lessons.some((lesson) => lesson.id === id)).length} étapes terminées</Text>
-          </View>
-          <Text style={styles.progressValue}>{summary.progress}%</Text>
-        </View>
+        <View style={styles.rowBetween}><View><Text style={styles.progressLabel}>Progression du parcours</Text><Text style={styles.progressHint}>{state.completedLessons.filter((id) => lessons.some((lesson) => lesson.id === id)).length} étapes terminées</Text></View><Text style={styles.progressValue}>{summary.progress}%</Text></View>
         <ProgressBar value={summary.progress} />
       </GlassCard>
 
@@ -311,24 +219,30 @@ function CourseJourney({ course, state, onBack, onOpenLesson, onToggleChapterOff
       <View style={styles.offlineList}>
         {course.chapters.slice(0, 4).map((chapter) => {
           const installedPack = state.installedOfflinePacks.find((pack) => pack.courseId === course.id && pack.chapterIds.includes(chapter.id));
-          const installed = Boolean(installedPack);
           const installedKind = installedPack?.kind;
+          const installedOption = OFFLINE_PACK_OPTIONS.find((option) => option.kind === installedKind);
           return (
             <Card key={chapter.id} style={styles.offlineCard}>
               <View style={styles.rowBetween}>
-                <View style={styles.offlineCopy}>
-                  <Text style={styles.offlineTitle} numberOfLines={1}>{chapter.title}</Text>
-                  <Text style={styles.offlineMeta}>{chapter.estimatedMinutes} min · {chapter.lessonIds.length} étapes</Text>
-                </View>
-                <Pill label={installed ? (installedKind === 'light' ? 'Light' : 'Complet') : 'Cloud'} tone={installed ? 'success' : undefined} />
+                <View style={styles.offlineCopy}><Text style={styles.offlineTitle} numberOfLines={1}>{chapter.title}</Text><Text style={styles.offlineMeta}>{chapter.estimatedMinutes} min · {chapter.lessonIds.length} étapes</Text></View>
+                <Pill label={installedOption ? installedOption.label : 'Cloud'} tone={installedOption ? 'success' : undefined} />
               </View>
-              <View style={styles.offlineActions}>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Télécharger ${chapter.title} en pack léger`} onPress={() => onToggleChapterOffline(chapter.id, 'light')} style={({ pressed }) => [styles.offlineAction, pressed && styles.pressed]}>
-                  <Text style={styles.offlineActionText}>{installedKind === 'light' ? 'Retirer Light' : 'Pack Light'}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Télécharger ${chapter.title} en pack complet`} onPress={() => onToggleChapterOffline(chapter.id, 'full')} style={({ pressed }) => [styles.offlineAction, pressed && styles.pressed]}>
-                  <Text style={styles.offlineActionText}>{installedKind === 'full' ? 'Retirer complet' : 'Pack complet'}</Text>
-                </Pressable>
+              <View style={styles.offlineActions} accessibilityRole="radiogroup" accessibilityLabel={`Qualité hors ligne pour ${chapter.title}`}>
+                {OFFLINE_PACK_OPTIONS.map((option) => {
+                  const active = installedKind === option.kind;
+                  return (
+                    <Pressable
+                      key={option.kind}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active, checked: active }}
+                      accessibilityLabel={`${active ? 'Retirer' : 'Télécharger'} ${chapter.title} en pack ${option.accessibilityLabel}`}
+                      onPress={() => onToggleChapterOffline(chapter.id, option.kind)}
+                      style={({ pressed }) => [styles.offlineAction, active && styles.offlineActionActive, pressed && styles.pressed]}
+                    >
+                      <Text style={[styles.offlineActionText, active && styles.offlineActionTextActive]}>{active ? `Retirer ${option.label}` : option.label}</Text>
+                    </Pressable>
+                  );
+                })}
               </View>
             </Card>
           );
@@ -342,16 +256,7 @@ function CourseJourney({ course, state, onBack, onOpenLesson, onToggleChapterOff
           const unlocked = index <= firstIncompleteIndex || isCompleted;
           const next = !isCompleted && index === firstIncompleteIndex;
           const nodeState: LearningPathNodeState = isCompleted ? 'completed' : next ? 'next' : unlocked ? 'available' : 'locked';
-          return (
-            <LearningPathNode
-              key={lesson.id}
-              lesson={lesson}
-              index={index}
-              state={nodeState}
-              courseColor={course.color}
-              onPress={() => unlocked && onOpenLesson(lesson)}
-            />
-          );
+          return <LearningPathNode key={lesson.id} lesson={lesson} index={index} state={nodeState} courseColor={course.color} onPress={() => unlocked && onOpenLesson(lesson)} />;
         })}
       </View>
     </View>
@@ -437,7 +342,9 @@ const styles = StyleSheet.create({
   offlineTitle: { fontSize: theme.type.body, fontWeight: '900', color: theme.colors.text },
   offlineMeta: { fontSize: theme.type.caption, color: theme.colors.muted, marginTop: 3 },
   offlineActions: { flexDirection: 'row', gap: 8 },
-  offlineAction: { flex: 1, minHeight: 44, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
-  offlineActionText: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.text },
+  offlineAction: { flex: 1, minHeight: 44, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  offlineActionActive: { borderColor: theme.colors.primaryBorder, backgroundColor: theme.colors.primarySoft },
+  offlineActionText: { fontSize: theme.type.micro, fontWeight: '800', color: theme.colors.text },
+  offlineActionTextActive: { color: theme.colors.primary },
   pathWrap: { paddingVertical: theme.space.md, paddingHorizontal: 4 },
 });
