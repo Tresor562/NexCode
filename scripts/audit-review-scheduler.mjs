@@ -36,8 +36,15 @@ assert.match(source, /const selectedLessonIds = new Set<string>\(\)/, 'interleav
 assert.match(source, /if \(selectedLessonIds\.has\(item\.lesson\.id\)\) continue;/, 'the same lesson must never appear twice in one practice session');
 assert.match(source, /const itemSkillIds = canonicalSkillIds\(item\.skillIds\);/, 'interleaving must apply the same canonical skill identity');
 assert.match(source, /itemSkillIds\.forEach/, 'interleaving repetition counters must use canonical skills');
-assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2\) continue;/, 'the strict pass must protect both course and skill diversity');
+assert.match(source, /function overlapsSkills\(left: string\[\], right: string\[\]\): boolean/, 'interleaving must explicitly detect adjacent concept overlap');
+assert.match(source, /let lastCourseId: string \| null = null;/, 'interleaving must remember the previously selected course');
+assert.match(source, /let lastSkillIds: string\[\] = \[\];/, 'interleaving must remember the previously selected concepts');
+assert.match(source, /lastCourseId = item\.courseId;[\s\S]*lastSkillIds = itemSkillIds;/, 'selection must update transition context after every accepted recommendation');
+assert.match(source, /const repeatsPreviousContext = lastCourseId === item\.courseId \|\| overlapsSkills\(lastSkillIds, itemSkillIds\);/, 'strict interleaving must treat repeated course or repeated concept as the same immediate context');
+assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2 \|\| repeatsPreviousContext\) continue;/, 'the strict pass must protect aggregate diversity and adjacent context switching');
+assert.match(source, /relax[\s\S]*adjacency and then the per-course cap/i, 'fallback behavior must document which diversity constraints may relax and in what order');
 assert.match(source, /Never relax the skill repetition cap/, 'fallback filling must document the pedagogical invariant');
-assert.match(source, /if \(skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'fallback filling must keep the skill repetition cap instead of silently reverting to blocked practice');
+assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'the first fallback may relax adjacency but must preserve course and skill caps');
+assert.match(source, /if \(skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'the final fallback may relax the course cap but must never silently revert to blocked practice');
 
-console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, bounded overdue-age priority, authored-order ties, finite urgency, unique lessons and skill-diverse interleaving are enforced.');
+console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, bounded overdue-age priority, authored-order ties, finite urgency, unique lessons and transition-aware skill-diverse interleaving are enforced.');
