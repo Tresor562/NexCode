@@ -93,9 +93,9 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
         sharedLastStrongFeedbackKind = undefined;
       } else {
         const elapsedSinceStrong = current - sharedLastStrongFeedbackAt;
+        if (elapsedSinceStrong < 0) sharedLastStrongFeedbackKind = undefined;
         if (elapsedSinceStrong < 0) {
           sharedLastStrongFeedbackAt = current;
-          sharedLastStrongFeedbackKind = undefined;
           return false;
         }
         if (kind === 'selection' && elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS) return false;
@@ -106,11 +106,9 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
         // lesson feel unresponsive. Keep the inverse protection though: once a
         // notification lands, a trailing impact cannot muddy that result cue.
         const semanticNotificationPreemptsImpact = kind === 'notification' && sharedLastStrongFeedbackKind === 'impact';
-        if (
-          (kind === 'notification' || kind === 'impact') &&
-          elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS &&
-          !semanticNotificationPreemptsImpact
-        ) return false;
+        if (!semanticNotificationPreemptsImpact) {
+          if ((kind === 'notification' || kind === 'impact') && elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS) return false;
+        }
       }
     }
 
@@ -128,10 +126,8 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       if (!bypassOwnCooldown && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
     }
     sharedLastTriggeredAt.set(kind, current);
-    if (kind === 'notification' || kind === 'impact') {
-      sharedLastStrongFeedbackAt = current;
-      sharedLastStrongFeedbackKind = kind;
-    }
+    if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;
+    if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackKind = kind;
     if (kind === 'notification') {
       sharedLastNotificationFeedbackAt = current;
       openSemanticAudioAssociationWindow();
