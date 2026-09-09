@@ -154,6 +154,38 @@ function svgPreviewDataUri(source: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
 }
 
+function javascriptPreviewDataUri(source: string) {
+  return `data:text/javascript;charset=utf-8,${encodeURIComponent(source)}`;
+}
+
+function inlineLocalModuleImports(source: string, draft: LabDraft, modulePath: string, visiting = new Set<string>()) {
+  const moduleKey = workspaceCollisionKey(modulePath);
+  if (visiting.has(moduleKey)) return source;
+  const nextVisiting = new Set(visiting);
+  nextVisiting.add(moduleKey);
+
+  const resolveReference = (reference: string) => {
+    const normalizedPath = normalizePreviewAssetPath(reference, modulePath);
+    if (!normalizedPath || !/\.(?:m?js)$/i.test(normalizedPath)) return reference;
+    const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
+    if (!path) return reference;
+    const dependency = draft.files[path];
+    if (dependency === undefined) return reference;
+    if (nextVisiting.has(workspaceCollisionKey(path))) return reference;
+    return javascriptPreviewDataUri(inlineLocalModuleImports(dependency, draft, path, nextVisiting));
+  };
+
+  let output = source.replace(/(\b(?:import|export)\s+[^'"\n]*?\sfrom\s*)(['"])([^'"]+)\2/g, (_match, prefix, quote, reference) => {
+    return `${prefix}${quote}${resolveReference(String(reference))}${quote}`;
+  });
+  output = output.replace(/(\bimport\s*)(['"])([^'"]+)\2/g, (_match, prefix, quote, reference) => {
+    return `${prefix}${quote}${resolveReference(String(reference))}${quote}`;
+  });
+  return output.replace(/(\bimport\s*\(\s*)(['"])([^'"]+)\2(\s*\))/g, (_match, prefix, quote, reference, suffix) => {
+    return `${prefix}${quote}${resolveReference(String(reference))}${quote}${suffix}`;
+  });
+}
+
 function inlineLocalSvgCssUrls(source: string, draft: LabDraft, stylesheetPath: string) {
   return source.replace(/url\(\s*(?:"([^"]*)"|'([^']*)'|([^)'"\s][^)]*))\s*\)/gi, (match, doubleQuoted, singleQuoted, bare) => {
     const reference = String(doubleQuoted ?? singleQuoted ?? bare ?? '').trim();
@@ -207,14 +239,16 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
     const src = previewAttribute(tag, 'src');
     if (!src) return tag;
     const normalizedPath = normalizePreviewAssetPath(src);
-    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.js')) return tag;
+    if (!normalizedPath || !/\.(?:m?js)$/i.test(normalizedPath)) return tag;
     const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
     if (!path) return tag;
     const source = draft.files[path];
     if (source === undefined) return tag;
     inlinedScripts.add(path);
+    const type = previewAttribute(tag, 'type')?.trim().toLowerCase();
     const typeAttribute = optionalPreviewAttribute(tag, 'type');
-    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}"${typeAttribute}>${escapeInlineClosingTag(source, 'script')}<\/script>`;
+    const previewSource = type === 'module' ? inlineLocalModuleImports(source, draft, path) : source;
+    return `<script data-nexcode-source="${escapeHtmlAttribute(path)}"${typeAttribute}>${escapeInlineClosingTag(previewSource, 'script')}<\/script>`;
   });
 
   return { document: output, inlinedStyles, inlinedScripts };
