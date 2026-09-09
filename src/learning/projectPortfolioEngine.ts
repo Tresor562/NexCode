@@ -36,10 +36,12 @@ function canonicalProjectSkills(skills: string[]): string[] {
   return canonical;
 }
 
-function canonicalProofSkillIds(skillIds: string[]): string[] {
+function canonicalProofSkillIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const canonical: string[] = [];
-  for (const raw of skillIds) {
+  for (const raw of value) {
+    if (typeof raw !== 'string') continue;
     const skillId = raw.trim();
     const identity = normalize(skillId);
     if (!identity || seen.has(identity)) continue;
@@ -155,8 +157,11 @@ export function buildPortfolioProof(
 export function portfolioSkillCoverage(proofs: PortfolioProof[]) {
   const projectsBySkillIdentity = new Map<string, Set<string>>();
   const skillIdByIdentity = new Map<string, string>();
+  const restoredProofs: unknown[] = Array.isArray(proofs) ? proofs : [];
 
-  for (const proof of proofs) {
+  for (const rawProof of restoredProofs) {
+    if (!rawProof || typeof rawProof !== 'object') continue;
+    const proof = rawProof as Partial<PortfolioProof>;
     const projectId = typeof proof.projectId === 'string' ? normalize(proof.projectId) : '';
     if (!projectId) continue;
 
