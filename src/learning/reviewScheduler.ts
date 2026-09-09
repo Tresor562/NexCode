@@ -79,6 +79,12 @@ function boundedUrgency(value: number) {
   return Math.max(0, Math.min(160, Math.round(value)));
 }
 
+function overlapsSkills(left: string[], right: string[]): boolean {
+  if (!left.length || !right.length) return false;
+  const rightSet = new Set(right);
+  return left.some((skillId) => rightSet.has(skillId));
+}
+
 export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = new Date()): ReviewItem[] {
   const referenceNow = validNow(now);
   const items: ReviewItem[] = [];
@@ -138,6 +144,8 @@ export function interleavedPracticeSession(
   const selectedLessonIds = new Set<string>();
   const usedCourses = new Map<string, number>();
   const usedSkills = new Map<string, number>();
+  let lastCourseId: string | null = null;
+  let lastSkillIds: string[] = [];
 
   function add(item: (typeof recommendations)[number]) {
     const itemSkillIds = canonicalSkillIds(item.skillIds);
@@ -145,21 +153,38 @@ export function interleavedPracticeSession(
     selectedLessonIds.add(item.lesson.id);
     usedCourses.set(item.courseId, (usedCourses.get(item.courseId) ?? 0) + 1);
     itemSkillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
+    lastCourseId = item.courseId;
+    lastSkillIds = itemSkillIds;
   }
 
+  // The strict pass optimizes not only aggregate diversity but also transition
+  // quality. Avoiding the same course or concept twice in a row forces retrieval
+  // after a context switch, which is the useful part of interleaving rather than
+  // merely mixing several topics somewhere inside the same session.
   for (const item of recommendations) {
+    if (selectedLessonIds.has(item.lesson.id)) continue;
+    const courseCount = usedCourses.get(item.courseId) ?? 0;
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
+    const repeatsPreviousContext = lastCourseId === item.courseId || overlapsSkills(lastSkillIds, itemSkillIds);
+    if (courseCount >= 2 || skillRepeat >= 2 || repeatsPreviousContext) continue;
+    add(item);
+    if (selected.length >= target) break;
+  }
+
+  // If transition diversity prevents us from filling the requested session, relax
+  // adjacency and then the per-course cap. Never relax the skill repetition cap:
+  // doing so turns an "interleaved" session back into blocked practice of one concept.
+  for (const item of recommendations) {
+    if (selected.length >= target) break;
     if (selectedLessonIds.has(item.lesson.id)) continue;
     const courseCount = usedCourses.get(item.courseId) ?? 0;
     const itemSkillIds = canonicalSkillIds(item.skillIds);
     const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
     if (courseCount >= 2 || skillRepeat >= 2) continue;
     add(item);
-    if (selected.length >= target) break;
   }
 
-  // If course diversity alone prevents us from filling the requested session,
-  // relax only the per-course cap. Never relax the skill repetition cap: doing
-  // so turns an "interleaved" session back into blocked practice of one concept.
   for (const item of recommendations) {
     if (selected.length >= target) break;
     if (selectedLessonIds.has(item.lesson.id)) continue;
