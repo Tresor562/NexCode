@@ -21,6 +21,10 @@ expect(/PROJECT_STEP_REWARD\.nexCoins\s*\*\s*newlyCompletedSteps/, 'NexCoins mus
 expect(/receiptId:\s*`project:\$\{registeredProject\.id\}:steps:\$\{previousSteps \+ 1\}-\$\{nextSteps\}`/, 'Project step rewards must carry a deterministic receipt across cloud/device replay.');
 expect(/const PORTFOLIO_PASS_SCORE\s*=\s*70/, 'Portfolio rewards must preserve the project review passing threshold.');
 expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Project reward timestamps need a small bounded clock-skew tolerance.');
+expect(/const MAX_PORTFOLIO_PROJECT_ID_LENGTH\s*=\s*160/, 'Restored portfolio project identities need a bounded runtime length.');
+expect(/function canonicalPortfolioProjectId\(value:\s*unknown\):\s*string/, 'Restored portfolio entries need a runtime-safe project identity canonicalizer.');
+expect(/typeof value !== 'string'\) return ''/, 'Malformed restored project identities must fail closed before string operations.');
+expect(/projectId\.length > MAX_PORTFOLIO_PROJECT_ID_LENGTH/, 'Restored project identities must stay bounded before portfolio lookup.');
 expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Project rewards must sanitize their canonical reward clock against the actual system clock.');
 expect(/const clockSkewMs\s*=\s*value\.getTime\(\)\s*-\s*trustedSystemNow\.getTime\(\);/, 'Project reward clock sanitization must measure signed device clock drift.');
 expect(/Math\.abs\(clockSkewMs\)\s*<=\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied clock must not distort project rewards in either the future or backward direction.');
@@ -46,7 +50,7 @@ expect(/rubricIds\.length\s*>\s*0/, 'Portfolio proof rewards require rubric evid
 expect(/uniqueRubricIds\.size\s*===\s*rubricIds\.length/, 'Duplicate rubric evidence must not pass proof validation.');
 expect(/const project = canonicalProject\(proof\?\.projectId\);[\s\S]*if \(!project \|\| !isRewardablePortfolioProof\(proof, project, rewardTime\)\) return state;/, 'Unknown projects and malformed canonical evidence must be rejected before persistence or reward.');
 expect(/const canonicalProof = canonicalizePortfolioProof\(proof, project\);/, 'Portfolio reward logic must canonicalize valid evidence before deduplication or persistence.');
-expect(/findIndex\(\(item\)\s*=>\s*item\.projectId\.trim\(\)\s*===\s*project\.id\)/, 'Portfolio proofs must detect canonical and legacy whitespace-polluted project identities before rewarding.');
+expect(/findIndex\([\s\S]*canonicalPortfolioProjectId\(item\?\.projectId\)\s*===\s*project\.id[\s\S]*\)/, 'Portfolio proof lookup must canonicalize untrusted restored project identities before comparing them.');
 expect(/const existingProof = state\.portfolioProofs\[existingIndex\];[\s\S]*const existingCompletedAt = portfolioProofTimestamp\(existingProof\);[\s\S]*const incomingCompletedAt = portfolioProofTimestamp\(canonicalProof\);/, 'Existing proof updates must compare canonical persisted and canonical incoming versions.');
 expect(/if \(incomingCompletedAt === null\) return state;/, 'An invalid incoming portfolio proof timestamp must fail closed.');
 expect(/if \(existingCompletedAt !== null && incomingCompletedAt <= existingCompletedAt\) return state;/, 'Stale or equal-version portfolio callbacks must never overwrite newer proof evidence.');
@@ -72,6 +76,9 @@ if (/requestedProgress\s*>\s*\(state\.projectProgress/.test(source)) {
 }
 if (/portfolioProofs:\s*\[\.\.\.rewarded\.portfolioProofs,\s*proof\]/.test(source)) {
   throw new Error('The one-time reward path must never append an uncanonicalized proof payload.');
+}
+if (/findIndex\(\(item\)\s*=>\s*item\.projectId\.trim\(\)/.test(source)) {
+  throw new Error('Portfolio lookup must never call trim() directly on a restored untrusted projectId.');
 }
 
 const rewardClockBody = source.match(/function validRewardTime\([\s\S]*?\n\}/)?.[0] ?? '';
