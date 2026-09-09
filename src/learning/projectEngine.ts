@@ -25,6 +25,7 @@ export type ProjectReview = {
 const DEFAULT_PROJECT_READINESS_GATE = 55;
 const MAX_PROJECT_SKILL_ID_LENGTH = 96;
 const MAX_PROJECT_RUBRIC_ID_LENGTH = 64;
+const REQUIRED_PROJECT_RUBRIC_IDS = ['functionality', 'understanding', 'quality', 'delivery'] as const;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/;
 
 function boundedPercent(value: unknown, fallback = 0): number {
@@ -117,7 +118,8 @@ export function reviewProject(project: GuidedProject, achievedRubricIds: unknown
   const rubric = baseRubric.map((item) => ({ ...item, achieved: achieved.has(item.id) }));
   const score = rubric.reduce((sum, item) => sum + (item.achieved ? item.weight : 0), 0);
   const feedback = rubric.filter((item) => !item.achieved).map((item) => `${item.title} : ${item.description}`);
-  return { score, passed: score >= 70 && achieved.has('functionality') && achieved.has('understanding'), rubric, feedback };
+  const hasCoreEvidence = REQUIRED_PROJECT_RUBRIC_IDS.every((id) => achieved.has(id));
+  return { score, passed: score >= 70 && hasCoreEvidence, rubric, feedback };
 }
 
 function restoredCompletedSteps(progress: number, stepCount: number): number {
