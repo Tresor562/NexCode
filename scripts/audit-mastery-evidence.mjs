@@ -144,6 +144,31 @@ const baseState = (overrides = {}) => ({
 }
 
 {
+  const quality = evidenceQuality('skill-a', baseState({ evidence: null }), NOW);
+  assert.equal(quality.diversity, 0, 'non-array restored evidence must fail closed instead of crashing quality calculation');
+  assert.equal(quality.independence, 0);
+  assert.equal(quality.recency, 0);
+  assert.equal(quality.transferable, false);
+}
+
+{
+  const mastery = baseState({
+    evidence: [
+      null,
+      'forged',
+      { lessonId: 'missing-fields' },
+      { lessonId: 'bad-score', activityKind: 'project', correct: true, scoreDelta: Number.NaN, at: '2026-08-26T00:00:00.000Z' },
+      { lessonId: 'project-valid', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+    ],
+  });
+  const quality = evidenceQuality('skill-a', mastery, NOW);
+  assert.equal(quality.diversity, 20, 'malformed restored entries must be discarded while legitimate evidence survives');
+  assert.equal(quality.independence, 25);
+  assert.equal(quality.transferable, true);
+  assert.equal(quality.recency, 100);
+}
+
+{
   const quality = evidenceQuality('skill-a', baseState(), new Date(Number.NaN));
   assert.equal(quality.recency, 0, 'an invalid runtime clock must fail closed instead of treating evidence as fresh');
   assert.equal(quality.diversity, 0, 'an invalid runtime clock must not preserve mastery diversity');
@@ -151,4 +176,7 @@ const baseState = (overrides = {}) => ({
   assert.equal(quality.transferable, false, 'an invalid runtime clock must not preserve transfer evidence');
 }
 
-console.log('Mastery evidence audit OK: activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
+assert.match(source, /function usableEvidence\(value: unknown\)/, 'restored evidence quality must pass through an explicit runtime sanitation boundary');
+assert.match(source, /slice\(-MAX_RESTORED_EVIDENCE\)/, 'restored evidence quality must bound the amount of cloud history processed per skill');
+
+console.log('Mastery evidence audit OK: restored entries, activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
