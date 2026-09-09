@@ -17,10 +17,16 @@ assert.match(source, /new Set\(achievedRubricIds\.map\(\(id\) => id\.trim\(\)\)\
 assert.match(source, /const safeRubricIds = canonicalAchievedRubricIds\(project, achievedRubricIds\);[\s\S]*reviewProject\(project, safeRubricIds\)/, 'project review must score the same canonical rubric evidence that is persisted');
 assert.match(source, /rubricIds: safeRubricIds/, 'portfolio proof must persist canonical rubric evidence only');
 assert.match(source, /completedAt: validCompletionDate\(completedAt\)\.toISOString\(\)/, 'portfolio proof serialization must never call toISOString on an unchecked date');
-assert.match(source, /function canonicalProofSkillIds\(skillIds: string\[\]\): string\[\]/, 'portfolio coverage must canonicalize restored skill ids before counting evidence');
+assert.match(source, /function canonicalProofSkillIds\(value: unknown\): string\[\]/, 'portfolio coverage must validate restored skill evidence before iterating it');
+assert.match(source, /if \(!Array\.isArray\(value\)\) return \[\];/, 'malformed restored skill collections must fail closed to empty coverage');
+assert.match(source, /if \(typeof raw !== 'string'\) continue;/, 'malformed restored skill identities must not crash portfolio coverage');
 assert.match(source, /const skillId = raw\.trim\(\);[\s\S]*const identity = normalize\(skillId\);[\s\S]*if \(!identity \|\| seen\.has\(identity\)\) continue;/, 'restored portfolio skill ids must be trimmed, empty-filtered and deduplicated by normalized identity');
 assert.match(source, /const projectsBySkillIdentity = new Map<string, Set<string>>\(\);/, 'portfolio coverage must track distinct project identities per normalized skill identity');
 assert.match(source, /const skillIdByIdentity = new Map<string, string>\(\);/, 'portfolio coverage must preserve a stable display skill id while deduplicating normalized identities');
+assert.match(source, /const restoredProofs: unknown\[\] = Array\.isArray\(proofs\) \? proofs : \[\];/, 'portfolio coverage must fail closed when a restored proof collection is not an array');
+assert.match(source, /for \(const rawProof of restoredProofs\)/, 'portfolio coverage must iterate only the runtime-validated restored proof collection');
+assert.match(source, /if \(!rawProof \|\| typeof rawProof !== 'object'\) continue;/, 'null and primitive restored proof rows must be ignored safely');
+assert.match(source, /const proof = rawProof as Partial<PortfolioProof>;/, 'restored proof rows must remain partial until each field is runtime validated');
 assert.match(source, /const projectId = typeof proof\.projectId === 'string' \? normalize\(proof\.projectId\) : '';/, 'restored project ids must be canonicalized before coverage counting');
 assert.match(source, /if \(!projectId\) continue;/, 'invalid restored project ids must not contribute portfolio coverage');
 assert.match(source, /for \(const skillId of canonicalProofSkillIds\(proof\.skillIds\)\)/, 'each proof must contribute only canonical skill ids');
