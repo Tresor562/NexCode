@@ -5,6 +5,8 @@ export type LearningFeedbackKind = 'selection' | 'notification' | 'impact' | 'so
 export type LearningImpactTone = 'light' | 'medium';
 export type LearningNotificationTone = 'success' | 'error';
 
+type StrongLearningFeedbackKind = 'notification' | 'impact';
+
 export type ReplayableAudioPlayer = {
   seekTo: (seconds: number) => Promise<unknown>;
   play: () => void;
@@ -24,6 +26,7 @@ const SEMANTIC_AUDIO_PROTECTION_MS = 180;
 
 const sharedLastTriggeredAt = new Map<LearningFeedbackKind, number>();
 let sharedLastStrongFeedbackAt: number | undefined;
+let sharedLastStrongFeedbackKind: StrongLearningFeedbackKind | undefined;
 let sharedLastNotificationFeedbackAt: number | undefined;
 let sharedSemanticAudioProtectedFrom: number | undefined;
 let sharedSemanticAudioProtectedUntil: number | undefined;
@@ -87,14 +90,27 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
     if (sharedLastStrongFeedbackAt !== undefined) {
       if (!Number.isFinite(sharedLastStrongFeedbackAt)) {
         sharedLastStrongFeedbackAt = undefined;
+        sharedLastStrongFeedbackKind = undefined;
       } else {
         const elapsedSinceStrong = current - sharedLastStrongFeedbackAt;
         if (elapsedSinceStrong < 0) {
           sharedLastStrongFeedbackAt = current;
+          sharedLastStrongFeedbackKind = undefined;
           return false;
         }
         if (kind === 'selection' && elapsedSinceStrong < WEAK_FEEDBACK_AFTER_STRONG_COOLDOWN_MS) return false;
-        if ((kind === 'notification' || kind === 'impact') && elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS) return false;
+
+        // Semantic outcome feedback outranks the physical press that usually
+        // precedes it. A submit button may emit an impact immediately before the
+        // answer is graded; suppressing the success/error notification makes the
+        // lesson feel unresponsive. Keep the inverse protection though: once a
+        // notification lands, a trailing impact cannot muddy that result cue.
+        const semanticNotificationPreemptsImpact = kind === 'notification' && sharedLastStrongFeedbackKind === 'impact';
+        if (
+          (kind === 'notification' || kind === 'impact') &&
+          elapsedSinceStrong < STRONG_FEEDBACK_COOLDOWN_MS &&
+          !semanticNotificationPreemptsImpact
+        ) return false;
       }
     }
 
@@ -112,7 +128,10 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
       if (!bypassOwnCooldown && elapsed < FEEDBACK_COOLDOWN_MS[kind]) return false;
     }
     sharedLastTriggeredAt.set(kind, current);
-    if (kind === 'notification' || kind === 'impact') sharedLastStrongFeedbackAt = current;
+    if (kind === 'notification' || kind === 'impact') {
+      sharedLastStrongFeedbackAt = current;
+      sharedLastStrongFeedbackKind = kind;
+    }
     if (kind === 'notification') {
       sharedLastNotificationFeedbackAt = current;
       openSemanticAudioAssociationWindow();
