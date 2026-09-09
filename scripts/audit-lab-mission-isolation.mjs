@@ -50,6 +50,24 @@ for (const missionId of ['', undefined, 'project:old-mission']) {
   assert.equal(result.draft.passedCriteria, undefined, 'Foreign validation criteria must not cross mission boundaries');
 }
 
+const staleLanguage = restoreWorkspaceDraft({
+  ...options,
+  stored: {
+    missionId: options.expectedMissionId,
+    language: 'JavaScript',
+    files: { 'index.html': '<main>Code from an obsolete runtime</main>' },
+    activeFile: 'index.html',
+    updatedAt: new Date().toISOString(),
+    passedCriteria: ['stale-language-proof'],
+    lastValidatedAt: new Date().toISOString(),
+  },
+});
+assert.equal(staleLanguage.repaired, true, 'A language drift must force a fresh Lab workspace');
+assert.deepEqual(staleLanguage.draft.files, fallbackFiles, 'Files from a stale Lab runtime must not survive a language migration');
+assert.equal(staleLanguage.draft.language, options.expectedLanguage, 'Fresh workspace must bind to the current Lab language');
+assert.equal(staleLanguage.draft.lastValidatedAt, undefined, 'Validation from a stale Lab language must be discarded');
+assert.equal(staleLanguage.draft.passedCriteria, undefined, 'Criteria from a stale Lab language must be discarded');
+
 const firstFresh = restoreWorkspaceDraft(options).draft;
 assert.notEqual(firstFresh.files, fallbackFiles, 'Fresh Lab state must own its file map instead of aliasing trusted starter data');
 firstFresh.files['index.html'] = '<main>Edited learner copy</main>';
@@ -58,4 +76,4 @@ assert.equal(fallbackFiles['index.html'], '<main>Trusted starter</main>', 'Editi
 const secondFresh = restoreWorkspaceDraft(options).draft;
 assert.equal(secondFresh.files['index.html'], '<main>Trusted starter</main>', 'Later sessions must still receive pristine starter files');
 
-console.log('Lab mission isolation audit OK: foreign/missing mission drafts fail closed and starter files remain immutable across sessions.');
+console.log('Lab mission isolation audit OK: mission/language drift fails closed and starter files remain immutable across sessions.');
