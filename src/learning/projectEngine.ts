@@ -143,7 +143,11 @@ export function nextProjectStep(project: GuidedProject, progress: number) {
   const safeProgress = typeof progress === 'number' && Number.isFinite(progress)
     ? Math.max(0, Math.min(100, progress))
     : 0;
-  const stepCount = project.steps.length;
+  // Project definitions can be restored from persisted/cloud state before the
+  // latest curriculum is loaded. Treat malformed step metadata as an empty
+  // project instead of crashing the learning path while reconciliation runs.
+  const steps = Array.isArray(project.steps) ? project.steps : [];
+  const stepCount = steps.length;
   const complete = safeProgress >= 100;
   const restoredCompleted = restoredCompletedSteps(safeProgress, stepCount);
   const completed = stepCount
@@ -151,7 +155,7 @@ export function nextProjectStep(project: GuidedProject, progress: number) {
     : 0;
   return {
     completedSteps: completed,
-    nextStep: complete || stepCount === 0 ? undefined : project.steps[completed],
+    nextStep: complete || stepCount === 0 ? undefined : steps[completed],
     complete,
   };
 }
