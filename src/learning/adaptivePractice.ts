@@ -99,24 +99,30 @@ const MAX_RUNTIME_ACTIVITY_PRIORITY = 1000;
 const MAX_RUNTIME_ACTIVITY_SKILLS = 24;
 const MAX_RUNTIME_ID_LENGTH = 128;
 const MAX_RUNTIME_REASON_LENGTH = 400;
+const RUNTIME_CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+
+function canonicalRuntimeId(value: unknown) {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.normalize('NFKC').trim();
+  if (!normalized || normalized.length > MAX_RUNTIME_ID_LENGTH || RUNTIME_CONTROL_CHARS.test(normalized)) return undefined;
+  return normalized;
+}
 
 function normalizeRuntimeActivity(candidate: PlannedActivity): PlannedActivity | undefined {
   if (!candidate || typeof candidate !== 'object') return undefined;
   if (!practiceModes.has(candidate.mode)) return undefined;
   if (!Number.isFinite(candidate.estimatedMinutes) || candidate.estimatedMinutes <= 0 || candidate.estimatedMinutes > MAX_RUNTIME_ACTIVITY_MINUTES) return undefined;
   if (!Number.isFinite(candidate.priority) || Math.abs(candidate.priority) > MAX_RUNTIME_ACTIVITY_PRIORITY) return undefined;
-  if (typeof candidate.courseId !== 'string' || typeof candidate.lessonId !== 'string') return undefined;
-  const courseId = candidate.courseId.trim();
-  const lessonId = candidate.lessonId.trim();
-  if (!courseId || !lessonId || courseId.length > MAX_RUNTIME_ID_LENGTH || lessonId.length > MAX_RUNTIME_ID_LENGTH) return undefined;
+  const courseId = canonicalRuntimeId(candidate.courseId);
+  const lessonId = canonicalRuntimeId(candidate.lessonId);
+  if (!courseId || !lessonId) return undefined;
   if (!Array.isArray(candidate.skillIds) || candidate.skillIds.length > MAX_RUNTIME_ACTIVITY_SKILLS) return undefined;
 
   const skillIds = [...new Set(candidate.skillIds
-    .filter((skill): skill is string => typeof skill === 'string')
-    .map((skill) => skill.trim())
-    .filter((skill) => skill.length > 0 && skill.length <= MAX_RUNTIME_ID_LENGTH))];
+    .map(canonicalRuntimeId)
+    .filter((skill): skill is string => Boolean(skill)))];
   const reason = typeof candidate.reason === 'string'
-    ? candidate.reason.trim().slice(0, MAX_RUNTIME_REASON_LENGTH)
+    ? candidate.reason.normalize('NFKC').replace(RUNTIME_CONTROL_CHARS, ' ').trim().slice(0, MAX_RUNTIME_REASON_LENGTH)
     : '';
 
   return {
