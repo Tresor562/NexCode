@@ -46,6 +46,10 @@ const MAX_DUE_SKILL_BREADTH_BONUS = 12;
 const RECOMMENDATION_PREREQUISITE_GATE = 55;
 const MAX_PREREQUISITE_PENALTY = 90;
 const COMPLETED_NOT_DUE_PENALTY = 80;
+const RETRIEVAL_PRACTICE_BONUS = 4;
+const TRANSFER_PRACTICE_BONUS = 5;
+const HANDS_ON_LAB_BONUS = 7;
+const MAX_EXPERIENTIAL_DEPTH_BONUS = 16;
 
 function normalize(value: string) {
   return value
@@ -106,6 +110,14 @@ function boundedMasteryScore(value: unknown) {
     : 0;
 }
 
+function experientialDepthBonus(lesson: Lesson) {
+  let bonus = 0;
+  if (lesson.retrievalPrompt?.trim()) bonus += RETRIEVAL_PRACTICE_BONUS;
+  if (lesson.transferPrompt?.trim()) bonus += TRANSFER_PRACTICE_BONUS;
+  if (lesson.labMission?.instructions?.trim() || lesson.labMission?.successCriteria?.length) bonus += HANDS_ON_LAB_BONUS;
+  return Math.min(MAX_EXPERIENTIAL_DEPTH_BONUS, bonus);
+}
+
 function prerequisiteReadinessPenalty(lesson: Lesson, mastery: MasteryMap) {
   const prerequisites = [...new Set(lesson.prerequisiteSkillIds ?? [])].filter(Boolean);
   if (!prerequisites.length) return 0;
@@ -154,6 +166,12 @@ function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: 
   else if (kind === 'practice') score += 10;
   else if (kind === 'lab') score += 8;
   else if (kind === 'checkpoint' || kind === 'boss') score += 5;
+
+  // Prefer lessons that close the learning loop: recall from memory, transfer the
+  // concept to a fresh context, then build something concrete. The bonus stays
+  // deliberately smaller than review urgency and prerequisite penalties so it
+  // improves pedagogical quality without overriding what the learner needs next.
+  score += experientialDepthBonus(lesson);
 
   // Prerequisites should sequence unseen material, not suppress spaced repetition for
   // a lesson the learner has already completed. Once learned, a due review remains
