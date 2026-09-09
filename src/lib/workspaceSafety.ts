@@ -145,7 +145,9 @@ export function restoreWorkspaceDraft({
     updatedAt: now.toISOString(),
   });
 
-  if (!stored || stored.missionId !== expectedMissionId) {
+  // Mission identity and language form one workspace boundary. Keeping files from a
+  // stale language revision can silently turn a valid Lab into a different runtime.
+  if (!stored || stored.missionId !== expectedMissionId || stored.language !== expectedLanguage) {
     return { draft: fresh(), repaired: Boolean(stored) };
   }
 
@@ -192,7 +194,7 @@ export function restoreWorkspaceDraft({
     ? filenames.find((filename) => workspaceCollisionKey(filename) === activeFileKey) ?? filenames[0]!
     : filenames[0]!;
   if (activeFile !== stored.activeFile) repaired = true;
-  if (stored.language !== expectedLanguage || stored.missionId !== expectedMissionId) repaired = true;
+  if (stored.missionId !== expectedMissionId) repaired = true;
   if (!plausibleIsoDate(stored.updatedAt, nowMs)) repaired = true;
   if (!validValidationMetadata(stored, nowMs)) repaired = true;
 
