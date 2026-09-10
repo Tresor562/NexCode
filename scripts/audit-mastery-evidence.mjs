@@ -32,8 +32,9 @@ const requireStub = (id) => {
 };
 
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
-const { evidenceQuality } = module.exports;
+const { evidenceQuality, masteryEvidenceGaps } = module.exports;
 assert.equal(typeof evidenceQuality, 'function', 'evidenceQuality must stay exported');
+assert.equal(typeof masteryEvidenceGaps, 'function', 'masteryEvidenceGaps must stay exported');
 
 const NOW = new Date('2026-08-27T00:00:00.000Z');
 const baseState = (overrides = {}) => ({
@@ -176,7 +177,14 @@ const baseState = (overrides = {}) => ({
   assert.equal(quality.transferable, false, 'an invalid runtime clock must not preserve transfer evidence');
 }
 
+{
+  const gaps = masteryEvidenceGaps([' skill-a ', 'skill-a', '', '\u0000forged', 'skill-missing'], baseState(), NOW);
+  assert.deepEqual(gaps.map(({ skillId }) => skillId), ['skill-missing'], 'restored skill ids must be canonicalized and deduplicated before mastery gap ranking');
+}
+
 assert.match(source, /function usableEvidence\(value: unknown\)/, 'restored evidence quality must pass through an explicit runtime sanitation boundary');
 assert.match(source, /slice\(-MAX_RESTORED_EVIDENCE\)/, 'restored evidence quality must bound the amount of cloud history processed per skill');
+assert.match(source, /function canonicalSkillIds\(value: unknown\)/, 'mastery gap inputs must pass through an explicit canonical skill-id boundary');
+assert.match(source, /canonicalSkillIds\(skillIds\)/, 'mastery gap ranking must consume canonicalized skill ids');
 
-console.log('Mastery evidence audit OK: restored entries, activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
+console.log('Mastery evidence audit OK: restored entries, skill ids, activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
