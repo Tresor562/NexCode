@@ -33,6 +33,7 @@ assert.equal(canonicalWorkspacePath('src/report. '), null, 'Trailing dots or spa
 assert.equal(canonicalWorkspacePath('src/file:name.js'), null, 'Windows-invalid filename characters must be rejected for portable projects');
 assert.equal(canonicalWorkspacePath('src/component?.js'), null, 'Wildcard-like filename characters must not survive canonicalization');
 assert.match(source, /MAX_FUTURE_CLOCK_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Lab restoration must keep a bounded clock-skew tolerance instead of trusting arbitrary future timestamps');
+assert.match(source, /new Date\(timestamp\)\.toISOString\(\)\s*===\s*value/, 'Persisted Lab timestamps must use one canonical UTC ISO representation before they influence sync ordering');
 assert.match(source, /Date\.parse\(value\)\s*<=\s*nowMs\s*\+\s*MAX_FUTURE_CLOCK_SKEW_MS/, 'Persisted Lab timestamps must be bounded against the local clock before they influence restoration');
 assert.match(labEngineSource, /import\s+\{[^}]*restoreWorkspaceDraft[^}]*\}\s+from\s+['"]\.\.\/lib\/workspaceSafety['"]/, 'Lab engine must restore through the shared workspace safety boundary');
 assert.match(labEngineSource, /restoreWorkspaceDraft\s*\(\s*\{[\s\S]*stored,[\s\S]*expectedMissionId:\s*mission\.id,[\s\S]*expectedLanguage:\s*mission\.language,[\s\S]*fallbackFiles:\s*starterFiles/, 'Lab restoration must bind shared safety to the current mission, language and trusted starter files');
@@ -64,6 +65,26 @@ const options = {
   assert.equal(result.repaired, false, 'A clean workspace must not be rewritten');
   assert.equal(result.draft.updatedAt, base.updatedAt, 'A clean workspace must preserve its timestamp');
   assert.deepEqual(result.draft.passedCriteria, ['preview'], 'A clean workspace must preserve valid criteria');
+}
+
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: { ...base, updatedAt: '2026-08-25T06:00:00+01:00' },
+  });
+  assert.equal(result.repaired, true, 'Parseable offset timestamps must be canonicalized instead of participating in cross-device freshness ordering');
+  assert.match(result.draft.updatedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/, 'Repaired Lab timestamps must use canonical UTC ISO form');
+  assert.deepEqual(result.draft.passedCriteria, [], 'Timestamp representation repair must invalidate stale validation evidence');
+}
+
+{
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: { ...base, lastValidatedAt: '2026-08-25' },
+  });
+  assert.equal(result.repaired, true, 'Date-only values must not survive as validation timestamps even when Date.parse accepts them');
+  assert.equal(result.draft.lastValidatedAt, undefined);
+  assert.deepEqual(result.draft.passedCriteria, [], 'Non-canonical validation timestamps must clear their associated proof');
 }
 
 {
@@ -246,4 +267,4 @@ const options = {
   assert.deepEqual(result.draft.passedCriteria, []);
 }
 
-console.log('Workspace safety audit OK: shared Lab restoration/import identity, portable path handling, sensitive filtering, validation-proof invalidation, and bounded clock integrity are protected.');
+console.log('Workspace safety audit OK: shared Lab restoration/import identity, portable path handling, sensitive filtering, validation-proof invalidation, canonical sync timestamps, and bounded clock integrity are protected.');
