@@ -53,7 +53,7 @@ function finitePositiveInteger(value: unknown): number {
 export function estimatedConceptCapacity(policy = beginnerCourseDepthPolicy) {
   const targetActivities = finitePositiveInteger(policy.targetActivitiesPerCourse);
   const activitiesPerConcept = policy.phases.reduce(
-    (sum, phase) => sum + finitePositiveInteger(phase.minOccurrences),
+    (sum, phase) => sum + finitePositiveInteger(phase?.minOccurrences),
     0,
   );
   if (!targetActivities || !activitiesPerConcept) return 0;
