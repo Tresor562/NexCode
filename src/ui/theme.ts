@@ -74,15 +74,15 @@ export const theme = {
     xxxl: 40,
   },
   type: {
-    // Repeated microcopy carries real learning state (XP deltas, Lab metadata,
-    // progress hints and compact navigation). Keep the recurring floor at 13pt so
-    // dense mobile screens stay premium and scannable without sacrificing hierarchy.
+    // Learning copy is read repeatedly in short, high-focus sessions. Keep compact
+    // metadata at 13pt, then give instructions and hierarchy a deliberate step up
+    // so lesson prompts, Lab guidance and project surfaces do not feel compressed.
     caption: 13,
     label: 13,
-    body: 14,
-    bodyLarge: 16,
-    title: 18,
-    titleLarge: 22,
+    body: 15,
+    bodyLarge: 17,
+    title: 19,
+    titleLarge: 23,
     display: 28,
   },
   weight: {
