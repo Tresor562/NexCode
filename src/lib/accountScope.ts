@@ -4,6 +4,7 @@ import { sanitizeLocalState, type LocalState } from './localState';
 const ownerFile = new File(Paths.document, 'nexcode-local-owner.txt');
 const ownerBoundMarker = new File(Paths.document, 'nexcode-local-owner-bound-v1');
 const SUPABASE_USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 function normalizeAccountId(value: unknown): string | null {
   if (typeof value !== 'string') return null;
@@ -12,8 +13,9 @@ function normalizeAccountId(value: unknown): string | null {
   // identity boundary rather than a generic string: accepting arbitrary ids here
   // makes corrupted disk/session data capable of claiming another learner's local
   // XP, projects, drafts and mastery. Canonical lowercase also avoids accidental
-  // case-only mismatches after a restore.
-  if (!SUPABASE_USER_ID_PATTERN.test(normalized)) return null;
+  // case-only mismatches after a restore. The nil UUID is a sentinel, never a
+  // learner identity, so it must fail closed instead of becoming a shared owner.
+  if (!SUPABASE_USER_ID_PATTERN.test(normalized) || normalized.toLowerCase() === NIL_UUID) return null;
   return normalized.toLowerCase();
 }
 
