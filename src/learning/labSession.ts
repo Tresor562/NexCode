@@ -254,11 +254,11 @@ const previewRuntimeFeedback = `<style data-nexcode-runtime-feedback>
 #nexcode-runtime-feedback[data-level="error"]{border:1px solid rgba(248,113,113,.7)}
 <\/style>
 <script data-nexcode-runtime-feedback>(function(){
-  var MAX_LINES=6, MAX_CHARS=1800, lines=[], worst='log';
+  var MAX_LINES=6, MAX_CHARS=1800, lines=[], levels=[];
   function safe(value){try{if(typeof value==='string')return value;if(value instanceof Error)return value.name+': '+value.message;var json=JSON.stringify(value);return typeof json==='string'?json:String(value)}catch(_){try{return String(value)}catch(__){return '[valeur illisible]'}}}
   function rank(level){return level==='error'?3:level==='warn'?2:1}
-  function render(){var node=document.getElementById('nexcode-runtime-feedback');if(!node)return;node.textContent=lines.join('\\n').slice(-MAX_CHARS);node.dataset.level=worst;node.style.display=lines.length?'block':'none'}
-  function push(level,args){var text=Array.prototype.map.call(args,safe).join(' ').slice(0,500);if(!text)return;lines.push((level==='error'?'✕ ':level==='warn'?'⚠ ':'› ')+text);if(lines.length>MAX_LINES)lines=lines.slice(-MAX_LINES);if(rank(level)>rank(worst))worst=level;render()}
+  function render(){var node=document.getElementById('nexcode-runtime-feedback');if(!node)return;var worst=levels.reduce(function(current,level){return rank(level)>rank(current)?level:current},'log');node.textContent=lines.join('\\n').slice(-MAX_CHARS);node.dataset.level=worst;node.style.display=lines.length?'block':'none'}
+  function push(level,args){var text=Array.prototype.map.call(args,safe).join(' ').slice(0,500);if(!text)return;lines.push((level==='error'?'✕ ':level==='warn'?'⚠ ':'› ')+text);levels.push(level);if(lines.length>MAX_LINES){lines=lines.slice(-MAX_LINES);levels=levels.slice(-MAX_LINES)}render()}
   ['log','info','warn','error'].forEach(function(level){var original=console[level]&&console[level].bind(console);console[level]=function(){push(level,arguments);if(original)original.apply(console,arguments)}});
   window.addEventListener('error',function(event){push('error',[event.message||'Erreur JavaScript'])});
   window.addEventListener('unhandledrejection',function(event){push('error',['Promise rejetée',event.reason])});
