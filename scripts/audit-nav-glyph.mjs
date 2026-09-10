@@ -19,7 +19,10 @@ assert.match(source, /pointerEvents="none"/, 'Decorative glyph layers must never
 
 assert.match(source, /styles\.activeHalo/, 'Active bottom nav state must retain the premium halo affordance');
 assert.match(source, /theme\.colors\.primaryGlass/, 'Active halo must use the shared primary glass design token');
-assert.match(source, /theme\.colors\.borderGlass/, 'Active halo border must use the shared glass border token');
+assert.match(source, /activeHalo:[\s\S]*?borderColor:\s*theme\.colors\.primaryBorder/, 'Active halo border must use the semantic primary border token');
+assert.match(source, /styles\.activeCore/, 'Active bottom nav state must retain the layered premium core affordance');
+assert.match(source, /activeCore:[\s\S]*?borderColor:\s*theme\.colors\.primaryBorderStrong/, 'Active core must use the shared strong primary border token');
+assert.match(source, /activeCore:[\s\S]*?backgroundColor:\s*theme\.colors\.primarySurface/, 'Active core must use the shared primary surface token');
 assert.match(source, /opacity:\s*emphasis\.interpolate/, 'Active halo visibility must track the shared emphasis animation');
 assert.match(source, /scale:\s*emphasis\.interpolate/, 'Active halo scale must track the shared emphasis animation');
 
@@ -28,4 +31,4 @@ for (const glyph of ['home', 'learn', 'lab', 'projects']) {
 }
 assert.match(source, /styles\.head/, 'Profile glyph must remain implemented');
 
-console.log('Bottom nav glyph audit OK: bounded premium motion, shared lifecycle, non-blocking native animation and decorative accessibility are protected.');
+console.log('Bottom nav glyph audit OK: bounded premium motion, layered semantic emphasis, shared lifecycle, non-blocking native animation and decorative accessibility are protected.');
