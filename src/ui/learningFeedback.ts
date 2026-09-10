@@ -46,12 +46,6 @@ function clearSemanticAudioProtection() {
   sharedSemanticAudioProtectedUntil = undefined;
 }
 
-function resetHapticCadence() {
-  sharedLastTriggeredAt.clear();
-  sharedLastStrongFeedbackAt = undefined;
-  sharedLastStrongFeedbackKind = undefined;
-}
-
 function openSemanticAudioAssociationWindow() {
   sharedSemanticAudioAssociationOpen = true;
   sharedSemanticAudioAssociationGeneration = sharedSemanticAudioAssociationGeneration >= Number.MAX_SAFE_INTEGER
@@ -81,14 +75,6 @@ function supersedeAudio(): number {
 
 AppState.addEventListener('change', (nextState) => {
   if (nextState !== 'active') supersedeAudio();
-});
-
-// Cooldowns describe interaction cadence while NexCode is foregrounded. Carrying
-// them through a background transition can suppress the learner's first tactile
-// confirmation after returning to a lesson, so lifecycle boundaries start a fresh
-// haptic cadence without weakening the independent stale-audio invalidation above.
-AppState.addEventListener('change', (nextState) => {
-  if (nextState !== 'active') resetHapticCadence();
 });
 
 function nativeAppIsActive(): boolean {
