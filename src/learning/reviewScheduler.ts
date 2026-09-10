@@ -85,6 +85,10 @@ function overlapsSkills(left: string[], right: string[]): boolean {
   return left.some((skillId) => rightSet.has(skillId));
 }
 
+function recommendationIdentity(courseId: string, lessonId: string) {
+  return `${courseId}\u0000${lessonId}`;
+}
+
 export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = new Date()): ReviewItem[] {
   const referenceNow = validNow(now);
   const items: ReviewItem[] = [];
@@ -141,7 +145,7 @@ export function interleavedPracticeSession(
   const target = minutes <= 5 ? 2 : minutes <= 10 ? 4 : minutes <= 20 ? 7 : 12;
   const recommendations = recommendPractice(courses, graph, mastery, completedLessonIds, referenceNow, Math.max(target * 3, 12));
   const selected = [] as typeof recommendations;
-  const selectedLessonIds = new Set<string>();
+  const selectedActivityKeys = new Set<string>();
   const usedCourses = new Map<string, number>();
   const usedSkills = new Map<string, number>();
   let lastCourseId: string | null = null;
@@ -150,7 +154,7 @@ export function interleavedPracticeSession(
   function add(item: (typeof recommendations)[number]) {
     const itemSkillIds = canonicalSkillIds(item.skillIds);
     selected.push(item);
-    selectedLessonIds.add(item.lesson.id);
+    selectedActivityKeys.add(recommendationIdentity(item.courseId, item.lesson.id));
     usedCourses.set(item.courseId, (usedCourses.get(item.courseId) ?? 0) + 1);
     itemSkillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
     lastCourseId = item.courseId;
@@ -162,7 +166,7 @@ export function interleavedPracticeSession(
   // after a context switch, which is the useful part of interleaving rather than
   // merely mixing several topics somewhere inside the same session.
   for (const item of recommendations) {
-    if (selectedLessonIds.has(item.lesson.id)) continue;
+    if (selectedActivityKeys.has(recommendationIdentity(item.courseId, item.lesson.id))) continue;
     const courseCount = usedCourses.get(item.courseId) ?? 0;
     const itemSkillIds = canonicalSkillIds(item.skillIds);
     const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
@@ -177,7 +181,7 @@ export function interleavedPracticeSession(
   // doing so turns an "interleaved" session back into blocked practice of one concept.
   for (const item of recommendations) {
     if (selected.length >= target) break;
-    if (selectedLessonIds.has(item.lesson.id)) continue;
+    if (selectedActivityKeys.has(recommendationIdentity(item.courseId, item.lesson.id))) continue;
     const courseCount = usedCourses.get(item.courseId) ?? 0;
     const itemSkillIds = canonicalSkillIds(item.skillIds);
     const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
@@ -187,7 +191,7 @@ export function interleavedPracticeSession(
 
   for (const item of recommendations) {
     if (selected.length >= target) break;
-    if (selectedLessonIds.has(item.lesson.id)) continue;
+    if (selectedActivityKeys.has(recommendationIdentity(item.courseId, item.lesson.id))) continue;
     const itemSkillIds = canonicalSkillIds(item.skillIds);
     const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
     if (skillRepeat >= 2) continue;
