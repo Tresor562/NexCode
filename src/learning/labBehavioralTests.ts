@@ -1,6 +1,6 @@
 import { LabMission } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
-import { containsLikelyWorkspaceSecret } from '../lib/workspaceSafety';
+import { containsLikelyWorkspaceSecret, workspaceCollisionKey } from '../lib/workspaceSafety';
 
 export type BehavioralTest = {
   id: string;
@@ -45,7 +45,7 @@ function meaningfulEvidenceSource(content: string, filename: string): string {
 }
 
 function portableWorkspaceKey(filename: string): string {
-  return filename.normalize('NFC').toLocaleLowerCase('en-US');
+  return workspaceCollisionKey(filename);
 }
 
 function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
