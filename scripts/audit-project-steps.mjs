@@ -72,11 +72,40 @@ assert.equal(nextProjectStep(fourStepProject, 25).completedSteps, 1, '25% must c
 assert.equal(nextProjectStep(fourStepProject, 49).completedSteps, 1, '49% must not expose the second step as completed');
 assert.equal(nextProjectStep(fourStepProject, 50).completedSteps, 2, '50% must cross exactly the second four-step milestone');
 
+const normalizedProject = {
+  ...project,
+  id: 'normalized-project',
+  steps: ['  Structure  ', 'Style', 'Interaction'],
+};
+assert.deepEqual(
+  nextProjectStep(normalizedProject, 0),
+  { completedSteps: 0, nextStep: 'Structure', complete: false },
+  'restored step labels must be normalized before they are surfaced in the premium project flow',
+);
+
 const emptyProject = { ...project, id: 'empty-project', steps: [] };
 assert.deepEqual(
   nextProjectStep(emptyProject, 0),
   { completedSteps: 0, nextStep: undefined, complete: false },
   'empty projects must fail safely without indexing a phantom step',
 );
+assert.deepEqual(
+  nextProjectStep(emptyProject, 100),
+  { completedSteps: 0, nextStep: undefined, complete: false },
+  'an empty project must never become complete solely because stale persisted progress says 100%',
+);
 
-console.log('Project step audit OK: rounded persisted milestones restore correctly, partial progress never rounds up a guided step, completion stays exact, and invalid values fail safely.');
+for (const [label, steps] of [
+  ['non-string step', ['Structure', null, 'Interaction']],
+  ['blank step', ['Structure', '   ', 'Interaction']],
+  ['duplicate step', ['Structure', 'Style', 'Style']],
+  ['control characters', ['Structure', 'Style\u0000', 'Interaction']],
+]) {
+  assert.deepEqual(
+    nextProjectStep({ ...project, id: `malformed-${label}`, steps }, 67),
+    { completedSteps: 0, nextStep: undefined, complete: false },
+    `${label} must invalidate the ordered construction sequence instead of shifting persisted milestones`,
+  );
+}
+
+console.log('Project step audit OK: rounded persisted milestones restore correctly, malformed ordered steps fail closed, labels are normalized, partial progress never rounds up, and completion stays exact.');
