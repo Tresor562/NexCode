@@ -23,8 +23,12 @@ requirePattern(
   'Authenticated Supabase account identifiers must remain canonical UUIDs.',
 );
 requirePattern(
-  /function normalizeAccountId\(value: unknown\): string \| null \{[\s\S]*typeof value !== 'string'[\s\S]*SUPABASE_USER_ID_PATTERN\.test\(normalized\)[\s\S]*return normalized\.toLowerCase\(\);/,
-  'Account identifiers must reject malformed persisted/session ids and canonicalize UUID casing before ownership decisions.',
+  /const NIL_UUID = '00000000-0000-0000-0000-000000000000';/,
+  'Account scope must identify the nil UUID sentinel explicitly.',
+);
+requirePattern(
+  /function normalizeAccountId\(value: unknown\): string \| null \{[\s\S]*typeof value !== 'string'[\s\S]*SUPABASE_USER_ID_PATTERN\.test\(normalized\)[\s\S]*normalized\.toLowerCase\(\) === NIL_UUID[\s\S]*return normalized\.toLowerCase\(\);/,
+  'Account identifiers must reject malformed and nil UUID identities while canonicalizing valid Supabase UUID casing.',
 );
 requirePattern(
   /return normalizeAccountId\(ownerFile\.textSync\(\)\);/,
@@ -74,4 +78,4 @@ if (/ownerId === normalized \? local : freshState\(\)/.test(source) || /\? fresh
   throw new Error('Account scope must never return a retained snapshot without passing it through sanitizeLocalState first.');
 }
 
-console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, retained snapshots are re-sanitized at the ownership boundary, legacy migration stays one-time, and cross-account resets share canonical local defaults.');
+console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, the nil UUID sentinel is rejected, retained snapshots are re-sanitized at the ownership boundary, legacy migration stays one-time, and cross-account resets share canonical local defaults.');
