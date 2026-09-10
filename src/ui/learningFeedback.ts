@@ -46,6 +46,12 @@ function clearSemanticAudioProtection() {
   sharedSemanticAudioProtectedUntil = undefined;
 }
 
+function resetHapticCadence() {
+  sharedLastTriggeredAt.clear();
+  sharedLastStrongFeedbackAt = undefined;
+  sharedLastStrongFeedbackKind = undefined;
+}
+
 function openSemanticAudioAssociationWindow() {
   sharedSemanticAudioAssociationOpen = true;
   sharedSemanticAudioAssociationGeneration = sharedSemanticAudioAssociationGeneration >= Number.MAX_SAFE_INTEGER
@@ -74,7 +80,10 @@ function supersedeAudio(): number {
 }
 
 AppState.addEventListener('change', (nextState) => {
-  if (nextState !== 'active') supersedeAudio();
+  if (nextState !== 'active') {
+    resetHapticCadence();
+    supersedeAudio();
+  }
 });
 
 function nativeAppIsActive(): boolean {
