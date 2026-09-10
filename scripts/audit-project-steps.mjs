@@ -78,5 +78,15 @@ assert.deepEqual(
   { completedSteps: 0, nextStep: undefined, complete: false },
   'empty projects must fail safely without indexing a phantom step',
 );
+assert.deepEqual(
+  nextProjectStep(emptyProject, 100),
+  { completedSteps: 0, nextStep: undefined, complete: false },
+  'persisted 100% progress must not complete an empty restored project without guided steps',
+);
+assert.deepEqual(
+  nextProjectStep({ ...project, id: 'malformed-project', steps: null }, 100),
+  { completedSteps: 0, nextStep: undefined, complete: false },
+  'malformed restored step metadata must fail closed even when persisted progress says 100%',
+);
 
-console.log('Project step audit OK: rounded persisted milestones restore correctly, partial progress never rounds up a guided step, completion stays exact, and invalid values fail safely.');
+console.log('Project step audit OK: rounded persisted milestones restore correctly, partial progress never rounds up a guided step, completion requires real guided steps, and invalid values fail safely.');
