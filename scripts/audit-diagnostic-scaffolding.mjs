@@ -24,6 +24,23 @@ if (missing.length) {
   process.exit(1);
 }
 
+const priorityMarkers = [
+  "if (hasTag('expected-behavior'))",
+  "if (hasPrefix('structure:'))",
+  "if (hasPrefix('remove:'))",
+  "if (hasPrefix('syntax:'))",
+  "if (hasPrefix('precision:'))",
+  "if (hasPrefix('concept:'))",
+  "if (hasTag('edge-case'))",
+];
+const priorityIndexes = priorityMarkers.map((marker) => source.indexOf(marker));
+const priorityIsStable = priorityIndexes.every((index, position) => index >= 0 && (position === 0 || index > priorityIndexes[position - 1]));
+if (!priorityIsStable) {
+  console.error('Diagnostic scaffolding audit failed:');
+  console.error('- specific observable misconceptions must outrank the generic hidden edge-case nudge');
+  process.exit(1);
+}
+
 const unsafePatterns = [
   ['raw misconception tag echoed to learners', 'message: evaluation?.misconceptionTags'],
   ['raw hidden test id interpolated into nudge', '${tag}'],
@@ -37,4 +54,4 @@ if (unsafe.length) {
   process.exit(1);
 }
 
-console.log('Diagnostic scaffolding audit passed: retries use misconception-aware nudges without exposing hidden test identifiers or revealing solutions too early.');
+console.log('Diagnostic scaffolding audit passed: retries prioritize specific observable misconceptions before generic hidden edge cases, without exposing hidden test identifiers or revealing solutions too early.');

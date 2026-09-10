@@ -223,13 +223,13 @@ function diagnosticNudge(evaluation?: ExerciseEvaluation) {
 
   if (hasTag('evaluation-gate-missing')) return 'Cette activité ne possède pas encore une correction automatique fiable. Ne transforme pas une absence de test en réussite : passe par une activité vérifiable.';
   if (hasTag('input-required')) return 'Commence par produire une vraie tentative. Écris l’idée ou le code que tu crois correct, puis utilise le retour pour ajuster une seule chose à la fois.';
-  if (hasTag('edge-case')) return 'Le cas principal semble proche. Teste maintenant une valeur vide, minimale, maximale ou inattendue pour trouver la condition qui manque.';
+  if (hasTag('expected-behavior')) return 'Pars du résultat observable demandé. Identifie la plus petite différence entre ce que ton code produit et ce qu’il devrait produire, puis corrige uniquement cette cause.';
   if (hasPrefix('structure:')) return 'Le contenu est peut-être présent, mais pas dans le bon ordre. Repère les étapes qui dépendent les unes des autres et reconstruis leur séquence.';
   if (hasPrefix('remove:')) return 'Une partie qui devait disparaître est encore présente. Cherche le comportement ou le fragment interdit avant d’ajouter du nouveau code.';
   if (hasPrefix('syntax:')) return 'La forme attendue n’est pas encore reconnue. Vérifie la ponctuation, les délimiteurs, le nom des éléments et la structure syntaxique autour de la zone modifiée.';
   if (hasPrefix('precision:')) return 'Tu es proche, mais la sortie doit être précise. Compare caractère par caractère la forme produite avec l’objectif, notamment espaces, casse et valeur finale.';
-  if (hasTag('expected-behavior')) return 'Pars du résultat observable demandé. Identifie la plus petite différence entre ce que ton code produit et ce qu’il devrait produire, puis corrige uniquement cette cause.';
   if (hasPrefix('concept:')) return 'Le concept attendu n’apparaît pas encore dans ta réponse. Reviens à la règle centrale de la leçon et demande-toi où elle doit intervenir dans ta solution.';
+  if (hasTag('edge-case')) return 'Le cas principal semble proche. Teste maintenant une valeur vide, minimale, maximale ou inattendue pour trouver la condition qui manque.';
   return evaluation.feedback[0];
 }
 
