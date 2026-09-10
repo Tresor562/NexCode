@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     bottom: -5,
     borderRadius: 19,
     borderWidth: 1,
-    borderColor: theme.colors.borderGlass,
+    borderColor: theme.colors.primaryBorder,
     backgroundColor: theme.colors.primaryGlass,
   },
   activeCore: {
@@ -129,6 +129,8 @@ const styles = StyleSheet.create({
     top: 1,
     bottom: 1,
     borderRadius: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorderStrong,
     backgroundColor: theme.colors.primarySurface,
   },
   active: { borderColor: theme.colors.primaryBright, backgroundColor: theme.colors.primaryBright },
