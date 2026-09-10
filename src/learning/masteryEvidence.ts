@@ -52,6 +52,20 @@ function canonicalEvidenceContext(value: unknown) {
   return context;
 }
 
+function canonicalSkillIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const skillIds: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const skillId = item.trim();
+    if (!skillId || /[\u0000-\u001F\u007F]/.test(skillId) || seen.has(skillId)) continue;
+    seen.add(skillId);
+    skillIds.push(skillId);
+  }
+  return skillIds;
+}
+
 function usableEvidence(value: unknown): AttemptEvidence[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -128,7 +142,7 @@ export function masteryIsDurable(skillId: string, mastery: MasteryMap, now = new
 }
 
 export function masteryEvidenceGaps(skillIds: string[], mastery: MasteryMap, now = new Date()) {
-  return skillIds
+  return canonicalSkillIds(skillIds)
     .map((skillId) => evidenceQuality(skillId, mastery, now))
     .filter((quality) => quality.reasons.length > 0)
     .sort((a, b) => a.stability - b.stability || a.skillId.localeCompare(b.skillId));
