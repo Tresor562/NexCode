@@ -30,7 +30,7 @@ const policy = (targetActivitiesPerCourse, minOccurrences) => ({
   targetActivitiesPerCourse,
   preferredChapterCount: { min: 1, max: 1 },
   preferredActivitiesPerChapter: { min: 1, max: 1 },
-  phases: minOccurrences.map((value) => ({ kind: 'practice', purpose: 'audit', minOccurrences: value })),
+  phases: minOccurrences.map((value) => value === null ? null : ({ kind: 'practice', purpose: 'audit', minOccurrences: value })),
   rules: [],
 });
 
@@ -39,5 +39,6 @@ assert.equal(estimatedConceptCapacity(policy(Number.POSITIVE_INFINITY, [1])), 0,
 assert.equal(estimatedConceptCapacity(policy(500, [])), 0, 'a policy without learning phases must not divide by zero');
 assert.equal(estimatedConceptCapacity(policy(500, [0, -3, Number.NaN])), 0, 'non-positive or non-finite phase occurrence counts must not create fake capacity');
 assert.equal(estimatedConceptCapacity(policy(500.9, [2.9, 3.2])), 100, 'fractional telemetry/config values must be normalized to whole authored activities');
+assert.equal(estimatedConceptCapacity(policy(500, [2, null, 3])), 100, 'a malformed restored phase entry must be ignored without crashing valid authored capacity');
 
 console.log('Pedagogy capacity audit OK: premium course depth stays compact and filler-resistant while malformed policies fail closed deterministically.');
