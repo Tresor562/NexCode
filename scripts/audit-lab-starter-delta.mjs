@@ -29,6 +29,11 @@ assert.equal(
   'function',
   'The starter-delta audit must execute with the real shared workspace secret guard',
 );
+assert.equal(
+  typeof safetyExports.workspaceCollisionKey,
+  'function',
+  'The starter-delta audit must execute with the shared portable workspace identity policy',
+);
 
 const behavioralExports = executeCommonJs(
   transpile(behavioralSource, 'labBehavioralTests.ts'),
@@ -37,7 +42,7 @@ const behavioralExports = executeCommonJs(
 const { runBehavioralSuite } = behavioralExports;
 
 assert.equal(typeof runBehavioralSuite, 'function', 'runBehavioralSuite must stay exported');
-assert.match(behavioralSource, /normalize\('NFC'\)\.toLocaleLowerCase\('en-US'\)/, 'starter delta paths must use portable case/Unicode identity');
+assert.match(behavioralSource, /return workspaceCollisionKey\(filename\);/, 'starter delta paths must reuse the shared portable workspace identity policy');
 assert.match(behavioralSource, /resolvePortableDraftFile\(draft, 'index\.html'\)/, 'HTML checks must resolve portable workspace paths');
 assert.match(behavioralSource, /resolvePortableDraftFile\(draft, 'styles\.css'\)/, 'CSS checks must resolve portable workspace paths');
 assert.match(behavioralSource, /stored === undefined\) return false/, 'missing starter files must fail learning evidence');
@@ -133,4 +138,4 @@ const jsUnchanged = runBehavioralSuite(jsMission, {
 });
 assert.equal(jsUnchanged.hiddenPassed, 0, 'starterCode-only missions must reject unchanged submissions');
 
-console.log('Lab starter delta audit OK: real shared safety dependencies execute while filler, path aliases and unchanged starters remain blocked.');
+console.log('Lab starter delta audit OK: real shared safety and path-identity dependencies execute while filler, path aliases and unchanged starters remain blocked.');
