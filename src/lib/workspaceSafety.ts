@@ -87,7 +87,10 @@ export function containsLikelyWorkspaceSecret(content: string): boolean {
 }
 
 function validIsoDate(value: unknown): value is string {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value));
+  if (typeof value !== 'string') return false;
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return false;
+  return new Date(timestamp).toISOString() === value;
 }
 
 function plausibleIsoDate(value: unknown, nowMs: number): value is string {
