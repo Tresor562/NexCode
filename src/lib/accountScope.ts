@@ -26,6 +26,17 @@ function readOwnerId(): string | null {
   }
 }
 
+function ownerMetadataExists(): boolean {
+  try {
+    return ownerFile.exists;
+  } catch {
+    // An unreadable owner file is still evidence that this install may already
+    // have been account-bound. Never reinterpret that uncertainty as a pristine
+    // legacy install whose progression can be adopted by the next account.
+    return true;
+  }
+}
+
 function ownerBindingWasInitialized(): boolean {
   try {
     return ownerBoundMarker.exists;
@@ -76,9 +87,13 @@ export function scopeLocalStateForUser(local: LocalState, userId: string): Local
   const ownerId = readOwnerId();
 
   // Existing installs predate owner binding. They may adopt their snapshot once
-  // only when there is no evidence account scoping was ever initialized.
+  // only when there is genuinely no owner metadata and no evidence account scoping
+  // was ever initialized. A present-but-corrupt owner file is not a legacy state:
+  // its previous owner cannot be proven, so fail closed instead of leaking XP,
+  // NexCoins, projects or mastery into the next authenticated account.
   if (!ownerId) {
-    return ownerBindingWasInitialized() ? freshState() : safeLocal;
+    const ownershipEvidenceExists = ownerMetadataExists() || ownerBindingWasInitialized();
+    return ownershipEvidenceExists ? freshState() : safeLocal;
   }
 
   // Once an owner is known, never merge that learner's local XP, projects,
