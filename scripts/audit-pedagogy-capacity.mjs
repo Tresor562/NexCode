@@ -39,5 +39,15 @@ assert.equal(estimatedConceptCapacity(policy(Number.POSITIVE_INFINITY, [1])), 0,
 assert.equal(estimatedConceptCapacity(policy(500, [])), 0, 'a policy without learning phases must not divide by zero');
 assert.equal(estimatedConceptCapacity(policy(500, [0, -3, Number.NaN])), 0, 'non-positive or non-finite phase occurrence counts must not create fake capacity');
 assert.equal(estimatedConceptCapacity(policy(500.9, [2.9, 3.2])), 100, 'fractional telemetry/config values must be normalized to whole authored activities');
+assert.equal(
+  estimatedConceptCapacity({ ...policy(500, [2]), phases: null }),
+  0,
+  'restored policies with a non-array phases payload must fail closed instead of crashing the learning-path capacity calculation',
+);
+assert.equal(
+  estimatedConceptCapacity({ ...policy(500, [2]), phases: [null, { kind: 'practice', purpose: 'audit', minOccurrences: 5 }] }),
+  100,
+  'malformed individual phase entries must be ignored without discarding valid authored phase requirements',
+);
 
 console.log('Pedagogy capacity audit OK: premium course depth stays compact and filler-resistant while malformed policies fail closed deterministically.');
