@@ -50,6 +50,7 @@ const RETRIEVAL_PRACTICE_BONUS = 4;
 const TRANSFER_PRACTICE_BONUS = 5;
 const HANDS_ON_LAB_BONUS = 7;
 const MAX_EXPERIENTIAL_DEPTH_BONUS = 16;
+const MAX_COMPLETION_ID_CHARS = 160;
 
 function normalize(value: string) {
   return value
@@ -58,6 +59,17 @@ function normalize(value: string) {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function completedLessonSet(completedLessonIds: string[]) {
+  const completed = new Set<string>();
+  for (const rawId of completedLessonIds) {
+    if (typeof rawId !== 'string') continue;
+    const lessonId = rawId.trim();
+    if (!lessonId || lessonId.length > MAX_COMPLETION_ID_CHARS || /[\u0000-\u001f\u007f]/.test(lessonId)) continue;
+    completed.add(lessonId);
+  }
+  return completed;
 }
 
 function canonicalSearchToken(token: string) {
@@ -215,7 +227,7 @@ export function searchLearningActivities(
   const query = filter.query?.trim() ?? '';
   const terms = tokenizeSearch(query);
   const phrase = terms.join(' ');
-  const completed = new Set(completedLessonIds);
+  const completed = completedLessonSet(completedLessonIds);
   const results: Array<LearningSearchResult & { curriculumOrder: number }> = [];
   let curriculumOrder = 0;
 
@@ -265,7 +277,7 @@ export function searchLearningActivities(
 
 export function courseNavigationSummary(course: Course, completedLessonIds: string[], mastery: MasteryMap) {
   const masterySnapshot = courseMasterySnapshot(course, mastery);
-  const completedSet = new Set(completedLessonIds);
+  const completedSet = completedLessonSet(completedLessonIds);
   const completed = course.starterLessons.filter((lesson) => completedSet.has(lesson.id)).length;
   const chapters = course.chapters.map((chapter) => {
     const chapterCompleted = chapter.lessonIds.filter((id) => completedSet.has(id)).length;
