@@ -31,6 +31,10 @@ requirePattern(
   'Persisted owner metadata must pass through the same account-id validation as the authenticated session.',
 );
 requirePattern(
+  /function ownerMetadataExists\(\): boolean \{[\s\S]*return ownerFile\.exists;[\s\S]*catch \{[\s\S]*return true;/,
+  'Owner metadata presence checks must fail closed when the filesystem cannot prove the owner file is absent.',
+);
+requirePattern(
   /function ownerBindingWasInitialized\(\): boolean \{[\s\S]*return ownerBoundMarker\.exists;[\s\S]*catch \{[\s\S]*return true;/,
   'Owner-binding metadata lookup must fail closed when the filesystem cannot prove account ownership state.',
 );
@@ -56,8 +60,8 @@ requirePattern(
   'Valid owner handoffs must re-sanitize retained local state so malformed restored XP, streak, Lab or mastery data cannot bypass startup guards.',
 );
 requirePattern(
-  /if \(!ownerId\) \{[\s\S]*return ownerBindingWasInitialized\(\) \? freshState\(\) : safeLocal;[\s\S]*\}/,
-  'Missing owner metadata may migrate only a canonically sanitized legacy snapshot before account scoping has ever been initialized.',
+  /if \(!ownerId\) \{[\s\S]*const ownershipEvidenceExists = ownerMetadataExists\(\) \|\| ownerBindingWasInitialized\(\);[\s\S]*return ownershipEvidenceExists \? freshState\(\) : safeLocal;[\s\S]*\}/,
+  'Legacy migration must occur only when both the owner file and initialization marker are genuinely absent; corrupt owner metadata must fail closed.',
 );
 requirePattern(
   /return ownerId === normalized \? safeLocal : freshState\(\);/,
@@ -70,4 +74,4 @@ if (/ownerId === normalized \? local : freshState\(\)/.test(source) || /\? fresh
   throw new Error('Account scope must never return a retained snapshot without passing it through sanitizeLocalState first.');
 }
 
-console.log('Account scope audit OK: ownership initialization is fail-closed, Supabase UUIDs are canonicalized, retained snapshots are re-sanitized at the ownership boundary, legacy migration stays one-time, and cross-account resets share canonical local defaults.');
+console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, retained snapshots are re-sanitized at the ownership boundary, legacy migration stays one-time, and cross-account resets share canonical local defaults.');
