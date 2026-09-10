@@ -74,11 +74,11 @@ export const theme = {
     xxxl: 40,
   },
   type: {
-    // 12pt is the floor for recurring compact learning UI. Counters, pills and
-    // metadata carry real learning context throughout long practice sessions, so
-    // keep them readable at a glance instead of treating them as decorative text.
-    caption: 12,
-    label: 12,
+    // Repeated microcopy carries real learning state (XP deltas, Lab metadata,
+    // progress hints and compact navigation). Keep the recurring floor at 13pt so
+    // dense mobile screens stay premium and scannable without sacrificing hierarchy.
+    caption: 13,
+    label: 13,
     body: 14,
     bodyLarge: 16,
     title: 18,
