@@ -93,6 +93,17 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
         sharedLastStrongFeedbackKind = undefined;
       } else {
         const elapsedSinceStrong = current - sharedLastStrongFeedbackAt;
+        // A wall-clock rollback invalidates every channel's elapsed-time baseline,
+        // not only the strong channel that happened to detect it first. Clear the
+        // cross-channel timestamps and stale semantic-audio window so the next
+        // interaction starts from one coherent baseline instead of being rejected
+        // again by an older timestamp that is now artificially in the future.
+        if (elapsedSinceStrong < 0) {
+          sharedLastTriggeredAt.clear();
+          clearSemanticAudioProtection();
+          sharedLastNotificationFeedbackAt = undefined;
+          sharedSemanticAudioAssociationOpen = false;
+        }
         if (elapsedSinceStrong < 0) sharedLastStrongFeedbackKind = undefined;
         if (elapsedSinceStrong < 0) {
           sharedLastStrongFeedbackAt = current;
@@ -119,6 +130,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
         return false;
       }
       const elapsed = current - previous;
+      if (elapsed < 0) sharedLastTriggeredAt.clear();
       if (elapsed < 0) {
         sharedLastTriggeredAt.set(kind, current);
         return false;
