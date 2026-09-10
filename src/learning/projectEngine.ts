@@ -148,7 +148,10 @@ export function nextProjectStep(project: GuidedProject, progress: number) {
   // project instead of crashing the learning path while reconciliation runs.
   const steps = Array.isArray(project.steps) ? project.steps : [];
   const stepCount = steps.length;
-  const complete = safeProgress >= 100;
+  // Persisted progress alone is not sufficient evidence of completion. An
+  // empty/malformed restored project must remain incomplete until its real
+  // guided steps are available again.
+  const complete = stepCount > 0 && safeProgress >= 100;
   const restoredCompleted = restoredCompletedSteps(safeProgress, stepCount);
   const completed = stepCount
     ? Math.min(complete ? stepCount : Math.max(0, stepCount - 1), restoredCompleted)
