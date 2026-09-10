@@ -25,6 +25,7 @@ export type ProjectReview = {
 const DEFAULT_PROJECT_READINESS_GATE = 55;
 const MAX_PROJECT_SKILL_ID_LENGTH = 96;
 const MAX_PROJECT_RUBRIC_ID_LENGTH = 64;
+const MAX_PROJECT_STEP_LENGTH = 240;
 const REQUIRED_PROJECT_RUBRIC_IDS = ['functionality', 'understanding', 'quality', 'delivery'] as const;
 const CONTROL_CHARACTER_PATTERN = /[\u0000-\u001F\u007F-\u009F]/;
 
@@ -62,6 +63,23 @@ function canonicalProjectSkills(project: GuidedProject): string[] {
   }
 
   return skills;
+}
+
+function canonicalProjectSteps(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length === 0) return [];
+
+  const normalizedSteps: string[] = [];
+  const seen = new Set<string>();
+  for (const rawStep of value) {
+    if (typeof rawStep !== 'string') return [];
+    const normalized = rawStep.normalize('NFKC').trim();
+    if (!normalized || normalized.length > MAX_PROJECT_STEP_LENGTH || CONTROL_CHARACTER_PATTERN.test(normalized)) return [];
+    if (seen.has(normalized)) return [];
+    seen.add(normalized);
+    normalizedSteps.push(normalized);
+  }
+
+  return normalizedSteps;
 }
 
 function canonicalAchievedRubricIds(value: unknown, rubric: ProjectReviewRubric[]): Set<string> {
@@ -102,7 +120,7 @@ export function projectReadiness(project: GuidedProject, mastery: MasteryMap, ga
 }
 
 export function defaultProjectRubric(project: GuidedProject): ProjectReviewRubric[] {
-  const stepCount = Array.isArray(project.steps) ? project.steps.length : 0;
+  const stepCount = canonicalProjectSteps(project.steps).length;
   return [
     { id: 'functionality', title: 'Fonctionnement', description: 'Le résultat répond au besoin principal sans comportement cassé évident.', weight: 30 },
     { id: 'understanding', title: 'Compréhension', description: 'Le développeur peut expliquer les décisions et le rôle des compétences utilisées.', weight: 25 },
@@ -143,12 +161,13 @@ export function nextProjectStep(project: GuidedProject, progress: number) {
   const safeProgress = typeof progress === 'number' && Number.isFinite(progress)
     ? Math.max(0, Math.min(100, progress))
     : 0;
-  // Project definitions can be restored from persisted/cloud state before the
-  // latest curriculum is loaded. Treat malformed step metadata as an empty
-  // project instead of crashing the learning path while reconciliation runs.
-  const steps = Array.isArray(project.steps) ? project.steps : [];
+  // Project definitions may be restored from persisted/cloud state before the
+  // latest curriculum is loaded. Validate the whole ordered sequence instead
+  // of filtering individual entries: dropping one malformed item would shift
+  // persisted percentage milestones onto a different construction step.
+  const steps = canonicalProjectSteps(project.steps);
   const stepCount = steps.length;
-  const complete = safeProgress >= 100;
+  const complete = stepCount > 0 && safeProgress >= 100;
   const restoredCompleted = restoredCompletedSteps(safeProgress, stepCount);
   const completed = stepCount
     ? Math.min(complete ? stepCount : Math.max(0, stepCount - 1), restoredCompleted)
