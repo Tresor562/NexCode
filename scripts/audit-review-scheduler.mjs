@@ -32,8 +32,12 @@ assert.match(source, /const referenceNow = validNow\(now\);[\s\S]*daysUntil\(sta
 assert.match(source, /Math\.max\(0, Math\.min\(100, Math\.min/, 'mastery scores must be bounded before urgency math');
 assert.match(source, /Math\.max\(0, Math\.min\(160, Math\.round\(value\)\)\)/, 'review urgency must remain finite and bounded');
 assert.match(source, /recommendPractice\(courses, graph, mastery, completedLessonIds, referenceNow,/, 'interleaved practice must pass the validated reference date into recommendation scoring');
-assert.match(source, /const selectedLessonIds = new Set<string>\(\)/, 'interleaved sessions must track lesson identity explicitly');
-assert.match(source, /if \(selectedLessonIds\.has\(item\.lesson\.id\)\) continue;/, 'the same lesson must never appear twice in one practice session');
+assert.match(source, /function recommendationIdentity\(courseId: string, lessonId: string\)/, 'interleaved sessions must scope lesson identity by course');
+assert.match(source, /return `\$\{courseId\}\\u0000\$\{lessonId\}`;/, 'course and lesson ids must both contribute to recommendation identity without ambiguous concatenation');
+assert.match(source, /const selectedActivityKeys = new Set<string>\(\)/, 'interleaved sessions must track course-scoped activity identity explicitly');
+assert.match(source, /selectedActivityKeys\.add\(recommendationIdentity\(item\.courseId, item\.lesson\.id\)\)/, 'accepted activities must register their course-scoped identity');
+assert.match(source, /if \(selectedActivityKeys\.has\(recommendationIdentity\(item\.courseId, item\.lesson\.id\)\)\) continue;/, 'the same lesson in the same course must never appear twice while equal lesson ids in different courses remain distinct');
+assert.doesNotMatch(source, /selectedLessonIds\.has\(item\.lesson\.id\)/, 'lesson ids must not be deduplicated globally across unrelated courses');
 assert.match(source, /const itemSkillIds = canonicalSkillIds\(item\.skillIds\);/, 'interleaving must apply the same canonical skill identity');
 assert.match(source, /itemSkillIds\.forEach/, 'interleaving repetition counters must use canonical skills');
 assert.match(source, /function overlapsSkills\(left: string\[\], right: string\[\]\): boolean/, 'interleaving must explicitly detect adjacent concept overlap');
@@ -47,4 +51,4 @@ assert.match(source, /Never relax the skill repetition cap/, 'fallback filling m
 assert.match(source, /if \(courseCount >= 2 \|\| skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'the first fallback may relax adjacency but must preserve course and skill caps');
 assert.match(source, /if \(skillRepeat >= 2\) continue;[\s\S]*add\(item\);/, 'the final fallback may relax the course cap but must never silently revert to blocked practice');
 
-console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, bounded overdue-age priority, authored-order ties, finite urgency, unique lessons and transition-aware skill-diverse interleaving are enforced.');
+console.log('Review scheduler audit OK: bounded Unicode-canonical identities, safe review clocks, bounded overdue-age priority, authored-order ties, finite urgency, course-scoped unique lessons and transition-aware skill-diverse interleaving are enforced.');
