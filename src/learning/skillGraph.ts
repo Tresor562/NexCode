@@ -159,12 +159,6 @@ export function masteryConfidence(attempts: number, correctAttempts: number) {
   const boundedCorrect = Math.max(0, Math.min(boundedAttempts, Math.floor(correctAttempts)));
   if (boundedAttempts === 0 || boundedCorrect === 0) return 0;
 
-  // Confidence should represent repeated evidence, not a single lucky answer.
-  // The previous formula produced 73% confidence after one correct attempt,
-  // which was enough to satisfy the mastery confidence gate immediately.
-  // Evidence depth now ramps over the first four attempts and observed
-  // accuracy scales the whole confidence budget. A learner therefore needs
-  // several consistent attempts before confidence can cross the 70% gate.
   const accuracy = boundedCorrect / boundedAttempts;
   const evidenceDepth = Math.min(1, boundedAttempts / 4);
   const depthBudget = 70 * evidenceDepth;
@@ -257,4 +251,15 @@ export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
       .filter((context): context is string => context !== null),
   );
   return contexts.size < 2;
+}
+
+export function courseMastery(course: Course, mastery: MasteryMap): number {
+  if (course.skillIds.length === 0) return 0;
+  const total = course.skillIds.reduce((sum, id) => sum + boundedScore(mastery[id]?.score), 0);
+  return Math.round(total / course.skillIds.length);
+}
+
+export function weakSkillIds(course: Course, mastery: MasteryMap, threshold = 55) {
+  const requiredScore = boundedScore(threshold);
+  return course.skillIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }
