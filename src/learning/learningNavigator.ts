@@ -51,6 +51,7 @@ const TRANSFER_PRACTICE_BONUS = 5;
 const HANDS_ON_LAB_BONUS = 7;
 const MAX_EXPERIENTIAL_DEPTH_BONUS = 16;
 const MAX_COMPLETION_ID_CHARS = 160;
+const MAX_SKILL_ID_CHARS = 160;
 
 function normalize(value: string) {
   return value
@@ -70,6 +71,17 @@ function completedLessonSet(completedLessonIds: string[]) {
     completed.add(lessonId);
   }
   return completed;
+}
+
+function canonicalSkillIds(rawSkillIds: readonly string[] | undefined) {
+  const skillIds = new Set<string>();
+  for (const rawId of rawSkillIds ?? []) {
+    if (typeof rawId !== 'string') continue;
+    const skillId = rawId.trim();
+    if (!skillId || skillId.length > MAX_SKILL_ID_CHARS || /[\u0000-\u001f\u007f]/.test(skillId)) continue;
+    skillIds.add(skillId);
+  }
+  return [...skillIds];
 }
 
 function canonicalSearchToken(token: string) {
@@ -131,7 +143,7 @@ function experientialDepthBonus(lesson: Lesson) {
 }
 
 function prerequisiteReadinessPenalty(lesson: Lesson, mastery: MasteryMap) {
-  const prerequisites = [...new Set(lesson.prerequisiteSkillIds ?? [])].filter(Boolean);
+  const prerequisites = canonicalSkillIds(lesson.prerequisiteSkillIds);
   if (!prerequisites.length) return 0;
 
   let penalty = 0;
@@ -153,7 +165,7 @@ function prerequisiteReadinessPenalty(lesson: Lesson, mastery: MasteryMap) {
 }
 
 function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: MasteryMap, now: Date) {
-  const skillStates = (lesson.skillIds ?? [])
+  const skillStates = canonicalSkillIds(lesson.skillIds)
     .map((skillId) => mastery[skillId])
     .filter((state): state is SkillMastery => Boolean(state));
   const dueStates = skillStates.filter((state) => reviewIsDue(state.nextReviewAt, now));
@@ -244,7 +256,7 @@ export function searchLearningActivities(
           if (filter.kinds?.length && !filter.kinds.includes(lesson.activityKind ?? 'learn')) continue;
           if (filter.difficulty?.length && !filter.difficulty.includes(lesson.difficulty ?? 1)) continue;
           if (filter.onlyDueReview) {
-            const due = (lesson.skillIds ?? []).some((skillId) => {
+            const due = canonicalSkillIds(lesson.skillIds).some((skillId) => {
               const state = mastery[skillId];
               return state ? reviewIsDue(state.nextReviewAt, now) : false;
             });
@@ -254,7 +266,7 @@ export function searchLearningActivities(
           const searchScore = weightedSearchScore(terms, phrase, [
             { value: lesson.title, weight: 60 },
             { value: lesson.concept, weight: 45 },
-            { value: (lesson.skillIds ?? []).join(' '), weight: 40 },
+            { value: canonicalSkillIds(lesson.skillIds).join(' '), weight: 40 },
             { value: unit.title, weight: 28 },
             { value: chapter.title, weight: 20 },
             { value: course.title, weight: 16 },
