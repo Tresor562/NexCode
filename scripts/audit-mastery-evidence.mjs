@@ -170,6 +170,20 @@ const baseState = (overrides = {}) => ({
 }
 
 {
+  const mastery = baseState({
+    evidence: [
+      { lessonId: 'project-survives', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-08-26T00:00:00.000Z' },
+      ...Array.from({ length: 300 }, (_, index) => ({ malformed: index })),
+    ],
+  });
+  const quality = evidenceQuality('skill-a', mastery, NOW);
+  assert.equal(quality.diversity, 20, 'a valid restored proof must survive a trailing block of malformed entries');
+  assert.equal(quality.independence, 25, 'malformed trailing entries must not consume the valid-evidence budget');
+  assert.equal(quality.transferable, true, 'a legitimate project proof behind malformed entries must remain transferable');
+  assert.equal(quality.recency, 100, 'a legitimate recent proof behind malformed entries must remain recent');
+}
+
+{
   const quality = evidenceQuality('skill-a', baseState(), new Date(Number.NaN));
   assert.equal(quality.recency, 0, 'an invalid runtime clock must fail closed instead of treating evidence as fresh');
   assert.equal(quality.diversity, 0, 'an invalid runtime clock must not preserve mastery diversity');
@@ -183,8 +197,10 @@ const baseState = (overrides = {}) => ({
 }
 
 assert.match(source, /function usableEvidence\(value: unknown\)/, 'restored evidence quality must pass through an explicit runtime sanitation boundary');
-assert.match(source, /slice\(-MAX_RESTORED_EVIDENCE\)/, 'restored evidence quality must bound the amount of cloud history processed per skill');
+assert.match(source, /restored\.length < MAX_RESTORED_EVIDENCE/, 'restored evidence must cap accepted valid history rather than letting malformed entries consume the budget');
+assert.match(source, /inspected < MAX_EVIDENCE_INSPECTION/, 'restored evidence scanning must remain bounded against oversized cloud payloads');
+assert.doesNotMatch(source, /slice\(-MAX_RESTORED_EVIDENCE\)/, 'restored evidence must not truncate the raw payload before malformed entries are filtered');
 assert.match(source, /function canonicalSkillIds\(value: unknown\)/, 'mastery gap inputs must pass through an explicit canonical skill-id boundary');
 assert.match(source, /canonicalSkillIds\(skillIds\)/, 'mastery gap ranking must consume canonicalized skill ids');
 
-console.log('Mastery evidence audit OK: restored entries, skill ids, activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
+console.log('Mastery evidence audit OK: restored entries, bounded valid-history recovery, skill ids, activity kind, timestamp and canonical context identity are all required before evidence can contribute to mastery quality.');
