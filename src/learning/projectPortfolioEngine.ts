@@ -62,7 +62,8 @@ function readinessGate(value: unknown) {
 function validCompletionDate(value: Date, now = new Date()): Date {
   const safeNow = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeNow;
-  return value.getTime() <= safeNow.getTime() + MAX_COMPLETION_CLOCK_SKEW_MS ? value : safeNow;
+  const clockSkewMs = value.getTime() - safeNow.getTime();
+  return Math.abs(clockSkewMs) <= MAX_COMPLETION_CLOCK_SKEW_MS ? value : safeNow;
 }
 
 function canonicalAchievedRubricIds(project: GuidedProject, achievedRubricIds: string[]): string[] {
