@@ -183,6 +183,7 @@ function recoveredUnitCount(recoveredSkills: Set<string>, recoveredUnscopedKeys:
 
 export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 10 | 20 | 45): PracticeSession {
   const selected: PlannedActivity[] = [];
+  const selectedActivityKeys = new Set<string>();
   const usedSkills = new Set<string>();
   const usedCourses = new Set<string>();
   const recoveredSkills = new Set<string>();
@@ -209,12 +210,13 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
   const maxMinutes = budgetMinutes + overrunAllowance;
 
   for (const candidate of sorted) {
+    const candidateRecoveryKey = recoveryActivityKey(candidate);
+    if (selectedActivityKeys.has(candidateRecoveryKey)) continue;
     if (minutes + candidate.estimatedMinutes > maxMinutes) continue;
 
     if (selected.length === 0 && hasPendingRecovery && !isRecoveryMode(candidate.mode)) continue;
 
     const recoveryMode = isRecoveryMode(candidate.mode);
-    const candidateRecoveryKey = recoveryActivityKey(candidate);
     const bringsNewRecoverySkill = candidate.skillIds.some((skill) => !recoveredSkills.has(skill));
     if (recoveryMode && candidate.skillIds.length > 0 && !bringsNewRecoverySkill) continue;
     if (recoveryMode && candidate.skillIds.length === 0 && recoveredUnscopedKeys.has(candidateRecoveryKey)) continue;
@@ -229,6 +231,7 @@ export function planPracticeSession(pool: PlannedActivity[], budgetMinutes: 5 | 
     if (needsDiversity && !bringsNewSkill && !bringsNewCourse && candidate.mode !== 'repair') continue;
 
     selected.push(candidate);
+    selectedActivityKeys.add(candidateRecoveryKey);
     minutes += candidate.estimatedMinutes;
     if (candidate.mode === 'learn') newActivities += 1;
     candidate.skillIds.forEach((skill) => {
