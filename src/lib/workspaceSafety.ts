@@ -26,6 +26,8 @@ const SENSITIVE_PATH_SEGMENTS = new Set([
   '.aws',
   '.gcloud',
   '.azure',
+  '.kube',
+  '.docker',
 ]);
 
 const LIKELY_SECRET_PATTERNS = [
