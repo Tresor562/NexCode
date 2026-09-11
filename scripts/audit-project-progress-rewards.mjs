@@ -16,9 +16,8 @@ expect(/completedProjectSteps\(registeredProject, nextProgress\)/, 'New rewarded
 expect(/Math\.floor\(\(safePercent\(progress\) \/ 100\) \* total\)/, 'Project milestones must reward only fully crossed step boundaries.');
 expect(/Math\.max\(previousProgress,\s*safePercent\(requestedProgress\)\)/, 'Project progress must remain monotonic.');
 expect(/newlyCompletedSteps\s*=\s*Math\.max\(0,\s*nextSteps\s*-\s*previousSteps\)/, 'Project rewards must be derived from newly completed construction steps.');
-expect(/PROJECT_STEP_REWARD\.xp\s*\*\s*newlyCompletedSteps/, 'XP must scale with newly crossed project steps, not button presses.');
-expect(/PROJECT_STEP_REWARD\.nexCoins\s*\*\s*newlyCompletedSteps/, 'NexCoins must scale with newly crossed project steps.');
-expect(/receiptId:\s*`project:\$\{registeredProject\.id\}:steps:\$\{previousSteps \+ 1\}-\$\{nextSteps\}`/, 'Project step rewards must carry a deterministic receipt across cloud/device replay.');
+expect(/for \(let step = previousSteps \+ 1; step <= nextSteps; step \+= 1\)/, 'Each newly crossed project step must enter the reward ledger independently.');
+expect(/rewarded = rewardProgress\(rewarded, \{[\s\S]*?\.\.\.PROJECT_STEP_REWARD,[\s\S]*?receiptId:\s*`project:\$\{registeredProject\.id\}:step:\$\{step\}`,[\s\S]*?\}\);/, 'Project XP and NexCoins must use stable per-step receipts so replay batching cannot mint duplicate rewards.');
 expect(/const PORTFOLIO_PASS_SCORE\s*=\s*70/, 'Portfolio rewards must preserve the project review passing threshold.');
 expect(/const MAX_FUTURE_PROOF_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Project reward timestamps need a small bounded clock-skew tolerance.');
 expect(/const MAX_PORTFOLIO_PROJECT_ID_LENGTH\s*=\s*160/, 'Restored portfolio project identities need a bounded runtime length.');
@@ -28,7 +27,7 @@ expect(/projectId\.length > MAX_PORTFOLIO_PROJECT_ID_LENGTH/, 'Restored project 
 expect(/function validRewardTime\(value:\s*Date,\s*systemNow\s*=\s*new Date\(\)\):\s*Date/, 'Project rewards must sanitize their canonical reward clock against the actual system clock.');
 expect(/const clockSkewMs\s*=\s*value\.getTime\(\)\s*-\s*trustedSystemNow\.getTime\(\);/, 'Project reward clock sanitization must measure signed device clock drift.');
 expect(/Math\.abs\(clockSkewMs\)\s*<=\s*MAX_FUTURE_PROOF_SKEW_MS[\s\S]*\?\s*value[\s\S]*:\s*trustedSystemNow/, 'A caller-supplied clock must not distort project rewards in either the future or backward direction.');
-expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);\s*return rewardProgress\(progressed, \{[\s\S]*?now:\s*rewardTime,[\s\S]*?receiptId:[\s\S]*?\}\);/, 'Project step XP, NexCoins, streak accounting and idempotency must use the trusted reward boundary.');
+expect(/if \(newlyCompletedSteps === 0\) return progressed;\s*const rewardTime = validRewardTime\(now\);[\s\S]*for \(let step = previousSteps \+ 1; step <= nextSteps; step \+= 1\)[\s\S]*now:\s*rewardTime,[\s\S]*receiptId:\s*`project:\$\{registeredProject\.id\}:step:\$\{step\}`/, 'Project step XP, NexCoins, streak accounting and idempotency must use the trusted reward boundary and stable step identities.');
 expect(/function portfolioProofTimestamp\(proof:\s*PortfolioProof \| undefined\):\s*number \| null/, 'Portfolio proof updates need a central persisted-version timestamp parser.');
 expect(/Date\.parse\(proof\.completedAt\)/, 'Portfolio proof versioning must parse persisted completion timestamps.');
 expect(/function canonicalizePortfolioProof\(proof:\s*PortfolioProof,\s*project:\s*GuidedProject\):\s*PortfolioProof/, 'Validated portfolio evidence must be canonicalized before entering the reward ledger.');
@@ -74,6 +73,9 @@ if (/completedProjectSteps\(project,/.test(source)) {
 if (/requestedProgress\s*>\s*\(state\.projectProgress/.test(source)) {
   throw new Error('Do not reward raw progress increases without monotonic step accounting.');
 }
+if (/receiptId:\s*`project:\$\{registeredProject\.id\}:steps:/.test(source)) {
+  throw new Error('Batch-dependent project receipts are not replay-stable; each construction step needs its own identity.');
+}
 if (/portfolioProofs:\s*\[\.\.\.rewarded\.portfolioProofs,\s*proof\]/.test(source)) {
   throw new Error('The one-time reward path must never append an uncanonicalized proof payload.');
 }
@@ -96,8 +98,11 @@ if (!progressRewardSection) {
 if (/\bnow,/.test(progressRewardSection)) {
   throw new Error('Project step rewards must never pass the caller clock directly into rewardProgress.');
 }
-if (!/receiptId:\s*`project:\$\{registeredProject\.id\}:steps:/.test(progressRewardSection)) {
-  throw new Error('Project step rewards must never lose their durable receipt identity.');
+if (!/receiptId:\s*`project:\$\{registeredProject\.id\}:step:\$\{step\}`/.test(progressRewardSection)) {
+  throw new Error('Project step rewards must never lose their stable per-step durable receipt identity.');
+}
+if (!/return rewarded;/.test(progressRewardSection)) {
+  throw new Error('Project step reward accumulation must return the fully replay-safe ledger state.');
 }
 
 const existingProofBranch = source.match(/if \(existingIndex\s*>=\s*0\)\s*\{([\s\S]*?)\n\s*\}\n\n\s*\/\/ A passing rubric/)?.[1];
