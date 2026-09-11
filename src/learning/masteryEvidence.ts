@@ -26,6 +26,7 @@ const validActivityKinds: ReadonlySet<string> = new Set<ActivityKind>([
 const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60 * 1000;
 const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
 const MAX_RESTORED_EVIDENCE = 250;
+const MAX_EVIDENCE_INSPECTION = 1000;
 
 function finitePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -68,18 +69,25 @@ function canonicalSkillIds(value: unknown): string[] {
 
 function usableEvidence(value: unknown): AttemptEvidence[] {
   if (!Array.isArray(value)) return [];
-  return value
-    .slice(-MAX_RESTORED_EVIDENCE)
-    .filter((item): item is AttemptEvidence => {
-      if (!item || typeof item !== 'object') return false;
-      const candidate = item as Partial<AttemptEvidence>;
-      return typeof candidate.lessonId === 'string'
-        && typeof candidate.activityKind === 'string'
-        && typeof candidate.correct === 'boolean'
-        && typeof candidate.scoreDelta === 'number'
-        && Number.isFinite(candidate.scoreDelta)
-        && typeof candidate.at === 'string';
-    });
+  const restored: AttemptEvidence[] = [];
+  let inspected = 0;
+
+  for (let index = value.length - 1; index >= 0 && restored.length < MAX_RESTORED_EVIDENCE && inspected < MAX_EVIDENCE_INSPECTION; index -= 1) {
+    inspected += 1;
+    const item = value[index];
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as Partial<AttemptEvidence>;
+    const valid = typeof candidate.lessonId === 'string'
+      && typeof candidate.activityKind === 'string'
+      && typeof candidate.correct === 'boolean'
+      && typeof candidate.scoreDelta === 'number'
+      && Number.isFinite(candidate.scoreDelta)
+      && typeof candidate.at === 'string';
+    if (!valid) continue;
+    restored.push(candidate as AttemptEvidence);
+  }
+
+  return restored.reverse();
 }
 
 export function evidenceQuality(skillId: string, mastery: MasteryMap, now = new Date()): EvidenceQuality {
