@@ -58,7 +58,8 @@ function usableEvidence(value: unknown): AttemptEvidence[] {
       typeof candidate.correct === 'boolean' &&
       typeof candidate.scoreDelta === 'number' &&
       Number.isFinite(candidate.scoreDelta) &&
-      typeof candidate.at === 'string'
+      typeof candidate.at === 'string' &&
+      (candidate.errorTag === undefined || typeof candidate.errorTag === 'string')
     );
   });
 }
