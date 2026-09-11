@@ -154,13 +154,15 @@ export function advanceProjectProgress(
 
   if (newlyCompletedSteps === 0) return progressed;
   const rewardTime = validRewardTime(now);
-  return rewardProgress(progressed, {
-    xp: PROJECT_STEP_REWARD.xp * newlyCompletedSteps,
-    nexCoins: PROJECT_STEP_REWARD.nexCoins * newlyCompletedSteps,
-    minutes: PROJECT_STEP_REWARD.minutes * newlyCompletedSteps,
-    now: rewardTime,
-    receiptId: `project:${registeredProject.id}:steps:${previousSteps + 1}-${nextSteps}`,
-  });
+  let rewarded = progressed;
+  for (let step = previousSteps + 1; step <= nextSteps; step += 1) {
+    rewarded = rewardProgress(rewarded, {
+      ...PROJECT_STEP_REWARD,
+      now: rewardTime,
+      receiptId: `project:${registeredProject.id}:step:${step}`,
+    });
+  }
+  return rewarded;
 }
 
 export function recordPortfolioProof(
