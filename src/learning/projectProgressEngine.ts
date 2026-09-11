@@ -17,9 +17,6 @@ const portfolioSkillGraph = buildSkillGraph(courses);
 
 function safePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
-  // Progress is evidence, not a display-only number. Flooring prevents a caller
-  // reporting 24.6% from being promoted to the 25% construction milestone and
-  // earning XP/NexCoins before the learner has actually crossed that boundary.
   return Math.max(0, Math.min(100, Math.floor(value)));
 }
 
@@ -72,25 +69,14 @@ function matchesCanonicalProjectSkills(skillIds: string[] | null, project: Guide
 function completedProjectSteps(project: GuidedProject, progress: number): number {
   const total = Math.max(0, project.steps.length);
   if (total === 0) return progress >= 100 ? 1 : 0;
-
-  // A construction step is earned only once its full percentage boundary has
-  // been crossed. Rounding would pay a 4-step project at 13% (0.52 -> 1), well
-  // before the first 25% milestone is actually complete.
   return Math.min(total, Math.max(0, Math.floor((safePercent(progress) / 100) * total)));
 }
 
 function validRewardTime(value: Date, systemNow = new Date()): Date {
   const trustedSystemNow = systemNow instanceof Date && Number.isFinite(systemNow.getTime()) ? systemNow : new Date();
   if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return trustedSystemNow;
-
-  // A caller-controlled clock must not distort project reward chronology in either
-  // direction. A far-future clock could expand proof validation, while a heavily
-  // regressed device clock could backdate XP/streak activity and later be replayed
-  // through cloud sync. Keep the same bounded tolerance for both directions.
   const clockSkewMs = value.getTime() - trustedSystemNow.getTime();
-  return Math.abs(clockSkewMs) <= MAX_FUTURE_PROOF_SKEW_MS
-    ? value
-    : trustedSystemNow;
+  return Math.abs(clockSkewMs) <= MAX_FUTURE_PROOF_SKEW_MS ? value : trustedSystemNow;
 }
 
 function portfolioProofTimestamp(proof: PortfolioProof | undefined): number | null {
@@ -106,10 +92,8 @@ function canonicalizePortfolioProof(proof: PortfolioProof, project: GuidedProjec
     title: project.title.trim(),
     completedAt: new Date(completedAt).toISOString(),
     score: proof.score,
-    skillIds: canonicalProjectSkillIds(project),
-    rubricIds: [...new Set(proof.rubricIds
-      .map((id) => typeof id === 'string' ? id.trim() : '')
-      .filter(Boolean))],
+    skillIds: canonicalPortfolioSkillIds(proof.skillIds) ?? [],
+    rubricIds: [...new Set(proof.rubricIds.map((id) => typeof id === 'string' ? id.trim() : '').filter(Boolean))],
     evidenceSummary: proof.evidenceSummary.trim(),
   };
 }
@@ -130,6 +114,7 @@ function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProjec
   return projectId === project.id
     && title === project.title.trim()
     && Boolean(evidenceSummary)
+    && skillIds !== null
     && matchesCanonicalProjectSkills(skillIds, project)
     && typeof proof.score === 'number'
     && Number.isFinite(proof.score)
@@ -144,19 +129,6 @@ function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProjec
     && rubricIds.every((id) => allowedRubricIds.has(id));
 }
 
-/**
- * Progress is monotonic by design: stale UI callbacks or manual state tampering
- * can never lower the stored percentage and later re-earn the same step reward.
- * Rewards are derived from newly crossed construction steps, not button presses.
- *
- * The caller may pass a project object from the UI, but reward math always uses
- * the canonical project registered in product data. This prevents a malformed or
- * stale object from inflating the number of rewarded steps for a known project id.
- *
- * A saved workspace is not proof by itself: selecting a file can persist the
- * untouched starter. Every newly claimed construction step therefore requires a
- * growing amount of measurable delta from the canonical starter workspace.
- */
 export function advanceProjectProgress(
   state: LocalState,
   project: GuidedProject,
@@ -173,18 +145,11 @@ export function advanceProjectProgress(
   const previousSteps = completedProjectSteps(registeredProject, previousProgress);
   const nextSteps = completedProjectSteps(registeredProject, nextProgress);
   const newlyCompletedSteps = Math.max(0, nextSteps - previousSteps);
-  if (newlyCompletedSteps > 0 && !hasProjectWorkspaceEvidence(
-    registeredProject,
-    state.projectDrafts[registeredProject.id],
-    nextSteps,
-  )) return state;
+  if (newlyCompletedSteps > 0 && !hasProjectWorkspaceEvidence(registeredProject, state.projectDrafts[registeredProject.id], nextSteps)) return state;
 
   const progressed = {
     ...state,
-    projectProgress: {
-      ...state.projectProgress,
-      [registeredProject.id]: nextProgress,
-    },
+    projectProgress: { ...state.projectProgress, [registeredProject.id]: nextProgress },
   };
 
   if (newlyCompletedSteps === 0) return progressed;
@@ -198,17 +163,6 @@ export function advanceProjectProgress(
   });
 }
 
-/**
- * Only canonical, structurally valid passing evidence can enter the portfolio
- * reward path. Project identity, rubric membership, skill coverage and score are
- * recomputed from product data rather than trusted from a stale/imported proof.
- *
- * The first portfolio proof earns the one-time completion reward only after the
- * guided project itself has reached 100%. Later valid edits replace the proof in
- * place so learners can improve evidence without farming XP/NexCoins. Stale or
- * equal-version callbacks are ignored so an older editor state cannot overwrite a
- * newer portfolio proof after a fast save/sync sequence.
- */
 export function recordPortfolioProof(
   state: LocalState,
   proof: PortfolioProof,
@@ -218,15 +172,8 @@ export function recordPortfolioProof(
   const project = canonicalProject(proof?.projectId);
   if (!project || !isRewardablePortfolioProof(proof, project, rewardTime)) return state;
 
-  // Validation intentionally accepts harmless surrounding whitespace from UI or
-  // imported/cloud payloads, but persisted identity must always be canonical.
-  // Runtime-restored arrays can still contain malformed legacy entries before a
-  // later migration/sanitization pass, so identity lookup itself must also fail
-  // closed instead of calling `.trim()` on an untrusted value.
   const canonicalProof = canonicalizePortfolioProof(proof, project);
-  const existingIndex = state.portfolioProofs.findIndex(
-    (item) => canonicalPortfolioProjectId(item?.projectId) === project.id,
-  );
+  const existingIndex = state.portfolioProofs.findIndex((item) => canonicalPortfolioProjectId(item?.projectId) === project.id);
   if (existingIndex >= 0) {
     const existingProof = state.portfolioProofs[existingIndex];
     const existingCompletedAt = portfolioProofTimestamp(existingProof);
@@ -239,11 +186,6 @@ export function recordPortfolioProof(
     };
   }
 
-  // A passing rubric alone is not completion evidence. The learner must have
-  // actually crossed the canonical 100% project-progress boundary before the
-  // first proof can mint its one-time portfolio reward. Re-check the full project
-  // workspace delta as a second boundary so imported/tampered progress cannot
-  // mint a portfolio proof without corresponding code evidence.
   if (safePercent(state.projectProgress[project.id]) < 100) return state;
   const finalStepCount = Math.max(1, project.steps.length);
   if (!hasProjectWorkspaceEvidence(project, state.projectDrafts[project.id], finalStepCount)) return state;
@@ -253,8 +195,5 @@ export function recordPortfolioProof(
     now: rewardTime,
     receiptId: `project:${project.id}:portfolio`,
   });
-  return {
-    ...rewarded,
-    portfolioProofs: [...rewarded.portfolioProofs, canonicalProof],
-  };
+  return { ...rewarded, portfolioProofs: [...rewarded.portfolioProofs, canonicalProof] };
 }
