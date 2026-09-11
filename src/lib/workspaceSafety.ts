@@ -41,6 +41,7 @@ const MAX_WORKSPACE_DEPTH = 12;
 const MAX_RESTORED_FILE_CHARS = 1_500_000;
 const MAX_RESTORED_WORKSPACE_CHARS = 5_000_000;
 const MAX_RESTORED_FILES = 300;
+const MAX_RESTORED_FILE_CANDIDATES = 1_200;
 const MAX_VALIDATION_CRITERIA = 100;
 const MAX_VALIDATION_CRITERION_CHARS = 240;
 const MAX_FUTURE_CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -158,12 +159,21 @@ export function restoreWorkspaceDraft({
   }
 
   const source = stored.files && typeof stored.files === 'object' && !Array.isArray(stored.files) ? stored.files : {};
+  const sourceEntries = Object.entries(source);
   const files: Record<string, string> = {};
   const collisionKeys = new Set<string>();
   let totalChars = 0;
+  let restoredFiles = 0;
   let repaired = false;
 
-  for (const [rawName, rawContent] of Object.entries(source).slice(0, MAX_RESTORED_FILES)) {
+  // Inspect more candidates than the final file budget so a run of rejected secret,
+  // binary or non-portable entries cannot crowd out later valid learner files. The
+  // candidate ceiling keeps restoration bounded even for corrupted cloud payloads.
+  for (const [rawName, rawContent] of sourceEntries.slice(0, MAX_RESTORED_FILE_CANDIDATES)) {
+    if (restoredFiles >= MAX_RESTORED_FILES) {
+      repaired = true;
+      break;
+    }
     const normalizedName = canonicalWorkspacePath(rawName);
     if (
       typeof rawContent !== 'string'
@@ -188,9 +198,11 @@ export function restoreWorkspaceDraft({
     collisionKeys.add(collisionKey);
     files[normalizedName] = rawContent;
     totalChars += rawContent.length;
+    restoredFiles += 1;
   }
 
-  if (Object.keys(source).length > MAX_RESTORED_FILES) repaired = true;
+  if (sourceEntries.length > MAX_RESTORED_FILES) repaired = true;
+  if (sourceEntries.length > MAX_RESTORED_FILE_CANDIDATES) repaired = true;
   const filenames = Object.keys(files);
   if (!filenames.length) return { draft: fresh(), repaired: true };
 
