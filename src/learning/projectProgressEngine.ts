@@ -186,6 +186,9 @@ export function recordPortfolioProof(
     };
   }
 
+  // A passing rubric alone is not completion evidence. The learner must have
+  // actually crossed the canonical 100% project-progress boundary before the
+  // first proof can mint its one-time portfolio reward.
   if (safePercent(state.projectProgress[project.id]) < 100) return state;
   const finalStepCount = Math.max(1, project.steps.length);
   if (!hasProjectWorkspaceEvidence(project, state.projectDrafts[project.id], finalStepCount)) return state;
