@@ -54,6 +54,19 @@ function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
   return actualName ? draft.files[actualName] ?? '' : '';
 }
 
+function hasCssRule(draft: LabDraft): boolean {
+  const cssRule = /[^{}]+\{[^}]+\}/;
+  for (const [filename, content] of Object.entries(draft.files)) {
+    const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
+    if (normalizedName.endsWith('.css') && cssRule.test(content)) return true;
+    if (/\.html?$/i.test(normalizedName)) {
+      const inlineStyles = content.match(/<style\b[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
+      if (inlineStyles.some((styleBlock) => cssRule.test(styleBlock.replace(/^<style\b[^>]*>|<\/style>$/gi, '')))) return true;
+    }
+  }
+  return false;
+}
+
 function starterFilenameFor(language: LabMission['language']): string {
   if (language === 'Python') return 'main.py';
   if (language === 'SQL') return 'query.sql';
@@ -141,7 +154,7 @@ export function defaultBehavioralTests(mission: LabMission): BehavioralTest[] {
   if (language === 'HTML/CSS') {
     tests.push(
       { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolvePortableDraftFile(draft, 'index.html')) },
-      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: (draft) => /[^{}]+\{[^}]+\}/.test(resolvePortableDraftFile(draft, 'styles.css')) },
+      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: hasCssRule },
     );
   } else if (language === 'JavaScript') {
     tests.push({ id: 'js-logic', label: 'Le code contient une déclaration ou une fonction', run: (draft) => /\b(const|let|var|function|class)\b/.test(Object.values(draft.files).join('\n')) });
