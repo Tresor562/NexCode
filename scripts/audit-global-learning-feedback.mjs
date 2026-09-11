@@ -31,6 +31,12 @@ const expectations = [
   ['impact cooldown', "impact: 120"],
   ['sound cooldown', "sound: 90"],
   ['global audio generation', 'let sharedAudioRequestGeneration = 0;'],
+  ['active audio player tracking', 'let sharedActiveAudioPlayer: ReplayableAudioPlayer | undefined;'],
+  ['optional native pause contract', 'pause?: () => void;'],
+  ['active audio teardown helper', 'function stopActiveAudio() {'],
+  ['active audio pause', 'activePlayer.pause();'],
+  ['audio supersession stops active cue', 'clearSemanticAudioProtection();\n  stopActiveAudio();'],
+  ['active player assignment after play', 'player.play();\n          sharedActiveAudioPlayer = player;'],
   ['audio supersession', 'const generation = supersedeAudio();'],
   ['cross-player stale audio guard', 'if (sharedAudioRequestGeneration !== generation) return;'],
   ['generation overflow guard', 'sharedAudioRequestGeneration >= Number.MAX_SAFE_INTEGER'],
@@ -52,6 +58,7 @@ const factoryStart = source.indexOf('export function createLearningFeedbackGate'
 const sharedMapStart = source.indexOf('const sharedLastTriggeredAt');
 const sharedStrongStart = source.indexOf('let sharedLastStrongFeedbackAt');
 const sharedAudioStart = source.indexOf('let sharedAudioRequestGeneration');
+const sharedActiveAudioStart = source.indexOf('let sharedActiveAudioPlayer');
 const lifecycleInvalidationStart = source.indexOf("AppState.addEventListener('change'");
 if (sharedMapStart < 0 || factoryStart < 0 || sharedMapStart > factoryStart) {
   console.error('Global learning feedback audit failed: cooldown state must live outside individual gate instances.');
@@ -63,6 +70,10 @@ if (sharedStrongStart < 0 || sharedStrongStart > factoryStart) {
 }
 if (sharedAudioStart < 0 || sharedAudioStart > factoryStart) {
   console.error('Global learning feedback audit failed: audio replay generation must be shared across every gate and player.');
+  process.exit(1);
+}
+if (sharedActiveAudioStart < 0 || sharedActiveAudioStart > factoryStart) {
+  console.error('Global learning feedback audit failed: active audio ownership must be shared across every feedback gate.');
   process.exit(1);
 }
 if (lifecycleInvalidationStart < 0 || lifecycleInvalidationStart > factoryStart) {
@@ -122,6 +133,14 @@ if (!/function canTrigger\(kind: LearningFeedbackKind, appActive: boolean, bypas
   console.error('Global learning feedback audit failed: all haptic and audio feedback must verify native foreground state inside the shared trigger gate.');
   process.exit(1);
 }
+if (!/function stopActiveAudio\(\) \{[\s\S]{0,260}sharedActiveAudioPlayer = undefined;[\s\S]{0,260}activePlayer\.pause\(\);/.test(source)) {
+  console.error('Global learning feedback audit failed: superseded or backgrounded audio must relinquish ownership and pause the active cue.');
+  process.exit(1);
+}
+if (!/function supersedeAudio\(\): number \{[\s\S]{0,140}clearSemanticAudioProtection\(\);[\s\S]{0,100}stopActiveAudio\(\);/.test(source)) {
+  console.error('Global learning feedback audit failed: every accepted audio supersession must stop a cue that is already playing.');
+  process.exit(1);
+}
 
 const soundStart = source.indexOf('sound(appActive: boolean, player: ReplayableAudioPlayer)');
 const soundCancellationStart = source.indexOf('if (!appActive || !nativeAppIsActive()) {', soundStart);
@@ -141,8 +160,8 @@ if (!/if \(!nativeAppIsActive\(\)\) return false;[\s\S]{0,180}seekTo\(0\)/.test(
   console.error('Global learning feedback audit failed: native foreground state must be rechecked before starting an accepted asynchronous seek.');
   process.exit(1);
 }
-if (!/sharedAudioRequestGeneration !== generation[\s\S]{0,120}!nativeAppIsActive\(\)[\s\S]{0,80}player\.play\(\)/.test(source)) {
-  console.error('Global learning feedback audit failed: accepted audio must recheck native foreground state after seek and before playback.');
+if (!/sharedAudioRequestGeneration !== generation[\s\S]{0,120}!nativeAppIsActive\(\)[\s\S]{0,80}player\.play\(\)[\s\S]{0,80}sharedActiveAudioPlayer = player/.test(source)) {
+  console.error('Global learning feedback audit failed: accepted audio must recheck foreground state and claim shared playback ownership only after it actually starts.');
   process.exit(1);
 }
 if (!/AppState\.addEventListener\('change',[\s\S]{0,120}nextState !== 'active'[\s\S]{0,120}resetTransientFeedbackCadence\(\)[\s\S]{0,80}supersedeAudio\(\)/.test(source)) {
@@ -173,4 +192,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, lifecycle cadence resets, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, semantic sound priority, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, lifecycle cadence resets, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, active audio teardown, shared playback ownership, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, semantic sound priority, lesson routing, and cross-player stale-audio supersession are enforced.');
