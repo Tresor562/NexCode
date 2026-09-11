@@ -46,6 +46,16 @@ function clearSemanticAudioProtection() {
   sharedSemanticAudioProtectedUntil = undefined;
 }
 
+function resetTransientFeedbackCadence() {
+  // Cooldowns describe one continuous foreground interaction session. Crossing
+  // an app lifecycle boundary ends that session, so carrying a 45–180 ms tactile
+  // quiet window into the next foreground turn can incorrectly swallow the first
+  // selection/success cue after a fast task switch or accidental Home gesture.
+  sharedLastTriggeredAt.clear();
+  sharedLastStrongFeedbackAt = undefined;
+  sharedLastStrongFeedbackKind = undefined;
+}
+
 function openSemanticAudioAssociationWindow() {
   sharedSemanticAudioAssociationOpen = true;
   sharedSemanticAudioAssociationGeneration = sharedSemanticAudioAssociationGeneration >= Number.MAX_SAFE_INTEGER
@@ -74,7 +84,10 @@ function supersedeAudio(): number {
 }
 
 AppState.addEventListener('change', (nextState) => {
-  if (nextState !== 'active') supersedeAudio();
+  if (nextState !== 'active') {
+    resetTransientFeedbackCadence();
+    supersedeAudio();
+  }
 });
 
 function nativeAppIsActive(): boolean {
