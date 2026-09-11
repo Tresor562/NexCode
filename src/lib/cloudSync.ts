@@ -88,6 +88,10 @@ export function sanitizeReconciledCloudActivityClock(
       lastActiveDate: local.lastActiveDate,
       dailyCompleted: local.dailyCompleted,
       streak: local.streak,
+      // bestStreak is derived from streak history. If the reconciled activity day
+      // is impossible, keeping a remote bestStreak from the same poisoned clock can
+      // permanently preserve a forged record even after the active streak is repaired.
+      bestStreak: Math.max(local.bestStreak, local.streak),
     } : {}),
     ...(invalidRewardDate ? { dailyGoalRewardDate: local.dailyGoalRewardDate } : {}),
   };
