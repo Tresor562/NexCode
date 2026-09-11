@@ -36,6 +36,8 @@ export type SkillMastery = {
 
 export type MasteryMap = Record<string, SkillMastery>;
 
+const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
+
 export function masteryBand(score: number): MasteryBand {
   if (score >= 85) return 'mastered';
   if (score >= 55) return 'practicing';
@@ -121,6 +123,13 @@ function usableEvidence(value: unknown): AttemptEvidence[] {
       typeof candidate.at === 'string'
     );
   });
+}
+
+function canonicalEvidenceContext(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const context = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!context || context.length > MAX_EVIDENCE_CONTEXT_LENGTH) return null;
+  return context;
 }
 
 function usableAttemptTime(now: Date) {
@@ -240,7 +249,11 @@ export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
   const contexts = new Set(
     usableEvidence(state.evidence)
       .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind))
-      .map((item) => `${item.activityKind}:${item.lessonId}`),
+      .map((item) => {
+        const context = canonicalEvidenceContext(item.lessonId);
+        return context ? `${item.activityKind}:${context}` : null;
+      })
+      .filter((context): context is string => context !== null),
   );
   return contexts.size < 2;
 }
