@@ -25,6 +25,7 @@ export type GateResult = {
 };
 
 const MAX_FUTURE_PRACTICE_SKEW_MS = 5 * 60 * 1000;
+const MAX_REVIEW_SCHEDULE_MS = 22 * 86_400_000;
 
 function boundedPercent(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value)
@@ -96,8 +97,11 @@ function recurringErrorTags(state: SkillMastery) {
 
 function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   if (!nextReviewAt) return true;
+  const nowMs = now.getTime();
   const timestamp = new Date(nextReviewAt).getTime();
-  return !Number.isFinite(timestamp) || timestamp <= now.getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(timestamp)) return true;
+  if (timestamp - nowMs > MAX_REVIEW_SCHEDULE_MS) return true;
+  return timestamp <= nowMs;
 }
 
 function independentEvidenceContextCount(state: SkillMastery) {
