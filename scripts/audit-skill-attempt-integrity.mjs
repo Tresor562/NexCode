@@ -23,8 +23,9 @@ const requireStub = (id) => {
 };
 new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
 
-const { recordSkillAttempt } = module.exports;
+const { recordSkillAttempt, skillNeedsEvidence } = module.exports;
 assert.equal(typeof recordSkillAttempt, 'function', 'recordSkillAttempt must stay exported');
+assert.equal(typeof skillNeedsEvidence, 'function', 'skillNeedsEvidence must stay exported');
 
 const lesson = {
   id: 'js-array-lab',
@@ -135,14 +136,66 @@ const lesson = {
   assert.equal(state.evidence[1]?.lessonId, lesson.id, 'the new learning attempt must still be appended after sanitized history');
 }
 
+{
+  const node = {
+    id: 'js-arrays',
+    title: 'Arrays',
+    courseIds: ['javascript'],
+    prerequisiteIds: [],
+    prerequisiteGate: 55,
+    lessonIds: ['project-a'],
+    evidenceLessonIds: ['project-a'],
+  };
+  const mastery = {
+    'js-arrays': {
+      skillId: 'js-arrays',
+      score: 75,
+      confidence: 80,
+      band: 'practicing',
+      attempts: 4,
+      correctAttempts: 4,
+      consecutiveCorrect: 4,
+      errorTags: [],
+      evidence: [
+        { lessonId: 'project-a', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:00:00.000Z' },
+        { lessonId: ' project-a ', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:05:00.000Z' },
+        { lessonId: '\u0000project-a\u0007', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:10:00.000Z' },
+      ],
+    },
+  };
+  assert.equal(skillNeedsEvidence(node, mastery), true, 'restored aliases of the same evidence context must not satisfy the two-context progression gate');
+  mastery['js-arrays'].evidence.push(
+    { lessonId: 'checkpoint-b', activityKind: 'checkpoint', correct: true, scoreDelta: 10, at: '2026-09-04T12:15:00.000Z' },
+  );
+  assert.equal(skillNeedsEvidence(node, mastery), false, 'a genuinely distinct canonical context should satisfy the evidence gate');
+}
+
+{
+  const node = {
+    id: 'js-arrays', title: 'Arrays', courseIds: ['javascript'], prerequisiteIds: [], prerequisiteGate: 55, lessonIds: [], evidenceLessonIds: [],
+  };
+  const mastery = {
+    'js-arrays': {
+      skillId: 'js-arrays', score: 75, confidence: 80, band: 'practicing', attempts: 4, correctAttempts: 4, consecutiveCorrect: 4, errorTags: [],
+      evidence: [
+        { lessonId: '   ', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:00:00.000Z' },
+        { lessonId: 'x'.repeat(161), activityKind: 'lab', correct: true, scoreDelta: 10, at: '2026-09-04T12:05:00.000Z' },
+      ],
+    },
+  };
+  assert.equal(skillNeedsEvidence(node, mastery), true, 'empty or unbounded restored context identities must fail closed for progression evidence');
+}
+
 assert.match(source, /function boundedCount\(value: unknown/, 'restored counters must pass through a bounded normalization helper');
 assert.match(source, /function boundedScore\(value: unknown\)/, 'restored mastery scores must pass through a finite bounded normalization helper');
 assert.match(source, /function usableEvidence\(value: unknown\): AttemptEvidence\[\]/, 'restored evidence must pass through an entry-level sanitation helper');
 assert.match(source, /const previousEvidence = usableEvidence\(previous\.evidence\)/, 'attempt recording must sanitize restored evidence before spreading it');
+assert.match(source, /function canonicalEvidenceContext\(value: unknown\)/, 'progression evidence contexts must pass through a canonical identity boundary');
+assert.match(source, /canonicalEvidenceContext\(item\.lessonId\)/, 'skill evidence gates must consume canonical lesson contexts');
 assert.match(source, /function latestPracticedTime\(map: MasteryMap, skillIds: string\[\]\)/, 'restored skill timestamps must share a latest-time boundary');
 assert.match(source, /function monotonicAttemptTime\(map: MasteryMap, lesson: Lesson, candidate: Date\)/, 'attempt recording must enforce monotonic chronology');
 assert.match(source, /latestMs \+ 1/, 'equal or stale attempt timestamps must advance beyond the latest stored instant');
 assert.match(source, /const attemptTime = monotonicAttemptTime\(map, lesson, usableAttemptTime\(now\)\)/, 'attempt timestamps must cross both runtime-clock and monotonic-ordering boundaries before serialization');
 assert.match(source, /Array\.isArray\(previous\.errorTags\)/, 'restored error tags must be checked before spreading');
 
-console.log('Skill attempt integrity audit OK: malformed restored mastery state and evidence, invalid clocks and delayed synced attempts cannot poison or rewind progression chronology.');
+console.log('Skill attempt integrity audit OK: malformed restored mastery state and evidence, canonical proof contexts, invalid clocks and delayed synced attempts cannot poison or rewind progression chronology.');
