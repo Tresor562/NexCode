@@ -1,9 +1,11 @@
+import { courses } from '../data/courses';
 import { GuidedProject } from '../data/curriculumCore';
 import { guidedProjects } from '../data/projects';
 import { LocalState, rewardProgress } from '../lib/localState';
 import { defaultProjectRubric, reviewProject } from './projectEngine';
-import type { PortfolioProof } from './projectPortfolioEngine';
+import { resolveProjectSkills, type PortfolioProof } from './projectPortfolioEngine';
 import { hasProjectWorkspaceEvidence } from './projectWorkspaceEvidence';
+import { buildSkillGraph } from './skillGraph';
 
 const PROJECT_STEP_REWARD = Object.freeze({ xp: 15, nexCoins: 3, minutes: 3 });
 const PORTFOLIO_PROOF_REWARD = Object.freeze({ xp: 50, nexCoins: 10, minutes: 5 });
@@ -11,6 +13,7 @@ const PORTFOLIO_PASS_SCORE = 70;
 const MAX_FUTURE_PROOF_SKEW_MS = 5 * 60 * 1000;
 const MAX_PORTFOLIO_SKILL_ID_LENGTH = 160;
 const MAX_PORTFOLIO_PROJECT_ID_LENGTH = 160;
+const portfolioSkillGraph = buildSkillGraph(courses);
 
 function safePercent(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
@@ -34,6 +37,10 @@ function canonicalPortfolioProjectId(value: unknown): string {
   return projectId;
 }
 
+function portfolioSkillIdentity(skillId: string): string {
+  return skillId.normalize('NFKC').toLowerCase();
+}
+
 function canonicalPortfolioSkillIds(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const seen = new Set<string>();
@@ -42,12 +49,24 @@ function canonicalPortfolioSkillIds(value: unknown): string[] | null {
     if (typeof raw !== 'string') return null;
     const skillId = raw.trim();
     if (!skillId || skillId.length > MAX_PORTFOLIO_SKILL_ID_LENGTH || /[\u0000-\u001f\u007f]/.test(skillId)) return null;
-    const identity = skillId.normalize('NFKC').toLowerCase();
+    const identity = portfolioSkillIdentity(skillId);
     if (seen.has(identity)) return null;
     seen.add(identity);
     canonical.push(skillId);
   }
   return canonical;
+}
+
+function canonicalProjectSkillIds(project: GuidedProject): string[] {
+  return [...new Set(resolveProjectSkills(project, portfolioSkillGraph).flatMap((item) => item.skillIds))];
+}
+
+function matchesCanonicalProjectSkills(skillIds: string[] | null, project: GuidedProject): boolean {
+  if (skillIds === null) return false;
+  const expected = canonicalProjectSkillIds(project);
+  if (skillIds.length !== expected.length) return false;
+  const actualIdentities = new Set(skillIds.map(portfolioSkillIdentity));
+  return expected.every((skillId) => actualIdentities.has(portfolioSkillIdentity(skillId)));
 }
 
 function completedProjectSteps(project: GuidedProject, progress: number): number {
@@ -87,7 +106,7 @@ function canonicalizePortfolioProof(proof: PortfolioProof, project: GuidedProjec
     title: project.title.trim(),
     completedAt: new Date(completedAt).toISOString(),
     score: proof.score,
-    skillIds: canonicalPortfolioSkillIds(proof.skillIds) ?? [],
+    skillIds: canonicalProjectSkillIds(project),
     rubricIds: [...new Set(proof.rubricIds
       .map((id) => typeof id === 'string' ? id.trim() : '')
       .filter(Boolean))],
@@ -111,7 +130,7 @@ function isRewardablePortfolioProof(proof: PortfolioProof, project: GuidedProjec
   return projectId === project.id
     && title === project.title.trim()
     && Boolean(evidenceSummary)
-    && skillIds !== null
+    && matchesCanonicalProjectSkills(skillIds, project)
     && typeof proof.score === 'number'
     && Number.isFinite(proof.score)
     && proof.score >= PORTFOLIO_PASS_SCORE
@@ -181,8 +200,8 @@ export function advanceProjectProgress(
 
 /**
  * Only canonical, structurally valid passing evidence can enter the portfolio
- * reward path. Project identity, rubric membership and score are recomputed from
- * product data rather than trusted from a stale/imported proof object.
+ * reward path. Project identity, rubric membership, skill coverage and score are
+ * recomputed from product data rather than trusted from a stale/imported proof.
  *
  * The first portfolio proof earns the one-time completion reward only after the
  * guided project itself has reached 100%. Later valid edits replace the proof in
