@@ -16,9 +16,10 @@ const compiled = ts.transpileModule(source, {
 const exports = {};
 const module = { exports };
 new Function('exports', 'module', compiled)(exports, module);
-const { canonicalWorkspacePath } = module.exports;
+const { canonicalWorkspacePath, isSensitiveWorkspaceFilename } = module.exports;
 
 assert.equal(typeof canonicalWorkspacePath, 'function', 'canonicalWorkspacePath must stay exported');
+assert.equal(typeof isSensitiveWorkspaceFilename, 'function', 'isSensitiveWorkspaceFilename must stay exported');
 assert.equal(canonicalWorkspacePath('src/components/App.tsx'), 'src/components/App.tsx', 'normal nested project paths must stay valid');
 assert.equal(canonicalWorkspacePath('src\\components\\App.tsx'), 'src/components/App.tsx', 'portable normalization must preserve Windows imports');
 assert.equal(canonicalWorkspacePath('src/comp\u202Egnp.tsx'), null, 'bidirectional override controls must never survive workspace path canonicalization');
@@ -34,7 +35,18 @@ assert.equal(canonicalWorkspacePath(`${'folder/'.repeat(11)}${'x'.repeat(180)}.j
 assert.equal(canonicalWorkspacePath('src/aux/config.js'), null, 'Windows-reserved segments must stay rejected');
 assert.equal(canonicalWorkspacePath('src/name. /file.js'), null, 'segments ending in a dot or space must stay rejected');
 
+assert.equal(isSensitiveWorkspaceFilename('.git/config'), true, 'Git metadata must never enter a learner workspace or cloud sync');
+assert.equal(isSensitiveWorkspaceFilename('project/.Git/HEAD'), true, 'sensitive directory checks must stay case-insensitive');
+assert.equal(isSensitiveWorkspaceFilename('.ssh/config'), true, 'SSH configuration and key directories must never enter the Lab workspace');
+assert.equal(isSensitiveWorkspaceFilename('backup/.aws/credentials.example'), true, 'cloud CLI credential directories must be rejected regardless of basename');
+assert.equal(isSensitiveWorkspaceFilename('project/.gcloud/configurations/config_default'), true, 'gcloud credential/config state must stay outside portable projects');
+assert.equal(isSensitiveWorkspaceFilename('project/.azure/azureProfile.json'), true, 'Azure CLI account state must stay outside portable projects');
+assert.equal(isSensitiveWorkspaceFilename('src/git/client.ts'), false, 'ordinary source folders named after tools must remain valid');
+assert.equal(isSensitiveWorkspaceFilename('.env.example'), false, 'explicit environment templates must remain importable');
+
 assert.match(source, /UNSAFE_INVISIBLE_PATH_CHARS\s*=\s*\/\[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\]\//, 'workspace path policy must explicitly reject invisible and bidirectional formatting controls');
+assert.match(source, /SENSITIVE_PATH_SEGMENTS\s*=\s*new Set/, 'workspace safety must maintain a directory-level sensitive metadata boundary');
+assert.match(source, /segments\.some\(\(segment\) => SENSITIVE_PATH_SEGMENTS\.has\(segment\)\)/, 'sensitive path segments must be rejected before basename exceptions');
 assert.match(source, /MAX_WORKSPACE_PATH_CHARS\s*=\s*240/, 'workspace path cap must remain explicit');
 assert.match(source, /MAX_WORKSPACE_SEGMENT_CHARS\s*=\s*120/, 'workspace segment cap must remain explicit');
 assert.match(source, /MAX_WORKSPACE_DEPTH\s*=\s*12/, 'workspace depth cap must remain explicit');
@@ -47,4 +59,4 @@ assert.match(importSource, /try\s*\{\s*return directory\.list\(\);\s*\}\s*catch\
 assert.match(importSource, /const entries = safeDirectoryEntries\(directory\);\s*if \(!entries\) \{\s*skipped \+= 1;\s*return;/, 'failed subtrees must be counted and skipped while preserving already imported files');
 assert.doesNotMatch(importSource, /const entries = directory\.list\(\);/, 'recursive folder walking must never call the provider directly without recovery');
 
-console.log('Workspace path bounds audit OK: portable project paths reject invisible spoofing controls while collision-renamed imports and partial provider failures stay bounded, canonical and recoverable.');
+console.log('Workspace path bounds audit OK: portable project paths reject invisible spoofing and sensitive VCS/credential directories while collision-renamed imports and partial provider failures stay bounded, canonical and recoverable.');

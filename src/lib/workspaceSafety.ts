@@ -20,6 +20,14 @@ const SENSITIVE_BASENAMES = new Set([
   'service_account.json',
 ]);
 
+const SENSITIVE_PATH_SEGMENTS = new Set([
+  '.git',
+  '.ssh',
+  '.aws',
+  '.gcloud',
+  '.azure',
+]);
+
 const LIKELY_SECRET_PATTERNS = [
   /(?:bot[_-]?token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[=:]\s*["']?(?!replace|example|test|your|changeme)[A-Za-z0-9_\-.]{12,}/i,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
@@ -74,7 +82,9 @@ export function workspaceCollisionKey(path: string): string {
 
 export function isSensitiveWorkspaceFilename(path: string): boolean {
   const normalized = path.trim().replace(/\\/g, '/').normalize('NFC').toLowerCase();
-  const basename = normalized.split('/').pop() ?? normalized;
+  const segments = normalized.split('/').filter(Boolean);
+  const basename = segments.at(-1) ?? normalized;
+  if (segments.some((segment) => SENSITIVE_PATH_SEGMENTS.has(segment))) return true;
   if (basename === '.env.example') return false;
   if (SENSITIVE_BASENAMES.has(basename)) return true;
   if (basename.startsWith('.env.')) return true;
