@@ -18,7 +18,9 @@ const expectations = [
   ['foreground gate', 'if (!appActive || !nativeAppIsActive()) return false;'],
   ['native foreground source', "import { AppState } from 'react-native';"],
   ['native foreground predicate', "return AppState.currentState === 'active';"],
-  ['native lifecycle audio invalidation', "AppState.addEventListener('change', (nextState) => {\n  if (nextState !== 'active') supersedeAudio();\n});"],
+  ['lifecycle cadence reset helper', 'function resetTransientFeedbackCadence() {'],
+  ['lifecycle cooldown reset', 'sharedLastTriggeredAt.clear();\n  sharedLastStrongFeedbackAt = undefined;\n  sharedLastStrongFeedbackKind = undefined;'],
+  ['native lifecycle audio invalidation', "AppState.addEventListener('change', (nextState) => {\n  if (nextState !== 'active') {\n    resetTransientFeedbackCadence();\n    supersedeAudio();\n  }\n});"],
   ['non-finite current clock guard', 'if (!Number.isFinite(current)) return false;'],
   ['non-finite previous clock recovery', 'if (!Number.isFinite(previous)) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
   ['clock rollback guard', 'if (elapsed < 0) {\n        sharedLastTriggeredAt.set(kind, current);\n        return false;\n      }'],
@@ -143,8 +145,8 @@ if (!/sharedAudioRequestGeneration !== generation[\s\S]{0,120}!nativeAppIsActive
   console.error('Global learning feedback audit failed: accepted audio must recheck native foreground state after seek and before playback.');
   process.exit(1);
 }
-if (!/AppState\.addEventListener\('change',[\s\S]{0,120}nextState !== 'active'[\s\S]{0,80}supersedeAudio\(\)/.test(source)) {
-  console.error('Global learning feedback audit failed: background transitions must supersede accepted audio before a later foreground resume.');
+if (!/AppState\.addEventListener\('change',[\s\S]{0,120}nextState !== 'active'[\s\S]{0,120}resetTransientFeedbackCadence\(\)[\s\S]{0,80}supersedeAudio\(\)/.test(source)) {
+  console.error('Global learning feedback audit failed: background transitions must clear transient tactile cadence and supersede accepted audio before a later foreground resume.');
   process.exit(1);
 }
 
@@ -171,4 +173,4 @@ if (/player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/.test(lessonSource)) {
   process.exit(1);
 }
 
-console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, semantic sound priority, lesson routing, and cross-player stale-audio supersession are enforced.');
+console.log('Global learning feedback audit passed: shared notification haptics, per-channel cooldowns, serialized strong haptic cadence, post-strong tactile quiet windows, lifecycle cadence resets, native lifecycle gating, finite-clock recovery, clock rollback recovery, lifecycle invalidation, native-foreground request cancellation, native foreground rechecks, sync-safe audio replay, accepted-cue preservation, semantic sound priority, lesson routing, and cross-player stale-audio supersession are enforced.');
