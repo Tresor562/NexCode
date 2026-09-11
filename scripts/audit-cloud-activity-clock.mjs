@@ -48,6 +48,7 @@ const poisoned = {
   xp: 180,
   nexCoins: 70,
   streak: 999,
+  bestStreak: 999,
   lastActiveDate: '2099-01-01',
   dailyCompleted: 20,
   dailyGoalRewardDate: '2099-01-01',
@@ -56,15 +57,29 @@ const repaired = sanitizeReconciledCloudActivityClock(poisoned, local, reference
 assert.equal(repaired.lastActiveDate, local.lastActiveDate, 'impossible future cloud activity must not move the local streak day');
 assert.equal(repaired.dailyCompleted, local.dailyCompleted, 'future cloud activity must not forge today\'s daily completion');
 assert.equal(repaired.streak, local.streak, 'future cloud activity must not forge the active streak');
+assert.equal(repaired.bestStreak, local.bestStreak, 'future cloud activity must not preserve a forged all-time streak record');
 assert.equal(repaired.dailyGoalRewardDate, local.dailyGoalRewardDate, 'future cloud reward markers must not block a legitimate daily reward');
-assert.equal(repaired.xp, poisoned.xp, 'monotonic XP reconciliation should remain intact while only day-scoped fields are repaired');
-assert.equal(repaired.nexCoins, poisoned.nexCoins, 'monotonic NexCoins reconciliation should remain intact while only day-scoped fields are repaired');
+assert.equal(repaired.xp, poisoned.xp, 'monotonic XP reconciliation should remain intact while only clock-derived fields are repaired');
+assert.equal(repaired.nexCoins, poisoned.nexCoins, 'monotonic NexCoins reconciliation should remain intact while only clock-derived fields are repaired');
+
+const localWithHigherCurrentStreak = {
+  ...local,
+  streak: 9,
+  bestStreak: 7,
+};
+const repairedLocalRecord = sanitizeReconciledCloudActivityClock({
+  ...poisoned,
+  streak: 500,
+  bestStreak: 500,
+}, localWithHigherCurrentStreak, reference);
+assert.equal(repairedLocalRecord.bestStreak, 9, 'repair must preserve the invariant that bestStreak is never below the trusted local active streak');
 
 const timezoneLead = {
   ...local,
   lastActiveDate: '2026-09-07',
   dailyCompleted: 4,
   streak: 6,
+  bestStreak: 8,
   dailyGoalRewardDate: '2026-09-07',
 };
 assert.equal(
@@ -86,7 +101,8 @@ assert.equal(
 );
 
 assert.match(source, /MAX_CLOUD_DATE_LEAD_MS\s*=\s*36\s*\*\s*60\s*\*\s*60\s*\*\s*1000/, 'the cross-timezone cloud clock tolerance must remain explicit and reviewable');
+assert.match(source, /bestStreak:\s*Math\.max\(local\.bestStreak,\s*local\.streak\)/, 'poisoned clock repair must restore bestStreak from trusted local streak history');
 assert.match(source, /sanitizeReconciledCloudActivityClock\(reconciled\.state, snapshot\.state\)/, 'every background reconciliation must pass through the cloud activity clock boundary before upload');
 assert.match(source, /pushCloudState\(currentBeforePush, safeReconciledState\)/, 'the repaired state, not the poisoned reconciliation, must be persisted back to Supabase');
 
-console.log('Cloud activity clock audit OK: impossible future streak/daily dates fail closed without discarding legitimate monotonic XP or NexCoins reconciliation.');
+console.log('Cloud activity clock audit OK: impossible future streak/daily dates and forged best-streak records fail closed without discarding legitimate monotonic XP or NexCoins reconciliation.');
