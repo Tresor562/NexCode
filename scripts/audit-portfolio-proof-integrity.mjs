@@ -10,7 +10,9 @@ assert.match(source, /const MAX_COMPLETION_CLOCK_SKEW_MS = 5 \* 60 \* 1000;/, 'p
 assert.match(source, /function validCompletionDate\(value: Date, now = new Date\(\)\): Date/, 'portfolio proof persistence must validate completion dates centrally');
 assert.match(source, /const safeNow = now instanceof Date && Number\.isFinite\(now\.getTime\(\)\) \? now : new Date\(\);/, 'portfolio proof date validation must itself use a valid reference clock');
 assert.match(source, /if \(!\(value instanceof Date\) \|\| !Number\.isFinite\(value\.getTime\(\)\)\) return safeNow;/, 'invalid completion dates must fall back before toISOString');
-assert.match(source, /value\.getTime\(\) <= safeNow\.getTime\(\) \+ MAX_COMPLETION_CLOCK_SKEW_MS \? value : safeNow/, 'future-dated portfolio evidence beyond tolerated clock skew must never be persisted');
+assert.match(source, /const clockSkewMs = value\.getTime\(\) - safeNow\.getTime\(\);/, 'portfolio completion validation must measure signed clock skew');
+assert.match(source, /Math\.abs\(clockSkewMs\) <= MAX_COMPLETION_CLOCK_SKEW_MS \? value : safeNow/, 'future and regressed completion clocks beyond tolerated skew must never be persisted');
+assert.doesNotMatch(source, /value\.getTime\(\) <= safeNow\.getTime\(\) \+ MAX_COMPLETION_CLOCK_SKEW_MS \? value : safeNow/, 'portfolio completion validation must not regress to a future-only clock check');
 assert.match(source, /function canonicalAchievedRubricIds\(/, 'portfolio proofs must canonicalize achieved rubric ids');
 assert.match(source, /new Set\(defaultProjectRubric\(project\)\.map\(\(item\) => item\.id\)\)/, 'only rubric ids declared by the project rubric may be persisted');
 assert.match(source, /new Set\(achievedRubricIds\.map\(\(id\) => id\.trim\(\)\)\.filter\(\(id\) => id && allowed\.has\(id\)\)\)/, 'rubric ids must be trimmed, filtered and deduplicated');
@@ -64,4 +66,4 @@ assert.match(progressSource, /index === existingIndex \? canonicalProof : item/,
 assert.match(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, canonicalProof\]/, 'first-time portfolio rewards must persist only canonical proof identity');
 assert.doesNotMatch(progressSource, /portfolioProofs: \[\.\.\.rewarded\.portfolioProofs, proof\]/, 'raw validated proof payloads must never be appended to the reward ledger');
 
-console.log('Portfolio proof integrity audit OK: completion timestamps, rubric evidence, restored skill evidence, normalized identities, reward deduplication, and distinct-project coverage are canonicalized before persistence or counting.');
+console.log('Portfolio proof integrity audit OK: completion timestamps reject impossible future or regressed clocks, rubric evidence, restored skill evidence, normalized identities, reward deduplication, and distinct-project coverage are canonicalized before persistence or counting.');
