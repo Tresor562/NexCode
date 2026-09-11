@@ -132,7 +132,20 @@ const mastery = (confidence, overrides = {}) => ({
   assert.deepEqual(result.weakSkills, ['dom']);
 }
 
+{
+  const restoredEvidence = [
+    ...evidence,
+    { lessonId: 'practice-bad-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:30:00.000Z', errorTag: 42 },
+    { lessonId: 'practice-bad-2', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:31:00.000Z', errorTag: 42 },
+    { lessonId: 'practice-good-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:32:00.000Z', errorTag: 'dom-query' },
+    { lessonId: 'practice-good-2', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:33:00.000Z', errorTag: 'dom-query' },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: restoredEvidence }), now);
+  assert.deepEqual(snapshot.recurringErrors, ['dom-query'], 'non-string restored error tags must be discarded before recurring-error ranking');
+}
+
 assert.match(source, /function boundedPercent\(value: unknown, fallback = 0\)/, 'mastery percentages must share one bounded normalization boundary');
 assert.match(source, /const normalizedRequired = boundedPercent\(required, 100\)/, 'invalid gate thresholds must fall back to the strictest requirement');
+assert.match(source, /candidate\.errorTag === undefined \|\| typeof candidate\.errorTag === 'string'/, 'restored mastery evidence must reject non-string error tags before diagnostics');
 
-console.log('Mastery gate audit OK: score, confidence, thresholds and corrupted clocks all fail closed while valid evidence remains usable.');
+console.log('Mastery gate audit OK: score, confidence, thresholds, corrupted clocks and malformed restored error tags all fail closed while valid evidence remains usable.');
