@@ -84,9 +84,9 @@ const lesson = {
       evidence: [],
     },
   };
-  const next = recordSkillAttempt(restored, lesson, true, new Date('2026-09-04T11:00:00.000Z'));
+  const next = recordSkillAttempt(restored, lesson, true, new Date('2026-09-04T11:57:00.000Z'));
   const state = next['js-arrays'];
-  assert.equal(state.lastPracticedAt, '2026-09-04T12:00:00.001Z', 'a delayed synced attempt must not move practice time backwards');
+  assert.equal(state.lastPracticedAt, '2026-09-04T12:00:00.001Z', 'a slightly delayed synced attempt must not move practice time backwards');
   assert.ok(new Date(state.nextReviewAt).getTime() > new Date(state.lastPracticedAt).getTime(), 'review scheduling must advance from the monotonic attempt time');
   assert.equal(state.evidence.at(-1)?.at, state.lastPracticedAt, 'evidence time and mastery time must remain consistent');
 }
@@ -103,9 +103,24 @@ const lesson = {
     },
   };
   const multiSkillLesson = { ...lesson, id: 'js-array-loop-lab', skillIds: ['js-arrays', 'js-loops'] };
-  const next = recordSkillAttempt(restored, multiSkillLesson, true, new Date('2026-09-04T12:30:00.000Z'));
-  assert.equal(next['js-arrays'].lastPracticedAt, '2026-09-04T13:30:00.001Z', 'multi-skill attempts must advance past the newest restored skill timestamp');
+  const next = recordSkillAttempt(restored, multiSkillLesson, true, new Date('2026-09-04T13:27:00.000Z'));
+  assert.equal(next['js-arrays'].lastPracticedAt, '2026-09-04T13:30:00.001Z', 'multi-skill attempts must advance past the newest plausible restored skill timestamp');
   assert.equal(next['js-loops'].lastPracticedAt, '2026-09-04T13:30:00.001Z', 'one learning event must use one coherent timestamp across all affected skills');
+}
+
+{
+  const restored = {
+    'js-arrays': {
+      skillId: 'js-arrays', score: 40, confidence: 44, band: 'learning', attempts: 2, correctAttempts: 2, consecutiveCorrect: 2,
+      lastPracticedAt: '2027-09-04T12:00:00.000Z', nextReviewAt: '2027-09-07T12:00:00.000Z', errorTags: [], evidence: [],
+    },
+  };
+  const candidate = new Date('2026-09-04T12:30:00.000Z');
+  const next = recordSkillAttempt(restored, lesson, true, candidate);
+  const state = next['js-arrays'];
+  assert.equal(state.lastPracticedAt, candidate.toISOString(), 'an implausibly future restored mastery clock must not drag a new attempt into the future');
+  assert.equal(state.evidence.at(-1)?.at, candidate.toISOString(), 'contained future clocks must keep evidence aligned with the real attempt time');
+  assert.ok(new Date(state.nextReviewAt).getTime() > candidate.getTime(), 'review scheduling must restart from the contained real attempt time');
 }
 
 {
@@ -192,10 +207,12 @@ assert.match(source, /function usableEvidence\(value: unknown\): AttemptEvidence
 assert.match(source, /const previousEvidence = usableEvidence\(previous\.evidence\)/, 'attempt recording must sanitize restored evidence before spreading it');
 assert.match(source, /function canonicalEvidenceContext\(value: unknown\)/, 'progression evidence contexts must pass through a canonical identity boundary');
 assert.match(source, /canonicalEvidenceContext\(item\.lessonId\)/, 'skill evidence gates must consume canonical lesson contexts');
+assert.match(source, /const MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS = 5 \* 60_000/, 'restored future mastery clocks must stay bounded by the five-minute tolerance');
 assert.match(source, /function latestPracticedTime\(map: MasteryMap, skillIds: string\[\]\)/, 'restored skill timestamps must share a latest-time boundary');
 assert.match(source, /function monotonicAttemptTime\(map: MasteryMap, lesson: Lesson, candidate: Date\)/, 'attempt recording must enforce monotonic chronology');
-assert.match(source, /latestMs \+ 1/, 'equal or stale attempt timestamps must advance beyond the latest stored instant');
+assert.match(source, /latestMs > candidateMs \+ MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS/, 'implausibly future restored timestamps must be contained before they can move a new attempt');
+assert.match(source, /latestMs \+ 1/, 'equal or slightly stale attempt timestamps must advance beyond the latest stored instant');
 assert.match(source, /const attemptTime = monotonicAttemptTime\(map, lesson, usableAttemptTime\(now\)\)/, 'attempt timestamps must cross both runtime-clock and monotonic-ordering boundaries before serialization');
 assert.match(source, /Array\.isArray\(previous\.errorTags\)/, 'restored error tags must be checked before spreading');
 
-console.log('Skill attempt integrity audit OK: malformed restored mastery state and evidence, canonical proof contexts, invalid clocks and delayed synced attempts cannot poison or rewind progression chronology.');
+console.log('Skill attempt integrity audit OK: malformed restored mastery state and evidence, canonical proof contexts, invalid clocks, plausible delayed sync and implausible future clocks cannot poison or rewind progression chronology.');
