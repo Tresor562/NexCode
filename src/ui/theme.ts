@@ -107,6 +107,13 @@ export const theme = {
     pressedDepth: 2,
     springSpeed: 32,
     springBounciness: 3,
+    // Shared progress motion is brief and purposeful. Normal increments glide
+    // quickly, while reaching 100% gets one finite halo pulse rather than a
+    // perpetual glow. Reduced-motion and background states resolve instantly.
+    progressDuration: 280,
+    progressCompletionIn: 160,
+    progressCompletionOut: 280,
+    progressCompletionScale: 1.035,
     // Bottom navigation is one of the most repeated interactions in the app.
     // Keep its emphasis restrained and centralize the spring so every glyph feels
     // like the same product instead of carrying component-local animation tuning.

@@ -23,6 +23,8 @@ export function ProgressBar({ value, label = 'Progression' }: { value: number; l
   const roundedValue = Math.round(safeValue);
   const { reduceMotion, appActive } = useMotionPreferences();
   const animatedValue = useRef(new Animated.Value(safeValue)).current;
+  const completionPulse = useRef(new Animated.Value(0)).current;
+  const wasComplete = useRef(safeValue >= 100);
 
   useEffect(() => {
     animatedValue.stopAnimation();
@@ -32,16 +34,48 @@ export function ProgressBar({ value, label = 'Progression' }: { value: number; l
     }
     Animated.timing(animatedValue, {
       toValue: safeValue,
-      duration: 260,
+      duration: theme.motion.progressDuration,
       useNativeDriver: false,
     }).start();
     return () => animatedValue.stopAnimation();
   }, [animatedValue, appActive, reduceMotion, safeValue]);
 
+  useEffect(() => {
+    const complete = safeValue >= 100;
+    const becameComplete = complete && !wasComplete.current;
+    wasComplete.current = complete;
+    completionPulse.stopAnimation();
+
+    if (!becameComplete || reduceMotion || !appActive) {
+      completionPulse.setValue(0);
+      return;
+    }
+
+    completionPulse.setValue(0);
+    const animation = Animated.sequence([
+      Animated.timing(completionPulse, {
+        toValue: 1,
+        duration: theme.motion.progressCompletionIn,
+        useNativeDriver: true,
+      }),
+      Animated.timing(completionPulse, {
+        toValue: 0,
+        duration: theme.motion.progressCompletionOut,
+        useNativeDriver: true,
+      }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [appActive, completionPulse, reduceMotion, safeValue]);
+
   const width = animatedValue.interpolate({
     inputRange: [0, 100],
     outputRange: ['0%', '100%'],
     extrapolate: 'clamp',
+  });
+  const completionScale = completionPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, theme.motion.progressCompletionScale],
   });
 
   return (
@@ -50,9 +84,17 @@ export function ProgressBar({ value, label = 'Progression' }: { value: number; l
       accessibilityLabel={label}
       accessibilityRole="progressbar"
       accessibilityValue={{ min: 0, max: 100, now: roundedValue, text: `${roundedValue} %` }}
-      style={styles.progressTrack}
+      style={styles.progressShell}
     >
-      <Animated.View style={[styles.progressValue, { width }]} />
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.progressCompletionGlow, { opacity: completionPulse, transform: [{ scale: completionScale }] }]}
+      />
+      <View style={styles.progressTrack}>
+        <Animated.View style={[styles.progressValue, { width }]}>
+          <View pointerEvents="none" style={styles.progressHighlight} />
+        </Animated.View>
+      </View>
     </View>
   );
 }
@@ -339,16 +381,42 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.xl,
     padding: theme.space.md,
   },
+  progressShell: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
+  progressCompletionGlow: {
+    position: 'absolute',
+    left: -4,
+    right: -4,
+    top: -4,
+    bottom: -4,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.success,
+    backgroundColor: theme.colors.successGlass,
+  },
   progressTrack: {
-    height: 9,
+    height: 10,
     borderRadius: theme.radius.pill,
     overflow: 'hidden',
     backgroundColor: theme.colors.surfaceGlassStrong,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    padding: 1,
   },
   progressValue: {
     height: '100%',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    overflow: 'hidden',
+  },
+  progressHighlight: {
+    width: '100%',
+    height: '46%',
     backgroundColor: theme.colors.primaryBright,
     borderRadius: theme.radius.pill,
+    opacity: 0.78,
   },
   primaryButton: {
     minHeight: theme.control.heightLg,

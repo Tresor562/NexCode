@@ -49,6 +49,14 @@ requireSnippet(components, 'minHeight: theme.control.heightLg', 'Primary control
 requireSnippet(components, 'width: theme.control.heightSm', 'Icon controls must keep tokenized 44pt sizing.');
 requireSnippet(components, 'backgroundColor: theme.colors.primary', 'Primary button must keep the semantic primary token.');
 requireSnippet(components, 'backgroundColor: theme.colors.surfaceGlassStrong', 'Progress track must keep a shared surface token.');
+requireSnippet(components, 'duration: theme.motion.progressDuration', 'Shared progress animation timing must come from the motion design system.');
+requireSnippet(components, 'const becameComplete = complete && !wasComplete.current;', 'Progress completion celebration must trigger only when crossing into a completed state.');
+requireSnippet(components, 'if (!becameComplete || reduceMotion || !appActive)', 'Progress completion celebration must fail closed for reduced motion, background state, and non-transition renders.');
+requireSnippet(components, 'theme.motion.progressCompletionIn', 'Progress completion halo must use the centralized finite entrance timing.');
+requireSnippet(components, 'theme.motion.progressCompletionOut', 'Progress completion halo must use the centralized finite exit timing.');
+requireSnippet(components, 'backgroundColor: theme.colors.primaryBright', 'Progress highlight must use the semantic brand highlight rather than a component-local literal.');
+requireSnippet(components, 'borderColor: theme.colors.success', 'Completed progress must use a semantic success halo.');
+requireSnippet(components, 'accessibilityRole="progressbar"', 'Premium progress visuals must retain native progress semantics.');
 requireSnippet(components, 'if (appActive && !reduceMotion && !disabled) return;', 'Disabled tactile controls must reset active press motion.');
 requireSnippet(components, 'if (disabled) {', 'Tactile animation must fail safe when a control is disabled.');
 requireSnippet(components, 'scale.setValue(1);', 'Disabled tactile controls must restore neutral scale.');
@@ -112,10 +120,18 @@ const pressedScale = readNumericToken('pressedScale');
 const pressedDepth = readNumericToken('pressedDepth');
 const springSpeed = readNumericToken('springSpeed');
 const springBounciness = readNumericToken('springBounciness');
+const progressDuration = readNumericToken('progressDuration');
+const progressCompletionIn = readNumericToken('progressCompletionIn');
+const progressCompletionOut = readNumericToken('progressCompletionOut');
+const progressCompletionScale = readNumericToken('progressCompletionScale');
 if (pressedScale < 0.975 || pressedScale > 0.99) throw new Error(`Shared tactile pressedScale must stay subtle (found ${pressedScale}).`);
 if (pressedDepth < 1 || pressedDepth > 3) throw new Error(`Shared tactile pressedDepth must stay shallow (found ${pressedDepth}).`);
 if (springSpeed < 28 || springSpeed > 36) throw new Error(`Shared tactile springSpeed must stay responsive (found ${springSpeed}).`);
 if (springBounciness < 0 || springBounciness > 5) throw new Error(`Shared tactile springBounciness must stay controlled (found ${springBounciness}).`);
+if (progressDuration < 180 || progressDuration > 420) throw new Error(`Shared progress duration must stay quick enough for repeated learning flows (found ${progressDuration}ms).`);
+if (progressCompletionIn < 100 || progressCompletionIn > 240) throw new Error(`Progress completion entrance must stay brief (found ${progressCompletionIn}ms).`);
+if (progressCompletionOut < 180 || progressCompletionOut > 420) throw new Error(`Progress completion exit must stay finite and restrained (found ${progressCompletionOut}ms).`);
+if (progressCompletionScale < 1.01 || progressCompletionScale > 1.06) throw new Error(`Progress completion scale must stay subtle (found ${progressCompletionScale}).`);
 
 const readHexToken = (token) => {
   const match = theme.match(new RegExp(`${token}:\\s*'(#(?:[0-9A-Fa-f]{6}))'`));
@@ -144,4 +160,4 @@ if (minimumMutedContrast < 4.5) {
   throw new Error(`Muted text contrast must stay AA-readable on core dark surfaces (found ${minimumMutedContrast.toFixed(2)}:1).`);
 }
 
-console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), centralized foreground-only resilient feedback, unified loading/disable-safe primary/secondary/icon/section controls, expanded shared hit targets, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
+console.log(`Design system components audit OK: semantic colors, shared motion lifecycle, premium tactile bounds (${pressedScale}/${pressedDepth}px, speed ${springSpeed}, bounce ${springBounciness}), finite reduced-motion-safe progress completion (${progressDuration}ms glide, ${progressCompletionIn + progressCompletionOut}ms halo), centralized foreground-only resilient feedback, unified loading/disable-safe primary/secondary/icon/section controls, expanded shared hit targets, tokenized touch targets, and muted-text AA contrast (${minimumMutedContrast.toFixed(2)}:1 minimum) are centralized.`);
