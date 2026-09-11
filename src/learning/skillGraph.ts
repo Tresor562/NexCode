@@ -137,20 +137,19 @@ function usableAttemptTime(now: Date) {
   return Number.isFinite(now.getTime()) ? now : new Date();
 }
 
-function latestPracticedTime(map: MasteryMap, skillIds: string[], candidateMs: number) {
+function latestPracticedTime(map: MasteryMap, skillIds: string[]) {
   let latest = Number.NEGATIVE_INFINITY;
-  const latestPlausibleMs = candidateMs + MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS;
   for (const skillId of skillIds) {
     const timestamp = new Date(map[skillId]?.lastPracticedAt ?? '').getTime();
-    if (Number.isFinite(timestamp) && timestamp <= latestPlausibleMs) latest = Math.max(latest, timestamp);
+    if (Number.isFinite(timestamp)) latest = Math.max(latest, timestamp);
   }
   return latest;
 }
 
 function monotonicAttemptTime(map: MasteryMap, lesson: Lesson, candidate: Date) {
   const candidateMs = candidate.getTime();
-  const latestMs = latestPracticedTime(map, lesson.skillIds ?? [], candidateMs);
-  if (!Number.isFinite(latestMs) || candidateMs > latestMs) return candidate;
+  const latestMs = latestPracticedTime(map, lesson.skillIds ?? []);
+  if (!Number.isFinite(latestMs) || latestMs > candidateMs + MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS || candidateMs > latestMs) return candidate;
   return new Date(latestMs + 1);
 }
 
