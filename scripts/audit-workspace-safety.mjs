@@ -33,6 +33,7 @@ assert.equal(canonicalWorkspacePath('src/report. '), null, 'Trailing dots or spa
 assert.equal(canonicalWorkspacePath('src/file:name.js'), null, 'Windows-invalid filename characters must be rejected for portable projects');
 assert.equal(canonicalWorkspacePath('src/component?.js'), null, 'Wildcard-like filename characters must not survive canonicalization');
 assert.match(source, /MAX_FUTURE_CLOCK_SKEW_MS\s*=\s*5\s*\*\s*60\s*\*\s*1000/, 'Lab restoration must keep a bounded clock-skew tolerance instead of trusting arbitrary future timestamps');
+assert.match(source, /MAX_RESTORED_FILE_CANDIDATES\s*=\s*1_200/, 'Lab restoration must bound candidate scanning while allowing rejected entries to be skipped');
 assert.match(source, /new Date\(timestamp\)\.toISOString\(\)\s*===\s*value/, 'Persisted Lab timestamps must use one canonical UTC ISO representation before they influence sync ordering');
 assert.match(source, /Date\.parse\(value\)\s*<=\s*nowMs\s*\+\s*MAX_FUTURE_CLOCK_SKEW_MS/, 'Persisted Lab timestamps must be bounded against the local clock before they influence restoration');
 assert.match(labEngineSource, /import\s+\{[^}]*restoreWorkspaceDraft[^}]*\}\s+from\s+['"]\.\.\/lib\/workspaceSafety['"]/, 'Lab engine must restore through the shared workspace safety boundary');
@@ -215,6 +216,23 @@ const options = {
 }
 
 {
+  const files = {};
+  for (let index = 0; index < 300; index += 1) files[`config/.env.${index}`] = 'SECRET=1';
+  files['src/app.js'] = 'console.log("learner work")';
+  const result = restoreWorkspaceDraft({
+    ...options,
+    stored: {
+      ...base,
+      files,
+      activeFile: 'src/app.js',
+    },
+  });
+  assert.equal(result.repaired, true, 'Rejected entries ahead of learner work must still be treated as a repair');
+  assert.deepEqual(result.draft.files, { 'src/app.js': 'console.log("learner work")' }, 'Rejected restore entries must not consume the final safe-file budget');
+  assert.equal(result.draft.activeFile, 'src/app.js', 'A valid file after a rejected prefix must remain active instead of being replaced by starter content');
+}
+
+{
   const result = restoreWorkspaceDraft({
     ...options,
     stored: {
@@ -267,4 +285,4 @@ const options = {
   assert.deepEqual(result.draft.passedCriteria, []);
 }
 
-console.log('Workspace safety audit OK: shared Lab restoration/import identity, portable path handling, sensitive filtering, validation-proof invalidation, canonical sync timestamps, and bounded clock integrity are protected.');
+console.log('Workspace safety audit OK: shared Lab restoration/import identity, portable path handling, sensitive filtering, rejected-prefix resilience, validation-proof invalidation, canonical sync timestamps, and bounded clock integrity are protected.');
