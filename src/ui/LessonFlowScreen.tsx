@@ -151,7 +151,8 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
     if (answer === null) return;
     setSubmitted(true);
     if (!recorded) {
-      onRecord(correct, correct ? undefined : `${lesson.id}.misconception`);
+      const errorSkillId = lesson.skillIds?.[0] ?? lesson.id;
+      onRecord(correct, correct ? undefined : `${errorSkillId}.choice-${answer}`);
       setRecorded(true);
     }
     if (correct) {
