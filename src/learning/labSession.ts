@@ -150,6 +150,23 @@ function resolvePreviewWorkspaceFile(draft: LabDraft, normalizedPath: string) {
   return Object.keys(draft.files).find((filename) => workspaceCollisionKey(filename) === collisionKey);
 }
 
+function previewPathDepth(path: string) {
+  return path.replace(/\\/g, '/').split('/').filter(Boolean).length;
+}
+
+function previewEntryPath(draft: LabDraft) {
+  const rootEntry = resolvePreviewWorkspaceFile(draft, 'index.html');
+  if (rootEntry) return rootEntry;
+
+  const activeEntry = Object.keys(draft.files).find((filename) => filename === draft.activeFile && filename.toLowerCase().endsWith('.html'));
+  if (activeEntry) return activeEntry;
+
+  const htmlFiles = Object.keys(draft.files)
+    .filter((filename) => filename.toLowerCase().endsWith('.html'))
+    .sort((left, right) => previewPathDepth(left) - previewPathDepth(right) || left.localeCompare(right));
+  return htmlFiles.find((filename) => filename.replace(/\\/g, '/').split('/').pop()?.toLowerCase() === 'index.html') ?? htmlFiles[0];
+}
+
 function svgPreviewDataUri(source: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
 }
@@ -167,11 +184,11 @@ function inlineLocalSvgCssUrls(source: string, draft: LabDraft, stylesheetPath: 
   });
 }
 
-function inlineLocalPreviewImages(document: string, draft: LabDraft) {
+function inlineLocalPreviewImages(document: string, draft: LabDraft, documentPath?: string) {
   return document.replace(/<img\b[^>]*>/gi, (tag) => {
     const src = previewAttribute(tag, 'src');
     if (!src) return tag;
-    const normalizedPath = normalizePreviewAssetPath(src);
+    const normalizedPath = normalizePreviewAssetPath(src, documentPath);
     if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.svg')) return tag;
     const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
     if (!path) return tag;
@@ -182,16 +199,16 @@ function inlineLocalPreviewImages(document: string, draft: LabDraft) {
   });
 }
 
-function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
+function inlineLocalPreviewAssets(document: string, draft: LabDraft, documentPath?: string) {
   const inlinedStyles = new Set<string>();
   const inlinedScripts = new Set<string>();
 
-  let output = inlineLocalPreviewImages(document, draft);
+  let output = inlineLocalPreviewImages(document, draft, documentPath);
   output = output.replace(/<link\b[^>]*>/gi, (tag) => {
     const rel = previewAttribute(tag, 'rel')?.toLowerCase().split(/\s+/) ?? [];
     const href = previewAttribute(tag, 'href');
     if (!href || !rel.includes('stylesheet')) return tag;
-    const normalizedPath = normalizePreviewAssetPath(href);
+    const normalizedPath = normalizePreviewAssetPath(href, documentPath);
     if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.css')) return tag;
     const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
     if (!path) return tag;
@@ -206,7 +223,7 @@ function inlineLocalPreviewAssets(document: string, draft: LabDraft) {
   output = output.replace(/<script\b[^>]*\bsrc\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)[^>]*>\s*<\/script>/gi, (tag) => {
     const src = previewAttribute(tag, 'src');
     if (!src) return tag;
-    const normalizedPath = normalizePreviewAssetPath(src);
+    const normalizedPath = normalizePreviewAssetPath(src, documentPath);
     if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.js')) return tag;
     const path = resolvePreviewWorkspaceFile(draft, normalizedPath);
     if (!path) return tag;
@@ -275,11 +292,13 @@ function previewHeadMarkup(styleTag: string) {
 }
 
 export function webPreviewDocument(draft: LabDraft) {
-  const entryPath = resolvePreviewWorkspaceFile(draft, 'index.html');
+  const entryPath = previewEntryPath(draft);
   const sourceHtml = (entryPath ? draft.files[entryPath] : undefined)?.trim() || '<main></main>';
-  const inlined = inlineLocalPreviewAssets(sourceHtml, draft);
-  const fallbackCssPath = resolvePreviewWorkspaceFile(draft, 'styles.css');
-  const fallbackJsPath = resolvePreviewWorkspaceFile(draft, 'script.js');
+  const inlined = inlineLocalPreviewAssets(sourceHtml, draft, entryPath);
+  const fallbackCssReference = normalizePreviewAssetPath('styles.css', entryPath) ?? 'styles.css';
+  const fallbackJsReference = normalizePreviewAssetPath('script.js', entryPath) ?? 'script.js';
+  const fallbackCssPath = resolvePreviewWorkspaceFile(draft, fallbackCssReference);
+  const fallbackJsPath = resolvePreviewWorkspaceFile(draft, fallbackJsReference);
   const fallbackCss = fallbackCssPath && !inlined.inlinedStyles.has(fallbackCssPath) ? (draft.files[fallbackCssPath] ?? '') : '';
   const fallbackJs = fallbackJsPath && !inlined.inlinedScripts.has(fallbackJsPath) ? (draft.files[fallbackJsPath] ?? '') : '';
   const styleTag = fallbackCssPath && fallbackCss
