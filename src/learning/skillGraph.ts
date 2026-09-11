@@ -37,6 +37,7 @@ export type SkillMastery = {
 export type MasteryMap = Record<string, SkillMastery>;
 
 const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
+const MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS = 5 * 60_000;
 
 export function masteryBand(score: number): MasteryBand {
   if (score >= 85) return 'mastered';
@@ -136,18 +137,19 @@ function usableAttemptTime(now: Date) {
   return Number.isFinite(now.getTime()) ? now : new Date();
 }
 
-function latestPracticedTime(map: MasteryMap, skillIds: string[]) {
+function latestPracticedTime(map: MasteryMap, skillIds: string[], candidateMs: number) {
   let latest = Number.NEGATIVE_INFINITY;
+  const latestPlausibleMs = candidateMs + MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS;
   for (const skillId of skillIds) {
     const timestamp = new Date(map[skillId]?.lastPracticedAt ?? '').getTime();
-    if (Number.isFinite(timestamp)) latest = Math.max(latest, timestamp);
+    if (Number.isFinite(timestamp) && timestamp <= latestPlausibleMs) latest = Math.max(latest, timestamp);
   }
   return latest;
 }
 
 function monotonicAttemptTime(map: MasteryMap, lesson: Lesson, candidate: Date) {
   const candidateMs = candidate.getTime();
-  const latestMs = latestPracticedTime(map, lesson.skillIds ?? []);
+  const latestMs = latestPracticedTime(map, lesson.skillIds ?? [], candidateMs);
   if (!Number.isFinite(latestMs) || candidateMs > latestMs) return candidate;
   return new Date(latestMs + 1);
 }
@@ -256,15 +258,4 @@ export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
       .filter((context): context is string => context !== null),
   );
   return contexts.size < 2;
-}
-
-export function courseMastery(course: Course, mastery: MasteryMap): number {
-  if (course.skillIds.length === 0) return 0;
-  const total = course.skillIds.reduce((sum, id) => sum + boundedScore(mastery[id]?.score), 0);
-  return Math.round(total / course.skillIds.length);
-}
-
-export function weakSkillIds(course: Course, mastery: MasteryMap, threshold = 55) {
-  const requiredScore = boundedScore(threshold);
-  return course.skillIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }
