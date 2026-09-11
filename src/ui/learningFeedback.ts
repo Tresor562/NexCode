@@ -10,6 +10,7 @@ type StrongLearningFeedbackKind = 'notification' | 'impact';
 export type ReplayableAudioPlayer = {
   seekTo: (seconds: number) => Promise<unknown>;
   play: () => void;
+  pause?: () => void;
 };
 
 const FEEDBACK_COOLDOWN_MS: Record<LearningFeedbackKind, number> = {
@@ -30,6 +31,7 @@ let sharedLastStrongFeedbackKind: StrongLearningFeedbackKind | undefined;
 let sharedLastNotificationFeedbackAt: number | undefined;
 let sharedSemanticAudioProtectedFrom: number | undefined;
 let sharedSemanticAudioProtectedUntil: number | undefined;
+let sharedActiveAudioPlayer: ReplayableAudioPlayer | undefined;
 
 // A semantic success/error sound belongs to the synchronous notification turn that
 // requested it. The millisecond window remains as a defensive clock bound, while
@@ -44,6 +46,17 @@ let sharedAudioRequestGeneration = 0;
 function clearSemanticAudioProtection() {
   sharedSemanticAudioProtectedFrom = undefined;
   sharedSemanticAudioProtectedUntil = undefined;
+}
+
+function stopActiveAudio() {
+  const activePlayer = sharedActiveAudioPlayer;
+  sharedActiveAudioPlayer = undefined;
+  if (!activePlayer?.pause) return;
+  try {
+    activePlayer.pause();
+  } catch {
+    // Native audio teardown must never make learning navigation or feedback fail.
+  }
 }
 
 function resetTransientFeedbackCadence() {
@@ -72,6 +85,7 @@ function openSemanticAudioAssociationWindow() {
 
 function supersedeAudio(): number {
   clearSemanticAudioProtection();
+  stopActiveAudio();
   // Any newer audio/lifecycle request terminates the semantic notification turn.
   // Keeping that permit alive after a superseding request could let a foregrounded
   // app or a later interaction inherit success/error priority from stale feedback.
@@ -232,6 +246,7 @@ export function createLearningFeedbackGate(now: () => number = Date.now) {
           if (sharedAudioRequestGeneration !== generation) return;
           if (!nativeAppIsActive()) return;
           player.play();
+          sharedActiveAudioPlayer = player;
         })
         .catch(() => undefined);
     },
