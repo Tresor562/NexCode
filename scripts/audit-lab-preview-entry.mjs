@@ -60,6 +60,33 @@ const nestedHtml = webPreviewDocument({
 });
 assert.match(nestedHtml, /<main>NexCode<\/main>/, 'A nested HTML entry must still activate the Web preview even when a non-HTML file is active.');
 
+const activePage = webPreviewDocument({
+  ...baseDraft,
+  files: {
+    'index.html': '<main>Home</main>',
+    'pages/profile.html': '<main>Profile</main>',
+    'pages/styles.css': 'main { color: rebeccapurple; }',
+    'pages/script.js': 'document.body.dataset.page = "profile";',
+  },
+  activeFile: 'pages/profile.html',
+});
+assert.match(activePage, /<main>Profile<\/main>/, 'The active HTML page must take priority over a root index in a multi-page Lab.');
+assert.doesNotMatch(activePage, /<main>Home<\/main>/, 'The root index must not mask an explicitly selected HTML page.');
+assert.match(activePage, /data-nexcode-source="pages\/styles\.css"/, 'An active nested page must keep its directory-scoped fallback stylesheet.');
+assert.match(activePage, /data-nexcode-source="pages\/script\.js"/, 'An active nested page must keep its directory-scoped fallback script.');
+
+const rootFallback = webPreviewDocument({
+  ...baseDraft,
+  files: {
+    'index.html': '<main>Home fallback</main>',
+    'pages/profile.html': '<main>Profile hidden</main>',
+    'main.js': 'console.log("editing")',
+  },
+  activeFile: 'main.js',
+});
+assert.match(rootFallback, /<main>Home fallback<\/main>/, 'The root index must remain the stable fallback while a non-HTML file is active.');
+assert.doesNotMatch(rootFallback, /Profile hidden/, 'A non-HTML active file must not select an unrelated nested page over the root entry.');
+
 const emptyHtml = webPreviewDocument({
   ...baseDraft,
   files: {
@@ -70,6 +97,7 @@ const emptyHtml = webPreviewDocument({
 });
 assert.match(emptyHtml, /<main><\/main>/, 'An existing but empty HTML entry must keep the stable preview scaffold.');
 
+assert.match(source, /const activeEntry =[\s\S]*?if \(activeEntry\) return activeEntry;[\s\S]*?const rootEntry = resolvePreviewWorkspaceFile\(draft, 'index\.html'\);/, 'An explicitly active HTML page must be considered before the root fallback.');
 assert.match(source, /const entryPath = previewEntryPath\(draft\);\s*if \(!entryPath\) return undefined;/, 'The preview must explicitly fail closed when no HTML entry exists.');
 
-console.log('Lab preview entry audit OK: non-HTML workspaces use the native empty state while real HTML entries, including nested entries, still render.');
+console.log('Lab preview entry audit OK: non-HTML workspaces stay empty, active multi-page HTML entries win explicitly, root index remains the non-HTML fallback, and nested HTML entries still render.');
