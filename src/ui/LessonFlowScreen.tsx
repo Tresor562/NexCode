@@ -171,6 +171,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   function retry() {
     setAnswer(null);
     setSubmitted(false);
+    setRecorded(false);
     setQuizRetryCount((value) => value + 1);
     setQuizReflection('');
   }
