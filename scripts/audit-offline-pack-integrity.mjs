@@ -7,10 +7,13 @@ const source = fs.readFileSync('src/learning/offlineEngine.ts', 'utf8');
 const required = [
   'export function offlinePackIntegrityIssue',
   'function isOfflinePackKind(value: unknown)',
+  'function packIdentityScope(pack: OfflinePack)',
   'function packIdentityMatchesMetadata(pack: OfflinePack)',
+  'function packIdentityMatchesCourseStructure(pack: OfflinePack, course: Course)',
   'const prefix = `${pack.courseId}:`',
   'const suffix = `:${pack.kind}:v${pack.curriculumVersion}`',
   'if (!packIdentityMatchesMetadata(pack))',
+  'if (!packIdentityMatchesCourseStructure(pack, course))',
   'if (!isOfflinePackKind(kind)) return undefined',
   'if (!isOfflinePackKind(pack.kind))',
   'Number.isFinite(pack.estimatedMb)',
@@ -79,11 +82,13 @@ for (const kind of ['lite', 'standard', 'full']) {
   assert.ok(pack, `${kind} must remain a valid chapter pack variant`);
   assert.equal(pack.kind, kind);
   assert.equal(offlinePackIntegrityIssue(pack), undefined);
+  assert.equal(offlineUpdatePlan([pack], [course])[0]?.action, 'keep', `${kind} chapter packs must remain structurally recognized`);
 }
 
 const stagePack = buildStageOfflinePack(course, 'foundation', 'standard');
 assert.ok(stagePack, 'valid stage packs must remain accepted by the stronger identity contract');
 assert.equal(offlinePackIntegrityIssue(stagePack), undefined);
+assert.equal(offlineUpdatePlan([stagePack], [course])[0]?.action, 'keep', 'valid stage identities must remain bound to their chapter set');
 
 const canonical = buildChapterOfflinePack(course, 'basics', 'standard');
 assert.ok(canonical);
@@ -101,6 +106,42 @@ for (const forged of [forgedCourseId, forgedKindId, forgedVersionId]) {
   assert.equal(offlineUpdatePlan([forged], [course])[0]?.action, 'remove', 'forged pack identities must be removed before update planning');
 }
 
+const forgedScope = {
+  ...canonical,
+  id: `web:invented-scope:standard:v${course.curriculumVersion}`,
+};
+assert.equal(
+  offlinePackIntegrityIssue(forgedScope),
+  undefined,
+  'generic restored-pack integrity can only validate self-consistent metadata before a curriculum is available',
+);
+assert.equal(
+  offlineUpdatePlan([forgedScope], [course])[0]?.action,
+  'remove',
+  'a self-consistent id with a scope that was never minted by the course must not survive update planning',
+);
+
+const forgedChapterBinding = {
+  ...canonical,
+  id: `web:layout:standard:v${course.curriculumVersion}`,
+  chapterIds: ['basics'],
+};
+assert.equal(
+  offlineUpdatePlan([forgedChapterBinding], [course])[0]?.action,
+  'remove',
+  'chapter-scoped ids must describe exactly the chapter encoded in their identity',
+);
+
+const forgedStageBinding = {
+  ...stagePack,
+  chapterIds: ['basics'],
+};
+assert.equal(
+  offlineUpdatePlan([forgedStageBinding], [course])[0]?.action,
+  'remove',
+  'stage-scoped ids must preserve the complete chapter set defined by the current course structure',
+);
+
 assert.equal(
   buildChapterOfflinePack(course, 'basics', 'light'),
   undefined,
@@ -112,4 +153,4 @@ assert.equal(
   'stage builders must reject malformed runtime variants before constructing child packs',
 );
 
-console.log('Offline pack integrity audit passed: runtime variants, metadata-bound identities, restored-pack integrity and storage accounting are protected.');
+console.log('Offline pack integrity audit passed: runtime variants, metadata-bound identities, course-structure scope, restored-pack integrity and storage accounting are protected.');
