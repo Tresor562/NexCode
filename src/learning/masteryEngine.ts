@@ -26,6 +26,16 @@ export type GateResult = {
 
 const MAX_FUTURE_PRACTICE_SKEW_MS = 5 * 60 * 1000;
 const MAX_REVIEW_SCHEDULE_MS = 22 * 86_400_000;
+const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
+const VALID_EVIDENCE_KINDS: ReadonlySet<string> = new Set<MasteryEvidenceKind>([
+  'lesson',
+  'practice',
+  'review',
+  'lab',
+  'checkpoint',
+  'boss',
+  'project',
+]);
 
 function boundedPercent(value: unknown, fallback = 0) {
   return typeof value === 'number' && Number.isFinite(value)
@@ -47,21 +57,33 @@ function canonicalSkillIds(value: unknown) {
   return skillIds;
 }
 
+function canonicalEvidenceContext(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const context = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!context || context.length > MAX_EVIDENCE_CONTEXT_LENGTH) return null;
+  return context;
+}
+
 function usableEvidence(value: unknown): AttemptEvidence[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is AttemptEvidence => {
-    if (!item || typeof item !== 'object') return false;
+  const restored: AttemptEvidence[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
     const candidate = item as Partial<AttemptEvidence>;
-    return (
-      typeof candidate.lessonId === 'string' &&
-      typeof candidate.activityKind === 'string' &&
-      typeof candidate.correct === 'boolean' &&
-      typeof candidate.scoreDelta === 'number' &&
-      Number.isFinite(candidate.scoreDelta) &&
-      typeof candidate.at === 'string' &&
-      (candidate.errorTag === undefined || typeof candidate.errorTag === 'string')
-    );
-  });
+    const lessonId = canonicalEvidenceContext(candidate.lessonId);
+    if (
+      !lessonId ||
+      typeof candidate.activityKind !== 'string' ||
+      !VALID_EVIDENCE_KINDS.has(candidate.activityKind) ||
+      typeof candidate.correct !== 'boolean' ||
+      typeof candidate.scoreDelta !== 'number' ||
+      !Number.isFinite(candidate.scoreDelta) ||
+      typeof candidate.at !== 'string' ||
+      (candidate.errorTag !== undefined && typeof candidate.errorTag !== 'string')
+    ) continue;
+    restored.push({ ...candidate, lessonId } as AttemptEvidence);
+  }
+  return restored;
 }
 
 function ageDays(iso: string | undefined, now: Date) {
