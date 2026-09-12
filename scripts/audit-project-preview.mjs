@@ -53,8 +53,8 @@ function assertPreviewPolicy(output) {
   assertPreviewPolicy(output);
   assert.ok(output.indexOf('Content-Security-Policy') < output.indexOf('https://example.com/external.js'), 'CSP must be injected before user head scripts');
   assert.ok(output.indexOf('NEXCODE_CONSOLE:') < output.indexOf('https://example.com/external.js'), 'Console bridge must be installed before user scripts');
-  assert.ok(output.indexOf('<style>') < output.indexOf('</head>'), 'Project styles must be injected inside head');
-  assert.ok(output.lastIndexOf('<script>') < output.indexOf('</body>'), 'Project script must be injected inside body');
+  assert.ok(output.indexOf('<style') < output.indexOf('</head>'), 'Project styles must be injected inside head');
+  assert.ok(output.lastIndexOf('<script') < output.indexOf('</body>'), 'Project script must be injected inside body');
 }
 
 {
@@ -108,6 +108,63 @@ function assertPreviewPolicy(output) {
 
 {
   const files = {
+    'demo/page.html': '<html><head><link rel="stylesheet" href="./page.css"></head><body><main>ACTIVE ASSETS</main><script src="./page.js"></script></body></html>',
+    'demo/page.css': 'body { --active-css: 1; }',
+    'demo/page.js': 'console.log("ACTIVE_JS")',
+    'portfolio/index.html': '<main>OTHER PROJECT</main>',
+    'portfolio/portfolio.css': 'body { --other-css: 1; }',
+    'portfolio/portfolio.js': 'console.log("OTHER_JS")',
+  };
+  const output = buildPreview(files, 'demo/page.html');
+  assert.match(output, /--active-css: 1/, 'The active page must inline its referenced stylesheet');
+  assert.match(output, /ACTIVE_JS/, 'The active page must inline its referenced script');
+  assert.match(output, /data-nexcode-source="demo\/page\.css"/, 'Inlined styles must retain their workspace source for diagnostics');
+  assert.match(output, /data-nexcode-source="demo\/page\.js"/, 'Inlined scripts must retain their workspace source for diagnostics');
+  assert.doesNotMatch(output, /--other-css: 1/, 'Styles from an unrelated sub-project must not leak into the active preview');
+  assert.doesNotMatch(output, /OTHER_JS/, 'Scripts from an unrelated sub-project must not execute in the active preview');
+}
+
+{
+  const files = {
+    'demo/page.html': '<html><head><link rel="stylesheet" href="../shared/theme.css?rev=2"></head><body><main>RELATIVE ASSETS</main><script src="../shared/app.js#latest"></script></body></html>',
+    'shared/theme.css': 'body { --shared-theme: 1; }',
+    'shared/app.js': 'console.info("SHARED_APP")',
+  };
+  const output = buildPreview(files, 'demo/page.html');
+  assert.match(output, /--shared-theme: 1/, 'Relative parent-directory styles must resolve within the workspace');
+  assert.match(output, /SHARED_APP/, 'Relative parent-directory scripts must resolve within the workspace');
+  assert.match(output, /data-nexcode-source="shared\/theme\.css"/, 'Query strings must not break local style resolution');
+  assert.match(output, /data-nexcode-source="shared\/app\.js"/, 'Hash fragments must not break local script resolution');
+}
+
+{
+  const files = {
+    'demo/page.html': '<main>SAME DIRECTORY FALLBACK</main>',
+    'demo/style.css': 'body { --demo-fallback: 1; }',
+    'demo/script.js': 'console.log("DEMO_FALLBACK")',
+    'other/style.css': 'body { --unrelated-fallback: 1; }',
+    'other/script.js': 'console.log("UNRELATED_FALLBACK")',
+  };
+  const output = buildPreview(files, 'demo/page.html');
+  assert.match(output, /--demo-fallback: 1/, 'A page without explicit links may use conventional style.css from its own directory');
+  assert.match(output, /DEMO_FALLBACK/, 'A page without explicit scripts may use conventional script.js from its own directory');
+  assert.doesNotMatch(output, /--unrelated-fallback: 1/, 'Conventional CSS fallback must stay scoped to the HTML entry directory');
+  assert.doesNotMatch(output, /UNRELATED_FALLBACK/, 'Conventional JS fallback must stay scoped to the HTML entry directory');
+}
+
+{
+  const files = {
+    'demo/page.html': '<html><head><link rel="stylesheet" href="../../secret.css"></head><body><main>BOUNDED PATH</main><script src="../../secret.js"></script></body></html>',
+    'secret.css': 'body { --escaped-style: 1; }',
+    'secret.js': 'console.log("ESCAPED_SCRIPT")',
+  };
+  const output = buildPreview(files, 'demo/page.html');
+  assert.doesNotMatch(output, /--escaped-style: 1/, 'Preview asset resolution must not escape above the workspace root');
+  assert.doesNotMatch(output, /ESCAPED_SCRIPT/, 'Escaping script references must never be executed');
+}
+
+{
+  const files = {
     'portfolio/index.htm': '<main>NESTED HTM INDEX</main>',
     'docs/about.html': '<main>ABOUT</main>',
   };
@@ -134,6 +191,10 @@ function assertPreviewPolicy(output) {
 
 assert.match(source, /buildPreview\(draft\.files, draft\.activeFile\)/, 'Project preview must resolve its entry from the active workspace document');
 assert.match(source, /\[draft\.files, draft\.activeFile\]/, 'Project preview memoization must refresh when the active document changes');
+assert.match(source, /function resolvePreviewAssetPath\(/, 'Project preview must resolve assets relative to the selected HTML entry');
+assert.match(source, /function conventionalPreviewAsset\(/, 'Project preview conventional fallbacks must stay entry-directory scoped');
+assert.doesNotMatch(source, /filter\(\(\[name\]\) => name\.toLowerCase\(\)\.endsWith\('\.css'\)\)[\s\S]*join\('\n'\)/, 'Project preview must never concatenate every CSS file in the workspace');
+assert.doesNotMatch(source, /filter\(\(\[name\]\) => name\.toLowerCase\(\)\.endsWith\('\.js'\)\)[\s\S]*join\('\n'\)/, 'Project preview must never concatenate every JavaScript file in the workspace');
 assert.match(source, /originWhitelist=\{\['about:blank'\]\}/, 'Project WebView must only whitelist the local about:blank origin');
 assert.match(source, /baseUrl:\s*'about:blank'/, 'Project WebView must render from a local about:blank base URL');
 assert.match(source, /domStorageEnabled=\{false\}/, 'Project WebView DOM storage must stay disabled');
@@ -142,4 +203,4 @@ assert.match(source, /onMessage=\{\(event\) => handlePreviewMessage\(event\.nati
 assert.match(source, /key=\{`preview-\$\{previewRunId\}`\}/, 'Run must be able to remount the preview for a true rerun');
 assert.match(source, /request\.url === 'about:blank' \|\| request\.url\.startsWith\('data:'\)/, 'Project WebView navigation must stay local/data-only');
 
-console.log('Project preview audit OK: secure local rendering, active-entry parity, nested/HTM fallbacks, live bounded console and reruns are protected.');
+console.log('Project preview audit OK: secure local rendering, active-entry parity, entry-scoped assets, nested/HTM fallbacks, live bounded console and reruns are protected.');
