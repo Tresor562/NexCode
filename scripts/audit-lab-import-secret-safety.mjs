@@ -36,4 +36,8 @@ if (!/importFolderFromPhone[\s\S]*readTextFile\(entry\)/.test(importSource)) {
   throw new Error('Folder imports must pass through the secret-safe text reader.');
 }
 
-console.log('✓ Lab imports reuse the shared secret guard before workspace persistence/sync');
+if (!/TEXT_EXTENSIONS[\s\S]*['"]svg['"]/.test(importSource)) {
+  throw new Error('Lab project imports must preserve local SVG assets used by offline Web previews.');
+}
+
+console.log('✓ Lab imports reuse the shared secret guard and preserve SVG Web assets before workspace persistence/sync');
