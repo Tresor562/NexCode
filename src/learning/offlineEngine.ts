@@ -37,6 +37,14 @@ function packIncludes(kind: OfflinePackKind): OfflinePack['includes'] {
       : ['content', 'examples', 'exercise-assets', 'lab-starters', 'media'];
 }
 
+function packIdentityMatchesMetadata(pack: OfflinePack) {
+  const prefix = `${pack.courseId}:`;
+  const suffix = `:${pack.kind}:v${pack.curriculumVersion}`;
+  if (!pack.id.startsWith(prefix) || !pack.id.endsWith(suffix)) return false;
+  const scope = pack.id.slice(prefix.length, pack.id.length - suffix.length);
+  return Boolean(scope) && !scope.startsWith(':') && !scope.endsWith(':');
+}
+
 export function buildChapterOfflinePack(course: Course, chapterId: string, kind: OfflinePackKind = 'standard'): OfflinePack | undefined {
   if (!isOfflinePackKind(kind)) return undefined;
   const chapter = course.chapters.find((item) => item.id === chapterId);
@@ -83,6 +91,7 @@ export function offlinePackIntegrityIssue(pack: OfflinePack): string | undefined
   if (pack.courseId.trim() !== pack.courseId || pack.courseId.length > MAX_COURSE_ID_CHARS) return 'Identifiant de parcours invalide.';
   if (!isOfflinePackKind(pack.kind)) return 'Variante de pack inconnue.';
   if (!Number.isInteger(pack.curriculumVersion) || pack.curriculumVersion < 1) return 'Version de curriculum invalide.';
+  if (!packIdentityMatchesMetadata(pack)) return 'Identité du pack incohérente avec ses métadonnées.';
   if (!Number.isFinite(pack.estimatedMb) || pack.estimatedMb <= 0 || pack.estimatedMb > MAX_ESTIMATED_MB) return 'Taille du pack invalide.';
   if (!Array.isArray(pack.chapterIds) || !pack.chapterIds.length) return 'Pack sans chapitre.';
   if (pack.chapterIds.length > MAX_PACK_CHAPTERS) return 'Pack avec trop de chapitres.';
