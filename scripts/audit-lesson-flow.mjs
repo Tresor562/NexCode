@@ -11,6 +11,7 @@ assert.match(source, /setStepIndex\(0\)/, 'lesson switch must reset the step ind
 assert.match(source, /setAnswer\(null\)/, 'lesson switch must clear the selected quiz answer');
 assert.match(source, /setSubmitted\(false\)/, 'lesson switch must clear submitted feedback');
 assert.match(source, /setRecorded\(false\)/, 'lesson switch must clear per-attempt recording state');
+assert.match(source, /setQuizRetryCount\(0\)/, 'lesson switch must clear scaffolded quiz retry state');
 assert.match(source, /setPredictionDraft\(''\)/, 'lesson switch must clear code-prediction drafts');
 assert.match(source, /setRecallDraft\(''\)/, 'lesson switch must clear active-recall drafts');
 assert.match(source, /setRecallRevealed\(false\)/, 'lesson switch must hide old active-recall hints');
@@ -43,6 +44,14 @@ assert.match(source, /accessibilityLabel="Explication de ta bonne réponse"/, 'p
 assert.match(source, /transferDraft\.trim\(\)\.length >= 12/, 'transfer must require a substantive strategy');
 assert.match(source, /disabled=\{!transferAttemptReady\}/, 'Lab transition must stay gated by the transfer attempt');
 
+assert.match(source, /const revealQuizSolution = submitted && \(correct \|\| quizRetryCount >= 1\);/, 'a first wrong answer must not reveal the correct option immediately');
+assert.match(source, /const revealCorrect = revealQuizSolution && index === lesson\.correctIndex;/, 'quiz option styling must obey the delayed solution reveal gate');
+assert.match(source, /correct \|\| quizRetryCount >= 1 \? lesson\.explanation : `Reviens à l’idée-clé:/, 'first-error feedback must scaffold from the concept instead of leaking the full explanation');
+assert.match(source, /function retry\(\)[\s\S]*setQuizRetryCount\(\(value\) => value \+ 1\);[\s\S]*setQuizReflection\(''\);[\s\S]*\}/, 'quiz retries must advance scaffold depth and clear stale reflection');
+const retryBody = source.match(/function retry\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? '';
+assert.doesNotMatch(retryBody, /setRecorded\(false\)/, 'a scaffolded retry must not become a second independent mastery attempt');
+assert.match(source, /onRecord\(correct, correct \? undefined : `\$\{errorSkillId\}\.choice-\$\{answer\}`\);/, 'quiz evidence must remain tied to the learner first submitted choice');
+
 assert.match(source, /useMotionPreferences\(\)/, 'lesson flow must share the app-wide motion preference lifecycle');
 assert.match(source, /const \{ reduceMotion, appActive \} = useMotionPreferences\(\)/, 'lesson flow must consume both reduced-motion and foreground state');
 assert.match(source, /if \(reduceMotion \|\| !appActive\)/, 'mentor animation must stop for reduced motion or while the app is inactive');
@@ -61,4 +70,4 @@ assert.match(feedbackSource, /sharedAudioRequestGeneration !== generation/, 'sha
 assert.doesNotMatch(source, /from 'expo-haptics'/, 'lesson flow must not bypass the shared haptic controller');
 assert.doesNotMatch(source, /player\.seekTo\(0\)[\s\S]{0,80}player\.play\(\)/, 'lesson flow must not bypass shared stale-audio protection');
 
-console.log('Lesson flow audit OK: native code filenames, active code prediction, lesson-switch reset, active recall, post-quiz retrieval reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
+console.log('Lesson flow audit OK: native code filenames, active prediction/recall, first-attempt quiz evidence, delayed solution scaffolding, post-quiz reflection, transfer gating, shared motion lifecycle, centralized foreground feedback and live accessibility feedback are protected.');
