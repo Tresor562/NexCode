@@ -13,9 +13,52 @@ export type ReviewItem = {
   reason: string;
 };
 
+const DAY_MS = 86_400_000;
+const MAX_IDENTITY_LENGTH = 160;
+const UNSAFE_IDENTITY_CONTROLS = /[\u0000-\u001F\u007F]/;
+// recordSkillAttempt currently schedules at most 21 days ahead. Keep one day of
+// tolerance for timezone/device-boundary effects, but fail closed if restored or
+// cloud state tries to postpone a review beyond any interval NexCode can mint.
+const MAX_REVIEW_HORIZON_MS = 22 * DAY_MS;
+const MAX_OVERDUE_AGE_BONUS = 24;
+
+function canonicalSkillIds(skillIds: string[] | undefined) {
+  const canonical: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of Array.isArray(skillIds) ? skillIds : []) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.normalize('NFKC').trim();
+    if (!value || value.length > MAX_IDENTITY_LENGTH || UNSAFE_IDENTITY_CONTROLS.test(value) || seen.has(value)) continue;
+    seen.add(value);
+    canonical.push(value);
+  }
+  return canonical;
+}
+
+function canonicalErrorTags(errorTags: unknown[]) {
+  const canonical: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of Array.isArray(errorTags) ? errorTags : []) {
+    if (typeof raw !== 'string') continue;
+    const value = raw.normalize('NFKC').trim().toLocaleLowerCase();
+    if (!value || value.length > MAX_IDENTITY_LENGTH || UNSAFE_IDENTITY_CONTROLS.test(value) || seen.has(value)) continue;
+    seen.add(value);
+    canonical.push(value);
+  }
+  return canonical;
+}
+
+function validNow(now: Date): Date {
+  return now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
+}
+
 function daysUntil(iso: string | undefined, now: Date) {
   if (!iso) return 0;
-  return (new Date(iso).getTime() - now.getTime()) / 86_400_000;
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) return 0;
+  const delay = timestamp - now.getTime();
+  if (delay > MAX_REVIEW_HORIZON_MS) return 0;
+  return delay / DAY_MS;
 }
 
 function windowFor(days: number): ReviewWindow {
@@ -25,18 +68,51 @@ function windowFor(days: number): ReviewWindow {
   return 'later';
 }
 
+function overdueAgeBonus(daysUntilReview: number) {
+  if (!Number.isFinite(daysUntilReview) || daysUntilReview >= 0) return 0;
+  const overdueDays = Math.max(0, Math.floor(Math.abs(daysUntilReview)));
+  return Math.min(MAX_OVERDUE_AGE_BONUS, Math.floor(Math.log2(overdueDays + 1) * 6));
+}
+
+function boundedUrgency(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(160, Math.round(value)));
+}
+
+function overlapsSkills(left: string[], right: string[]): boolean {
+  if (!left.length || !right.length) return false;
+  const rightSet = new Set(right);
+  return left.some((skillId) => rightSet.has(skillId));
+}
+
+function recommendationIdentity(courseId: string, lessonId: string) {
+  return `${courseId}\u0000${lessonId}`;
+}
+
 export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = new Date()): ReviewItem[] {
+  const referenceNow = validNow(now);
   const items: ReviewItem[] = [];
   for (const course of courses) {
     for (const lesson of course.starterLessons) {
-      const skillIds = lesson.skillIds ?? [];
-      const states = skillIds.map((id) => mastery[id]).filter(Boolean);
+      const skillIds = canonicalSkillIds(lesson.skillIds);
+      const states = skillIds
+        .map((id) => mastery[id])
+        .filter((state): state is NonNullable<typeof state> => Boolean(state));
       if (!states.length) continue;
-      const nextDays = Math.min(...states.map((state) => daysUntil(state?.nextReviewAt, now)));
-      const weakest = Math.min(...states.map((state) => state?.score ?? 0));
-      const recurringErrors = states.reduce((total, state) => total + (state?.errorTags.length ?? 0), 0);
+      const nextDays = Math.min(...states.map((state) => daysUntil(state.nextReviewAt, referenceNow)));
+      const weakest = Math.max(0, Math.min(100, Math.min(...states.map((state) => Number.isFinite(state.score) ? state.score : 0))));
+      // One misconception can be attached to several skills touched by the same
+      // lesson. Count semantic error identity across the whole lesson, not once
+      // per skill, otherwise multi-skill lessons receive artificially inflated
+      // urgency and can crowd genuinely overdue reviews out of a short session.
+      const recurringErrors = canonicalErrorTags(states.flatMap((state) => state.errorTags ?? [])).length;
       const window = windowFor(nextDays);
-      const urgency = Math.round((window === 'overdue' ? 100 : window === 'today' ? 80 : window === 'soon' ? 45 : 10) + recurringErrors * 6 + Math.max(0, 55 - weakest));
+      // Overdue reviews need more nuance than a single flat bucket. A lesson that
+      // slipped by two weeks should outrank one that became due minutes ago, but
+      // the bonus grows logarithmically and stays capped so weakness/error signals
+      // still matter and old material cannot permanently starve the learning path.
+      const overdueBonus = overdueAgeBonus(nextDays);
+      const urgency = boundedUrgency((window === 'overdue' ? 100 : window === 'today' ? 80 : window === 'soon' ? 45 : 10) + overdueBonus + recurringErrors * 6 + Math.max(0, 55 - weakest));
       if (window === 'later' && weakest >= 70 && recurringErrors === 0) continue;
       items.push({
         lesson,
@@ -52,7 +128,9 @@ export function buildReviewQueue(courses: Course[], mastery: MasteryMap, now = n
       });
     }
   }
-  return items.sort((a, b) => b.urgency - a.urgency || a.lesson.id.localeCompare(b.lesson.id));
+  // Modern JS sorting is stable: an urgency tie therefore preserves the authored
+  // course/lesson order instead of replacing pedagogical sequencing with IDs.
+  return items.sort((a, b) => b.urgency - a.urgency);
 }
 
 export function interleavedPracticeSession(
@@ -63,23 +141,62 @@ export function interleavedPracticeSession(
   minutes: 5 | 10 | 20 | 45,
   now = new Date(),
 ) {
+  const referenceNow = validNow(now);
   const target = minutes <= 5 ? 2 : minutes <= 10 ? 4 : minutes <= 20 ? 7 : 12;
-  const recommendations = recommendPractice(courses, graph, mastery, completedLessonIds, now, Math.max(target * 3, 12));
+  const recommendations = recommendPractice(courses, graph, mastery, completedLessonIds, referenceNow, Math.max(target * 3, 12));
   const selected = [] as typeof recommendations;
+  const selectedActivityKeys = new Set<string>();
   const usedCourses = new Map<string, number>();
   const usedSkills = new Map<string, number>();
-  for (const item of recommendations) {
-    const courseCount = usedCourses.get(item.courseId) ?? 0;
-    const skillRepeat = Math.max(0, ...item.skillIds.map((id) => usedSkills.get(id) ?? 0));
-    if (courseCount >= 2 || skillRepeat >= 2) continue;
+  let lastCourseId: string | null = null;
+  let lastSkillIds: string[] = [];
+
+  function add(item: (typeof recommendations)[number]) {
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
     selected.push(item);
-    usedCourses.set(item.courseId, courseCount + 1);
-    item.skillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
+    selectedActivityKeys.add(recommendationIdentity(item.courseId, item.lesson.id));
+    usedCourses.set(item.courseId, (usedCourses.get(item.courseId) ?? 0) + 1);
+    itemSkillIds.forEach((id) => usedSkills.set(id, (usedSkills.get(id) ?? 0) + 1));
+    lastCourseId = item.courseId;
+    lastSkillIds = itemSkillIds;
+  }
+
+  // The strict pass optimizes not only aggregate diversity but also transition
+  // quality. Avoiding the same course or concept twice in a row forces retrieval
+  // after a context switch, which is the useful part of interleaving rather than
+  // merely mixing several topics somewhere inside the same session.
+  for (const item of recommendations) {
+    if (selectedActivityKeys.has(recommendationIdentity(item.courseId, item.lesson.id))) continue;
+    const courseCount = usedCourses.get(item.courseId) ?? 0;
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
+    const repeatsPreviousContext = lastCourseId === item.courseId || overlapsSkills(lastSkillIds, itemSkillIds);
+    if (courseCount >= 2 || skillRepeat >= 2 || repeatsPreviousContext) continue;
+    add(item);
     if (selected.length >= target) break;
   }
+
+  // If transition diversity prevents us from filling the requested session, relax
+  // adjacency and then the per-course cap. Never relax the skill repetition cap:
+  // doing so turns an "interleaved" session back into blocked practice of one concept.
   for (const item of recommendations) {
     if (selected.length >= target) break;
-    if (!selected.some((entry) => entry.lesson.id === item.lesson.id)) selected.push(item);
+    if (selectedActivityKeys.has(recommendationIdentity(item.courseId, item.lesson.id))) continue;
+    const courseCount = usedCourses.get(item.courseId) ?? 0;
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
+    if (courseCount >= 2 || skillRepeat >= 2) continue;
+    add(item);
   }
+
+  for (const item of recommendations) {
+    if (selected.length >= target) break;
+    if (selectedActivityKeys.has(recommendationIdentity(item.courseId, item.lesson.id))) continue;
+    const itemSkillIds = canonicalSkillIds(item.skillIds);
+    const skillRepeat = Math.max(0, ...itemSkillIds.map((id) => usedSkills.get(id) ?? 0));
+    if (skillRepeat >= 2) continue;
+    add(item);
+  }
+
   return selected;
 }

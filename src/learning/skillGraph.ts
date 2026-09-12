@@ -36,6 +36,10 @@ export type SkillMastery = {
 
 export type MasteryMap = Record<string, SkillMastery>;
 
+const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
+const MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS = 5 * 60_000;
+const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60_000;
+
 export function masteryBand(score: number): MasteryBand {
   if (score >= 85) return 'mastered';
   if (score >= 55) return 'practicing';
@@ -96,6 +100,81 @@ function nextReviewDays(score: number, consecutiveCorrect: number, correct: bool
   return 1;
 }
 
+function boundedCount(value: unknown, maximum = Number.MAX_SAFE_INTEGER) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(maximum, Math.floor(value)));
+}
+
+function boundedScore(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : 0;
+}
+
+function usableEvidence(value: unknown): AttemptEvidence[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is AttemptEvidence => {
+    if (!item || typeof item !== 'object') return false;
+    const candidate = item as Partial<AttemptEvidence>;
+    return (
+      typeof candidate.lessonId === 'string' &&
+      typeof candidate.activityKind === 'string' &&
+      typeof candidate.correct === 'boolean' &&
+      typeof candidate.scoreDelta === 'number' &&
+      Number.isFinite(candidate.scoreDelta) &&
+      typeof candidate.at === 'string'
+    );
+  });
+}
+
+function canonicalEvidenceContext(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const context = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  if (!context || context.length > MAX_EVIDENCE_CONTEXT_LENGTH) return null;
+  return context;
+}
+
+function evidenceTimeIsValid(value: unknown, now: Date) {
+  if (typeof value !== 'string') return false;
+  const nowMs = now.getTime();
+  const evidenceMs = new Date(value).getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(evidenceMs)) return false;
+  return evidenceMs <= nowMs + MAX_FUTURE_EVIDENCE_SKEW_MS;
+}
+
+function usableAttemptTime(now: Date) {
+  return Number.isFinite(now.getTime()) ? now : new Date();
+}
+
+function latestPracticedTime(map: MasteryMap, skillIds: string[]) {
+  let latest = Number.NEGATIVE_INFINITY;
+  for (const skillId of skillIds) {
+    const timestamp = new Date(map[skillId]?.lastPracticedAt ?? '').getTime();
+    if (Number.isFinite(timestamp)) latest = Math.max(latest, timestamp);
+  }
+  return latest;
+}
+
+function monotonicAttemptTime(map: MasteryMap, lesson: Lesson, candidate: Date) {
+  const candidateMs = candidate.getTime();
+  const latestMs = latestPracticedTime(map, lesson.skillIds ?? []);
+  if (!Number.isFinite(latestMs) || latestMs > candidateMs + MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS || candidateMs > latestMs) return candidate;
+  return new Date(latestMs + 1);
+}
+
+export function masteryConfidence(attempts: number, correctAttempts: number) {
+  if (!Number.isFinite(attempts) || !Number.isFinite(correctAttempts) || attempts <= 0 || correctAttempts <= 0) return 0;
+  const boundedAttempts = Math.max(0, Math.floor(attempts));
+  const boundedCorrect = Math.max(0, Math.min(boundedAttempts, Math.floor(correctAttempts)));
+  if (boundedAttempts === 0 || boundedCorrect === 0) return 0;
+
+  const accuracy = boundedCorrect / boundedAttempts;
+  const evidenceDepth = Math.min(1, boundedAttempts / 4);
+  const depthBudget = 70 * evidenceDepth;
+  const repetitionBudget = Math.min(boundedAttempts, 10) * 3;
+  return Math.max(0, Math.min(100, Math.round(accuracy * (depthBudget + repetitionBudget))));
+}
+
 export function recordSkillAttempt(
   map: MasteryMap,
   lesson: Lesson,
@@ -104,6 +183,8 @@ export function recordSkillAttempt(
   errorTag?: string,
 ): MasteryMap {
   const next = { ...map };
+  const attemptTime = monotonicAttemptTime(map, lesson, usableAttemptTime(now));
+  const attemptIso = attemptTime.toISOString();
   for (const skillId of lesson.skillIds ?? []) {
     const previous = next[skillId] ?? {
       skillId,
@@ -116,21 +197,27 @@ export function recordSkillAttempt(
       errorTags: [],
       evidence: [],
     };
-    const attempts = previous.attempts + 1;
-    const correctAttempts = previous.correctAttempts + (correct ? 1 : 0);
-    const consecutiveCorrect = correct ? previous.consecutiveCorrect + 1 : 0;
+    const previousAttempts = boundedCount(previous.attempts);
+    const previousCorrectAttempts = boundedCount(previous.correctAttempts, previousAttempts);
+    const previousConsecutiveCorrect = boundedCount(previous.consecutiveCorrect, previousAttempts);
+    const previousScore = boundedScore(previous.score);
+    const previousErrorTags = Array.isArray(previous.errorTags) ? previous.errorTags.filter((tag) => typeof tag === 'string') : [];
+    const previousEvidence = usableEvidence(previous.evidence);
+    const attempts = previousAttempts + 1;
+    const correctAttempts = Math.min(attempts, previousCorrectAttempts + (correct ? 1 : 0));
+    const consecutiveCorrect = correct ? Math.min(attempts, previousConsecutiveCorrect + 1) : 0;
     const delta = qualityWeight(lesson, correct);
-    const score = Math.max(0, Math.min(100, previous.score + delta));
-    const confidence = Math.max(0, Math.min(100, Math.round((correctAttempts / attempts) * 70 + Math.min(attempts, 10) * 3)));
+    const score = Math.max(0, Math.min(100, previousScore + delta));
+    const confidence = masteryConfidence(attempts, correctAttempts);
     const reviewDays = nextReviewDays(score, consecutiveCorrect, correct);
-    const nextReview = new Date(now);
+    const nextReview = new Date(attemptTime);
     nextReview.setDate(nextReview.getDate() + reviewDays);
     const evidence: AttemptEvidence = {
       lessonId: lesson.id,
       activityKind: lesson.activityKind ?? 'learn',
       correct,
       scoreDelta: delta,
-      at: now.toISOString(),
+      at: attemptIso,
       errorTag: !correct ? errorTag : undefined,
     };
     next[skillId] = {
@@ -141,36 +228,47 @@ export function recordSkillAttempt(
       attempts,
       correctAttempts,
       consecutiveCorrect,
-      lastPracticedAt: now.toISOString(),
+      lastPracticedAt: attemptIso,
       nextReviewAt: nextReview.toISOString(),
-      errorTags: errorTag && !correct ? [...new Set([...previous.errorTags, errorTag])].slice(-8) : previous.errorTags,
-      evidence: [...previous.evidence, evidence].slice(-20),
+      errorTags: errorTag && !correct ? [...new Set([...previousErrorTags, errorTag])].slice(-8) : previousErrorTags,
+      evidence: [...previousEvidence, evidence].slice(-20),
     };
   }
   return next;
 }
 
 export function prerequisitesReady(node: SkillNode, mastery: MasteryMap, gate?: number) {
-  const requiredScore = gate ?? node.prerequisiteGate;
-  return node.prerequisiteIds.every((id) => (mastery[id]?.score ?? 0) >= requiredScore);
+  const requiredScore = boundedScore(gate ?? node.prerequisiteGate);
+  return node.prerequisiteIds.every((id) => boundedScore(mastery[id]?.score) >= requiredScore);
 }
 
 export function missingPrerequisites(node: SkillNode, mastery: MasteryMap) {
-  return node.prerequisiteIds.filter((id) => (mastery[id]?.score ?? 0) < node.prerequisiteGate);
+  const requiredScore = boundedScore(node.prerequisiteGate);
+  return node.prerequisiteIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }
 
-export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
+export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap, now = new Date()) {
   const state = mastery[node.id];
-  if (!state || state.score < 55) return true;
-  return !state.evidence.some((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind));
+  if (!state || boundedScore(state.score) < 55) return true;
+  const contexts = new Set(
+    usableEvidence(state.evidence)
+      .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind) && evidenceTimeIsValid(item.at, now))
+      .map((item) => {
+        const context = canonicalEvidenceContext(item.lessonId);
+        return context ? `${item.activityKind}:${context}` : null;
+      })
+      .filter((context): context is string => context !== null),
+  );
+  return contexts.size < 2;
 }
 
 export function courseMastery(course: Course, mastery: MasteryMap): number {
   if (course.skillIds.length === 0) return 0;
-  const total = course.skillIds.reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0);
+  const total = course.skillIds.reduce((sum, id) => sum + boundedScore(mastery[id]?.score), 0);
   return Math.round(total / course.skillIds.length);
 }
 
 export function weakSkillIds(course: Course, mastery: MasteryMap, threshold = 55) {
-  return course.skillIds.filter((id) => (mastery[id]?.score ?? 0) < threshold);
+  const requiredScore = boundedScore(threshold);
+  return course.skillIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }

@@ -1,4 +1,4 @@
 import { registerRootComponent } from 'expo';
-import NexCodeApp from './src/ui/NexCodeApp';
+import RootApp from './src/ui/RootApp';
 
-registerRootComponent(NexCodeApp);
+registerRootComponent(RootApp);

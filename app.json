@@ -2,6 +2,7 @@
   "expo": {
     "name": "NexCode",
     "slug": "nexcode",
+    "scheme": "nexcode",
     "owner": "nexus-tech01",
     "version": "1.5.0",
     "orientation": "portrait",

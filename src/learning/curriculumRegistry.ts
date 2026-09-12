@@ -159,7 +159,12 @@ export function activitiesForStage(registry: CurriculumRegistry, stageId: string
 export function nextActivityInCourse(registry: CurriculumRegistry, courseId: string, completedIds: string[]): CurriculumActivityRef | undefined {
   const course = registry.coursesById.get(courseId);
   if (!course) return undefined;
-  for (const stage of course.stages.sort((a, b) => a.order - b.order)) {
+
+  // Navigation must be a pure read. Sorting the course array in place used to
+  // mutate shared curriculum data, so simply asking for the next lesson could
+  // silently reorder stages for every later screen that reused the same Course.
+  const orderedStages = [...course.stages].sort((a, b) => a.order - b.order);
+  for (const stage of orderedStages) {
     for (const chapterId of stage.chapterIds) {
       const chapter = registry.chaptersById.get(chapterId);
       if (!chapter) continue;

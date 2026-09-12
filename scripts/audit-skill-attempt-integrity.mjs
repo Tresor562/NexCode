@@ -1,0 +1,218 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+
+const sourceUrl = new URL('../src/learning/skillGraph.ts', import.meta.url);
+const source = fs.readFileSync(sourceUrl, 'utf8');
+const compiled = ts.transpileModule(source, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+    esModuleInterop: true,
+  },
+  fileName: 'skillGraph.ts',
+}).outputText;
+
+const exports = {};
+const module = { exports };
+const requireStub = (id) => {
+  if (id.endsWith('/skillPrerequisites') || id === './skillPrerequisites') {
+    return { prerequisiteRuleMap: () => new Map() };
+  }
+  return {};
+};
+new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
+
+const { recordSkillAttempt, skillNeedsEvidence } = module.exports;
+assert.equal(typeof recordSkillAttempt, 'function', 'recordSkillAttempt must stay exported');
+assert.equal(typeof skillNeedsEvidence, 'function', 'skillNeedsEvidence must stay exported');
+
+const lesson = {
+  id: 'js-array-lab',
+  module: 'Arrays',
+  activityKind: 'lab',
+  skillIds: ['js-arrays'],
+};
+
+{
+  const corrupted = {
+    'js-arrays': {
+      skillId: 'js-arrays',
+      score: Number.NaN,
+      confidence: Number.POSITIVE_INFINITY,
+      band: 'mastered',
+      attempts: Number.NaN,
+      correctAttempts: Number.POSITIVE_INFINITY,
+      consecutiveCorrect: -99,
+      errorTags: null,
+      evidence: null,
+    },
+  };
+  const next = recordSkillAttempt(corrupted, lesson, true, new Date('2026-09-02T08:00:00.000Z'));
+  const state = next['js-arrays'];
+  assert.equal(state.score, 20, 'a corrupted score must normalize before applying the new attempt');
+  assert.equal(state.attempts, 1, 'a corrupted attempt count must restart from a finite baseline');
+  assert.equal(state.correctAttempts, 1, 'correct attempts must remain bounded by total attempts');
+  assert.equal(state.consecutiveCorrect, 1, 'consecutive correct attempts must recover from malformed restored state');
+  assert.deepEqual(state.errorTags, [], 'non-array error tags must not break attempt recording');
+  assert.equal(state.evidence.length, 1, 'non-array evidence must not break attempt recording');
+  assert.equal(state.lastPracticedAt, '2026-09-02T08:00:00.000Z');
+  assert.ok(Number.isFinite(state.confidence), 'confidence must remain finite after recovery');
+}
+
+{
+  const next = recordSkillAttempt({}, lesson, false, new Date(Number.NaN), 'array-index');
+  const state = next['js-arrays'];
+  assert.match(state.lastPracticedAt, /^\d{4}-\d{2}-\d{2}T/, 'an invalid caller clock must fall back to a usable runtime timestamp');
+  assert.match(state.nextReviewAt, /^\d{4}-\d{2}-\d{2}T/, 'review scheduling must remain serializable after an invalid caller clock');
+  assert.deepEqual(state.errorTags, ['array-index']);
+}
+
+{
+  const restored = {
+    'js-arrays': {
+      skillId: 'js-arrays',
+      score: 40,
+      confidence: 44,
+      band: 'learning',
+      attempts: 2,
+      correctAttempts: 2,
+      consecutiveCorrect: 2,
+      lastPracticedAt: '2026-09-04T12:00:00.000Z',
+      nextReviewAt: '2026-09-07T12:00:00.000Z',
+      errorTags: [],
+      evidence: [],
+    },
+  };
+  const next = recordSkillAttempt(restored, lesson, true, new Date('2026-09-04T11:57:00.000Z'));
+  const state = next['js-arrays'];
+  assert.equal(state.lastPracticedAt, '2026-09-04T12:00:00.001Z', 'a slightly delayed synced attempt must not move practice time backwards');
+  assert.ok(new Date(state.nextReviewAt).getTime() > new Date(state.lastPracticedAt).getTime(), 'review scheduling must advance from the monotonic attempt time');
+  assert.equal(state.evidence.at(-1)?.at, state.lastPracticedAt, 'evidence time and mastery time must remain consistent');
+}
+
+{
+  const restored = {
+    'js-arrays': {
+      skillId: 'js-arrays', score: 40, confidence: 44, band: 'learning', attempts: 2, correctAttempts: 2, consecutiveCorrect: 2,
+      lastPracticedAt: '2026-09-04T12:00:00.000Z', nextReviewAt: '2026-09-07T12:00:00.000Z', errorTags: [], evidence: [],
+    },
+    'js-loops': {
+      skillId: 'js-loops', score: 50, confidence: 50, band: 'learning', attempts: 3, correctAttempts: 2, consecutiveCorrect: 1,
+      lastPracticedAt: '2026-09-04T13:30:00.000Z', nextReviewAt: '2026-09-07T13:30:00.000Z', errorTags: [], evidence: [],
+    },
+  };
+  const multiSkillLesson = { ...lesson, id: 'js-array-loop-lab', skillIds: ['js-arrays', 'js-loops'] };
+  const next = recordSkillAttempt(restored, multiSkillLesson, true, new Date('2026-09-04T13:27:00.000Z'));
+  assert.equal(next['js-arrays'].lastPracticedAt, '2026-09-04T13:30:00.001Z', 'multi-skill attempts must advance past the newest plausible restored skill timestamp');
+  assert.equal(next['js-loops'].lastPracticedAt, '2026-09-04T13:30:00.001Z', 'one learning event must use one coherent timestamp across all affected skills');
+}
+
+{
+  const restored = {
+    'js-arrays': {
+      skillId: 'js-arrays', score: 40, confidence: 44, band: 'learning', attempts: 2, correctAttempts: 2, consecutiveCorrect: 2,
+      lastPracticedAt: '2027-09-04T12:00:00.000Z', nextReviewAt: '2027-09-07T12:00:00.000Z', errorTags: [], evidence: [],
+    },
+  };
+  const candidate = new Date('2026-09-04T12:30:00.000Z');
+  const next = recordSkillAttempt(restored, lesson, true, candidate);
+  const state = next['js-arrays'];
+  assert.equal(state.lastPracticedAt, candidate.toISOString(), 'an implausibly future restored mastery clock must not drag a new attempt into the future');
+  assert.equal(state.evidence.at(-1)?.at, candidate.toISOString(), 'contained future clocks must keep evidence aligned with the real attempt time');
+  assert.ok(new Date(state.nextReviewAt).getTime() > candidate.getTime(), 'review scheduling must restart from the contained real attempt time');
+}
+
+{
+  const restored = {
+    'js-arrays': {
+      skillId: 'js-arrays',
+      score: 40,
+      confidence: 44,
+      band: 'learning',
+      attempts: 2,
+      correctAttempts: 1,
+      consecutiveCorrect: 0,
+      lastPracticedAt: '2026-09-04T12:00:00.000Z',
+      nextReviewAt: '2026-09-05T12:00:00.000Z',
+      errorTags: [],
+      evidence: [
+        null,
+        'forged-evidence',
+        { lessonId: 'missing-score-delta', activityKind: 'lab', correct: true, at: '2026-09-04T12:00:00.000Z' },
+        { lessonId: 'valid-review', activityKind: 'review', correct: true, scoreDelta: 8, at: '2026-09-04T12:00:00.000Z' },
+      ],
+    },
+  };
+  const next = recordSkillAttempt(restored, lesson, true, new Date('2026-09-04T13:00:00.000Z'));
+  const state = next['js-arrays'];
+  assert.equal(state.evidence.length, 2, 'malformed restored evidence entries must be discarded before appending the new attempt');
+  assert.equal(state.evidence[0]?.lessonId, 'valid-review', 'valid restored evidence must be preserved');
+  assert.equal(state.evidence[1]?.lessonId, lesson.id, 'the new learning attempt must still be appended after sanitized history');
+}
+
+{
+  const node = {
+    id: 'js-arrays',
+    title: 'Arrays',
+    courseIds: ['javascript'],
+    prerequisiteIds: [],
+    prerequisiteGate: 55,
+    lessonIds: ['project-a'],
+    evidenceLessonIds: ['project-a'],
+  };
+  const mastery = {
+    'js-arrays': {
+      skillId: 'js-arrays',
+      score: 75,
+      confidence: 80,
+      band: 'practicing',
+      attempts: 4,
+      correctAttempts: 4,
+      consecutiveCorrect: 4,
+      errorTags: [],
+      evidence: [
+        { lessonId: 'project-a', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:00:00.000Z' },
+        { lessonId: ' project-a ', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:05:00.000Z' },
+        { lessonId: '\u0000project-a\u0007', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:10:00.000Z' },
+      ],
+    },
+  };
+  assert.equal(skillNeedsEvidence(node, mastery), true, 'restored aliases of the same evidence context must not satisfy the two-context progression gate');
+  mastery['js-arrays'].evidence.push(
+    { lessonId: 'checkpoint-b', activityKind: 'checkpoint', correct: true, scoreDelta: 10, at: '2026-09-04T12:15:00.000Z' },
+  );
+  assert.equal(skillNeedsEvidence(node, mastery), false, 'a genuinely distinct canonical context should satisfy the evidence gate');
+}
+
+{
+  const node = {
+    id: 'js-arrays', title: 'Arrays', courseIds: ['javascript'], prerequisiteIds: [], prerequisiteGate: 55, lessonIds: [], evidenceLessonIds: [],
+  };
+  const mastery = {
+    'js-arrays': {
+      skillId: 'js-arrays', score: 75, confidence: 80, band: 'practicing', attempts: 4, correctAttempts: 4, consecutiveCorrect: 4, errorTags: [],
+      evidence: [
+        { lessonId: '   ', activityKind: 'project', correct: true, scoreDelta: 10, at: '2026-09-04T12:00:00.000Z' },
+        { lessonId: 'x'.repeat(161), activityKind: 'lab', correct: true, scoreDelta: 10, at: '2026-09-04T12:05:00.000Z' },
+      ],
+    },
+  };
+  assert.equal(skillNeedsEvidence(node, mastery), true, 'empty or unbounded restored context identities must fail closed for progression evidence');
+}
+
+assert.match(source, /function boundedCount\(value: unknown/, 'restored counters must pass through a bounded normalization helper');
+assert.match(source, /function boundedScore\(value: unknown\)/, 'restored mastery scores must pass through a finite bounded normalization helper');
+assert.match(source, /function usableEvidence\(value: unknown\): AttemptEvidence\[\]/, 'restored evidence must pass through an entry-level sanitation helper');
+assert.match(source, /const previousEvidence = usableEvidence\(previous\.evidence\)/, 'attempt recording must sanitize restored evidence before spreading it');
+assert.match(source, /function canonicalEvidenceContext\(value: unknown\)/, 'progression evidence contexts must pass through a canonical identity boundary');
+assert.match(source, /canonicalEvidenceContext\(item\.lessonId\)/, 'skill evidence gates must consume canonical lesson contexts');
+assert.match(source, /const MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS = 5 \* 60_000/, 'restored future mastery clocks must stay bounded by the five-minute tolerance');
+assert.match(source, /function latestPracticedTime\(map: MasteryMap, skillIds: string\[\]\)/, 'restored skill timestamps must share a latest-time boundary');
+assert.match(source, /function monotonicAttemptTime\(map: MasteryMap, lesson: Lesson, candidate: Date\)/, 'attempt recording must enforce monotonic chronology');
+assert.match(source, /latestMs > candidateMs \+ MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS/, 'implausibly future restored timestamps must be contained before they can move a new attempt');
+assert.match(source, /latestMs \+ 1/, 'equal or slightly stale attempt timestamps must advance beyond the latest stored instant');
+assert.match(source, /const attemptTime = monotonicAttemptTime\(map, lesson, usableAttemptTime\(now\)\)/, 'attempt timestamps must cross both runtime-clock and monotonic-ordering boundaries before serialization');
+assert.match(source, /Array\.isArray\(previous\.errorTags\)/, 'restored error tags must be checked before spreading');
+
+console.log('Skill attempt integrity audit OK: malformed restored mastery state and evidence, canonical proof contexts, invalid clocks, plausible delayed sync and implausible future clocks cannot poison or rewind progression chronology.');

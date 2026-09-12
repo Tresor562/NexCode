@@ -1,0 +1,208 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import ts from 'typescript';
+
+const sourceUrl = new URL('../src/learning/masteryEngine.ts', import.meta.url);
+const source = fs.readFileSync(sourceUrl, 'utf8');
+const compiled = ts.transpileModule(source, {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+    esModuleInterop: true,
+  },
+  fileName: 'masteryEngine.ts',
+}).outputText;
+
+const exports = {};
+const module = { exports };
+const requireStub = (id) => {
+  if (id.endsWith('/skillGraph') || id === './skillGraph') {
+    return {
+      masteryBand: (score) => (score >= 85 ? 'mastered' : score >= 55 ? 'practicing' : score > 0 ? 'learning' : 'new'),
+    };
+  }
+  return {};
+};
+
+new Function('require', 'exports', 'module', compiled)(requireStub, exports, module);
+const { evaluateSkillGate, masterySnapshot } = module.exports;
+
+assert.equal(typeof evaluateSkillGate, 'function', 'evaluateSkillGate must stay exported');
+assert.equal(typeof masterySnapshot, 'function', 'masterySnapshot must stay exported');
+
+const now = new Date('2026-08-23T12:00:00.000Z');
+const evidence = [
+  {
+    lessonId: 'lab-dom-1',
+    activityKind: 'lab',
+    correct: true,
+    scoreDelta: 20,
+    at: '2026-08-23T09:00:00.000Z',
+  },
+  {
+    lessonId: 'checkpoint-dom-2',
+    activityKind: 'checkpoint',
+    correct: true,
+    scoreDelta: 24,
+    at: '2026-08-23T10:00:00.000Z',
+  },
+];
+
+const mastery = (confidence, overrides = {}) => ({
+  dom: {
+    skillId: 'dom',
+    score: 90,
+    confidence,
+    band: 'mastered',
+    attempts: 4,
+    correctAttempts: 4,
+    consecutiveCorrect: 4,
+    lastPracticedAt: '2026-08-23T10:00:00.000Z',
+    nextReviewAt: '2026-09-01T10:00:00.000Z',
+    errorTags: [],
+    evidence,
+    ...overrides,
+  },
+});
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(41), 70, now);
+  assert.equal(result.passed, false, 'a high score with shallow confidence must not unlock a checkpoint gate');
+  assert.deepEqual(result.weakSkills, ['dom']);
+  assert.deepEqual(result.missingIndependentEvidence, []);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(70), 70, now);
+  assert.equal(result.passed, true, 'sufficient score, confidence and distinct transfer evidence should pass');
+  assert.deepEqual(result.weakSkills, []);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(54), 55, now);
+  assert.equal(result.passed, false, 'regular lesson gates must also require confidence proportional to their score gate');
+  assert.deepEqual(result.weakSkills, ['dom']);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(55), 55, now);
+  assert.equal(result.passed, true, 'confidence equal to a lower lesson gate is sufficient when evidence is otherwise valid');
+}
+
+{
+  const snapshot = masterySnapshot(
+    'dom',
+    mastery(90, { lastPracticedAt: '2026-09-23T12:00:00.000Z' }),
+    now,
+  );
+  assert.equal(snapshot.effectiveScore, 0, 'far-future practice timestamps must not manufacture perfect retention');
+  assert.equal(snapshot.needsReview, true, 'far-future practice timestamps should fail closed into review');
+}
+
+{
+  const snapshot = masterySnapshot(
+    'dom',
+    mastery(90, { lastPracticedAt: '2026-08-23T12:04:00.000Z' }),
+    now,
+  );
+  assert.equal(snapshot.effectiveScore, 90, 'small clock skew within five minutes should not punish legitimate practice');
+}
+
+{
+  const snapshot = masterySnapshot('dom', mastery(90), new Date(Number.NaN));
+  assert.equal(snapshot.effectiveScore, 0, 'an invalid runtime clock must fail closed instead of granting fresh retention');
+  assert.deepEqual(snapshot.evidenceKinds, [], 'an invalid runtime clock must also invalidate restored mastery evidence');
+  assert.equal(snapshot.independentEvidence, false, 'an invalid runtime clock must not preserve independent proof');
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(90, { score: Number.NaN }), 70, now);
+  assert.equal(result.passed, false, 'a non-finite mastery score must fail closed instead of bypassing the gate');
+  assert.deepEqual(result.missingSkills, ['dom']);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(Number.POSITIVE_INFINITY), 70, now);
+  assert.equal(result.passed, false, 'a non-finite confidence value must fail closed instead of bypassing the gate');
+  assert.deepEqual(result.weakSkills, ['dom']);
+}
+
+{
+  const result = evaluateSkillGate(['dom'], mastery(90), Number.NaN, now);
+  assert.equal(result.required, 100, 'a malformed gate threshold must normalize to the strictest supported requirement');
+  assert.equal(result.passed, false, 'a malformed gate threshold must never fail open');
+  assert.deepEqual(result.weakSkills, ['dom']);
+}
+
+{
+  const futureEvidence = [
+    evidence[0],
+    {
+      lessonId: 'checkpoint-from-future',
+      activityKind: 'checkpoint',
+      correct: true,
+      scoreDelta: 24,
+      at: '2026-09-23T10:00:00.000Z',
+    },
+    {
+      lessonId: 'project-from-future',
+      activityKind: 'project',
+      correct: true,
+      scoreDelta: 30,
+      at: '2026-09-23T10:00:00.000Z',
+    },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: futureEvidence }), now);
+  assert.deepEqual(snapshot.evidenceKinds, ['lab'], 'future proof must not inflate the mastery evidence-kind summary');
+  assert.equal(snapshot.independentEvidence, false, 'future independent proof must not satisfy the two-context mastery requirement');
+  const result = evaluateSkillGate(['dom'], mastery(90, { evidence: futureEvidence }), 70, now);
+  assert.equal(result.passed, false, 'future transfer proof must not unlock a skill gate');
+  assert.deepEqual(result.missingIndependentEvidence, ['dom']);
+}
+
+{
+  const invalidClockEvidence = [
+    evidence[0],
+    {
+      lessonId: 'boss-invalid-clock',
+      activityKind: 'boss',
+      correct: true,
+      scoreDelta: 28,
+      at: 'not-a-date',
+    },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: invalidClockEvidence }), now);
+  assert.equal(snapshot.independentEvidence, false, 'invalid evidence timestamps must fail closed for independent mastery proof');
+  assert.deepEqual(snapshot.evidenceKinds, ['lab']);
+}
+
+{
+  const futureErrorEvidence = [
+    ...evidence,
+    { lessonId: 'practice-future-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-09-23T10:30:00.000Z', errorTag: 'dom-future' },
+    { lessonId: 'practice-future-2', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-09-23T10:31:00.000Z', errorTag: 'dom-future' },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: futureErrorEvidence }), now);
+  assert.deepEqual(snapshot.recurringErrors, [], 'future failed attempts must not manufacture recurring-error diagnostics');
+}
+
+{
+  const restoredEvidence = [
+    ...evidence,
+    { lessonId: 'practice-bad-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:30:00.000Z', errorTag: 42 },
+    { lessonId: 'practice-bad-2', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:31:00.000Z', errorTag: 42 },
+    { lessonId: 'practice-good-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:32:00.000Z', errorTag: 'dom-query' },
+    { lessonId: 'practice-good-2', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:33:00.000Z', errorTag: 'dom-query' },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: restoredEvidence }), now);
+  assert.deepEqual(snapshot.recurringErrors, ['dom-query'], 'non-string restored error tags must be discarded before recurring-error ranking');
+}
+
+assert.match(source, /function boundedPercent\(value: unknown, fallback = 0\)/, 'mastery percentages must share one bounded normalization boundary');
+assert.match(source, /const normalizedRequired = boundedPercent\(required, 100\)/, 'invalid gate thresholds must fall back to the strictest requirement');
+assert.match(source, /candidate\.errorTag === undefined \|\| typeof candidate\.errorTag === 'string'/, 'restored mastery evidence must reject non-string error tags before diagnostics');
+assert.match(source, /function temporallyValidEvidence\(state: SkillMastery, now: Date\)/, 'all restored mastery proof must cross a shared evidence-clock boundary');
+assert.match(source, /Number\.isFinite\(ageDays\(attempt\.at, now\)\)/, 'future or malformed evidence clocks must fail closed before they affect mastery');
+assert.match(source, /independentEvidenceContextCount\(state, now\) >= 2/, 'independent mastery proof must use time-validated evidence');
+
+console.log('Mastery gate audit OK: score, confidence, thresholds, runtime clocks, evidence clocks and malformed restored error tags all fail closed while valid evidence remains usable.');

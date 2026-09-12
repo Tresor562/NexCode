@@ -17,12 +17,62 @@ export type PortfolioProof = {
   evidenceSummary: string;
 };
 
+const MAX_COMPLETION_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
 function normalize(value: string) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
+function canonicalProjectSkills(skills: string[]): string[] {
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const raw of skills) {
+    const requested = raw.trim();
+    const identity = normalize(requested);
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    canonical.push(requested);
+  }
+  return canonical;
+}
+
+function canonicalProofSkillIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const canonical: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string') continue;
+    const skillId = raw.trim();
+    const identity = normalize(skillId);
+    if (!identity || seen.has(identity)) continue;
+    seen.add(identity);
+    canonical.push(skillId);
+  }
+  return canonical;
+}
+
+function boundedPercent(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
+}
+
+function readinessGate(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 55;
+}
+
+function validCompletionDate(value: Date, now = new Date()): Date {
+  const safeNow = now instanceof Date && Number.isFinite(now.getTime()) ? now : new Date();
+  if (!(value instanceof Date) || !Number.isFinite(value.getTime())) return safeNow;
+  const clockSkewMs = value.getTime() - safeNow.getTime();
+  return Math.abs(clockSkewMs) <= MAX_COMPLETION_CLOCK_SKEW_MS ? value : safeNow;
+}
+
+function canonicalAchievedRubricIds(project: GuidedProject, achievedRubricIds: string[]): string[] {
+  const allowed = new Set(defaultProjectRubric(project).map((item) => item.id));
+  return [...new Set(achievedRubricIds.map((id) => id.trim()).filter((id) => id && allowed.has(id)))];
+}
+
 export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[]): ResolvedProjectSkill[] {
-  return project.skills.map((requested) => {
+  return canonicalProjectSkills(project.skills).map((requested) => {
     const terms = normalize(requested).split(/\s+/).filter((term) => term.length >= 3);
     const scored = graph.map((node) => {
       const haystack = normalize(`${node.id} ${node.title}`);
@@ -34,20 +84,51 @@ export function resolveProjectSkills(project: GuidedProject, graph: SkillNode[])
   });
 }
 
+function skillReadinessScore(skillId: string, mastery: MasteryMap) {
+  const state = mastery[skillId];
+  if (!state) return 0;
+  const score = boundedPercent(state.score);
+  const confidence = boundedPercent(state.confidence);
+
+  // Projects are a transfer activity: the learner does not need prior project
+  // evidence to start one, but a high raw score from too little evidence should
+  // not make the prerequisite look consolidated. Blend demonstrated score with
+  // confidence so readiness reflects both competence and evidence depth.
+  return Math.round((score * 0.75) + (confidence * 0.25));
+}
+
 export function projectReadinessAgainstGraph(project: GuidedProject, graph: SkillNode[], mastery: MasteryMap, gate = 55) {
+  const safeGate = readinessGate(gate);
   const resolved = resolveProjectSkills(project, graph);
   const skillIds = [...new Set(resolved.flatMap((item) => item.skillIds))];
   const unresolved = resolved.filter((item) => item.skillIds.length === 0).map((item) => item.requested);
   const missing = skillIds.filter((id) => !mastery[id]);
-  const weak = skillIds.filter((id) => mastery[id] && (mastery[id]?.score ?? 0) < gate);
-  const score = skillIds.length ? Math.round(skillIds.reduce((sum, id) => sum + (mastery[id]?.score ?? 0), 0) / skillIds.length) : 0;
+  const weak = skillIds.filter((id) => mastery[id] && boundedPercent(mastery[id]?.score) < safeGate);
+  const confidenceGate = Math.min(70, Math.max(40, safeGate));
+  const uncertain = skillIds.filter((id) => {
+    const state = mastery[id];
+    if (!state) return false;
+    const score = boundedPercent(state.score);
+    const confidence = boundedPercent(state.confidence);
+    return score >= safeGate && confidence < confidenceGate;
+  });
+
+  // Unmapped prerequisite labels are real readiness gaps. Treat each unresolved
+  // label as a zero-score prerequisite so the percentage cannot claim 100%
+  // consolidated while the project is still blocked by unknown skills.
+  const prerequisiteCount = skillIds.length + unresolved.length;
+  const score = prerequisiteCount > 0
+    ? Math.round(skillIds.reduce((sum, id) => sum + skillReadinessScore(id, mastery), 0) / prerequisiteCount)
+    : 0;
+
   return {
-    ready: unresolved.length === 0 && missing.length === 0 && weak.length === 0,
+    ready: unresolved.length === 0 && missing.length === 0 && weak.length === 0 && uncertain.length === 0,
     score,
     skillIds,
     unresolvedSkillLabels: unresolved,
     missingSkillIds: missing,
     weakSkillIds: weak,
+    uncertainSkillIds: uncertain,
   };
 }
 
@@ -57,24 +138,54 @@ export function buildPortfolioProof(
   achievedRubricIds: string[],
   completedAt = new Date(),
 ): PortfolioProof | undefined {
-  const review = reviewProject(project, achievedRubricIds);
+  const safeRubricIds = canonicalAchievedRubricIds(project, achievedRubricIds);
+  const review = reviewProject(project, safeRubricIds);
   if (!review.passed) return undefined;
+  const declaredSkills = canonicalProjectSkills(project.skills);
   const skillIds = [...new Set(resolveProjectSkills(project, graph).flatMap((item) => item.skillIds))];
+  // A portfolio proof is meant to demonstrate transferable skills, not merely a
+  // passing self-review. If the project declares skills but the current learning
+  // graph cannot resolve even one of them, fail closed rather than persisting a
+  // skill-less proof that would look complete while contributing no real evidence.
+  if (declaredSkills.length > 0 && skillIds.length === 0) return undefined;
   const rubric = defaultProjectRubric(project);
-  const achievedTitles = rubric.filter((item) => achievedRubricIds.includes(item.id)).map((item) => item.title);
+  const achievedTitles = rubric.filter((item) => safeRubricIds.includes(item.id)).map((item) => item.title);
   return {
     projectId: project.id,
     title: project.title,
-    completedAt: completedAt.toISOString(),
+    completedAt: validCompletionDate(completedAt).toISOString(),
     score: review.score,
     skillIds,
-    rubricIds: achievedRubricIds,
+    rubricIds: safeRubricIds,
     evidenceSummary: `${project.title} • ${review.score}/100 • preuves : ${achievedTitles.join(', ')}`,
   };
 }
 
 export function portfolioSkillCoverage(proofs: PortfolioProof[]) {
-  const covered = new Map<string, number>();
-  for (const proof of proofs) for (const skillId of proof.skillIds) covered.set(skillId, (covered.get(skillId) ?? 0) + 1);
-  return [...covered.entries()].map(([skillId, projectCount]) => ({ skillId, projectCount })).sort((a, b) => b.projectCount - a.projectCount);
+  const projectsBySkillIdentity = new Map<string, Set<string>>();
+  const skillIdByIdentity = new Map<string, string>();
+  const restoredProofs: unknown[] = Array.isArray(proofs) ? proofs : [];
+
+  for (const rawProof of restoredProofs) {
+    if (!rawProof || typeof rawProof !== 'object') continue;
+    const proof = rawProof as Partial<PortfolioProof>;
+    const projectId = typeof proof.projectId === 'string' ? normalize(proof.projectId) : '';
+    if (!projectId) continue;
+
+    for (const skillId of canonicalProofSkillIds(proof.skillIds)) {
+      const skillIdentity = normalize(skillId);
+      if (!skillIdentity) continue;
+      if (!skillIdByIdentity.has(skillIdentity)) skillIdByIdentity.set(skillIdentity, skillId);
+      const projects = projectsBySkillIdentity.get(skillIdentity) ?? new Set<string>();
+      projects.add(projectId);
+      projectsBySkillIdentity.set(skillIdentity, projects);
+    }
+  }
+
+  return [...projectsBySkillIdentity.entries()]
+    .map(([skillIdentity, projectIds]) => ({
+      skillId: skillIdByIdentity.get(skillIdentity) ?? skillIdentity,
+      projectCount: projectIds.size,
+    }))
+    .sort((a, b) => b.projectCount - a.projectCount || a.skillId.localeCompare(b.skillId));
 }

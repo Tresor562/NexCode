@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Course, Lesson } from '../data/curriculumCore';
 import { buildSkillGraph } from '../learning/skillGraph';
-import { buildAdaptivePool, planPracticeSession, recommendedSessionMessage } from '../learning/adaptivePractice';
-import { courseNavigationSummary, learningEmptyState, searchLearningActivities } from '../learning/learningNavigator';
-import { buildChapterOfflinePack, OfflinePackKind } from '../learning/offlineEngine';
+import { buildAdaptivePool, planPracticeSession, PracticeMode, recommendedSessionMessage } from '../learning/adaptivePractice';
+import { courseNavigationSummary } from '../learning/learningNavigator';
+import { OfflinePackKind } from '../learning/offlineEngine';
+import { learningCompletionReward } from '../learning/sessionEngine';
 import { LocalState } from '../lib/localState';
-import { Card, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
+import { Card, GlassCard, Pill, PrimaryButton, ProgressBar, SectionHeader } from './components';
+import { LearningPathNode, LearningPathNodeState } from './LearningPathNode';
 import { theme } from './theme';
 
 export type LearningHubProps = {
@@ -16,40 +18,345 @@ export type LearningHubProps = {
   onToggleChapterOffline: (courseId: string, chapterId: string, kind: OfflinePackKind) => void;
 };
 
-const budgets = [5, 10, 20, 45] as const;
+const SESSION_OPTIONS = [5, 10, 20] as const;
+const OFFLINE_PACK_OPTIONS: Array<{ kind: OfflinePackKind; label: string; accessibilityLabel: string }> = [
+  { kind: 'lite', label: 'Lite', accessibilityLabel: 'léger' },
+  { kind: 'standard', label: 'Standard', accessibilityLabel: 'standard' },
+  { kind: 'full', label: 'Complet', accessibilityLabel: 'complet' },
+];
+type SessionMinutes = typeof SESSION_OPTIONS[number];
+
+const modeLabels: Record<PracticeMode, string> = {
+  learn: 'Nouvelle notion',
+  repair: 'Réparation ciblée',
+  review: 'Révision espacée',
+  interleave: 'Consolidation',
+  lab: 'Passage au Lab',
+  checkpoint: 'Checkpoint',
+};
+
+function modeTone(mode: PracticeMode): 'primary' | 'success' | 'warning' | undefined {
+  if (mode === 'repair') return 'warning';
+  if (mode === 'review' || mode === 'interleave') return 'success';
+  return 'primary';
+}
+
+function lessonExperienceLabels(lesson: Lesson) {
+  const labels: string[] = [];
+  if (lesson.retrievalPrompt) labels.push('Rappel actif');
+  if (lesson.transferPrompt) labels.push('Transfert');
+  if (lesson.labMission) labels.push('Lab guidé');
+  const exerciseCount = lesson.exercises?.length ?? 0;
+  if (exerciseCount > 1) labels.push(`${exerciseCount} défis`);
+  return labels.slice(0, 3);
+}
+
+function DailyMomentumCard({ state }: { state: LocalState }) {
+  const goal = Math.max(1, state.dailyGoal);
+  const completed = Math.max(0, Math.min(goal, state.dailyCompleted));
+  const progress = Math.round((completed / goal) * 100);
+  const remaining = Math.max(0, goal - completed);
+  const goalReached = completed >= goal;
+
+  return (
+    <GlassCard style={styles.momentumCard}>
+      <View style={styles.rowBetween}>
+        <View style={styles.flex}>
+          <Text style={styles.momentumKicker}>ÉLAN DU JOUR</Text>
+          <Text style={styles.momentumTitle}>{goalReached ? 'Objectif atteint. Garde le rythme.' : `${remaining} min pour ton objectif.`}</Text>
+        </View>
+        <View style={styles.streakBadge} accessibilityLabel={`Série actuelle : ${state.streak} jours`}>
+          <Text style={styles.streakIcon}>◆</Text>
+          <Text style={styles.streakValue}>{state.streak}</Text>
+          <Text style={styles.streakUnit}>j</Text>
+        </View>
+      </View>
+
+      <View
+        accessibilityRole="progressbar"
+        accessibilityLabel="Progression de l'objectif quotidien"
+        accessibilityValue={{ min: 0, max: goal, now: completed, text: `${completed} minutes sur ${goal}` }}
+        style={styles.momentumProgress}
+      >
+        <View style={styles.momentumProgressHeader}>
+          <Text style={styles.momentumProgressLabel}>{completed} / {goal} min</Text>
+          <Text style={styles.momentumProgressValue}>{progress}%</Text>
+        </View>
+        <ProgressBar value={progress} />
+      </View>
+
+      <View style={styles.momentumStats}>
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.xp}</Text><Text style={styles.momentumStatLabel}>XP</Text></View>
+        <View style={styles.momentumStatDivider} />
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.nexCoins}</Text><Text style={styles.momentumStatLabel}>NexCoins</Text></View>
+        <View style={styles.momentumStatDivider} />
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.bestStreak}</Text><Text style={styles.momentumStatLabel}>record série</Text></View>
+        <View style={styles.momentumStatDivider} />
+        <View style={styles.momentumStat}><Text style={styles.momentumStatValue}>{state.totalLearningMinutes}</Text><Text style={styles.momentumStatLabel}>min apprises</Text></View>
+      </View>
+
+      {goalReached ? (
+        <View style={styles.goalRewardRow} accessibilityLabel="Bonus quotidien obtenu : 40 XP et 20 NexCoins"><Pill label="Bonus obtenu" tone="success" /><Text style={styles.goalRewardText}>+40 XP · +20 NexCoins</Text></View>
+      ) : (
+        <Text style={styles.momentumHint}>Termine ton objectif pour débloquer +40 XP et +20 NexCoins aujourd’hui.</Text>
+      )}
+    </GlassCard>
+  );
+}
+
+function SessionLengthPicker({ value, onChange }: { value: SessionMinutes; onChange: (minutes: SessionMinutes) => void }) {
+  return (
+    <View style={styles.sessionLengthCard} accessibilityRole="radiogroup" accessibilityLabel="Durée de la session recommandée">
+      <View style={styles.flex}><Text style={styles.sessionLengthKicker}>TEMPS DISPONIBLE</Text><Text style={styles.sessionLengthHint}>Nex adapte la séance à ton temps réel.</Text></View>
+      <View style={styles.sessionLengthOptions}>
+        {SESSION_OPTIONS.map((minutes) => {
+          const selected = minutes === value;
+          return (
+            <Pressable key={minutes} accessibilityRole="radio" accessibilityState={{ checked: selected }} accessibilityLabel={`${minutes} minutes`} onPress={() => onChange(minutes)} hitSlop={6} style={({ pressed }) => [styles.sessionLengthOption, selected && styles.sessionLengthOptionSelected, pressed && styles.sessionLengthOptionPressed]}>
+              <Text style={[styles.sessionLengthOptionText, selected && styles.sessionLengthOptionTextSelected]}>{minutes} min</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 export function LearningHub({ courses, state, onOpenLesson, onToggleChapterOffline }: LearningHubProps) {
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
-  const [onlyDue, setOnlyDue] = useState(false);
-  const [budget, setBudget] = useState<(typeof budgets)[number]>(10);
-  const [packKind, setPackKind] = useState<OfflinePackKind>('standard');
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(state.recentCourseId ?? null);
+  const [sessionMinutes, setSessionMinutes] = useState<SessionMinutes>(10);
   const graph = useMemo(() => buildSkillGraph(courses), [courses]);
   const pool = useMemo(() => buildAdaptivePool(courses, graph, state.mastery, state.completedLessons), [courses, graph, state.mastery, state.completedLessons]);
-  const session = useMemo(() => planPracticeSession(pool, budget), [pool, budget]);
+  const session = useMemo(() => planPracticeSession(pool, sessionMinutes), [pool, sessionMinutes]);
   const selected = courses.find((course) => course.id === selectedCourseId) ?? null;
 
   if (selected) {
-    return <CourseJourney course={selected} state={state} packKind={packKind} onPackKind={setPackKind} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)} />;
+    return <CourseJourney course={selected} state={state} onBack={() => setSelectedCourseId(null)} onOpenLesson={(lesson) => onOpenLesson(selected, lesson)} onToggleChapterOffline={(chapterId, kind) => onToggleChapterOffline(selected.id, chapterId, kind)} />;
   }
 
-  const results = searchLearningActivities(courses, { query, onlyDueReview: onlyDue || undefined, onlyIncomplete: true }, state.completedLessons, state.mastery).slice(0, query || onlyDue ? 40 : 12);
+  const recommended = session.activities[0];
+  const recommendedCourse = recommended ? courses.find((course) => course.id === recommended.courseId) : undefined;
+  const recommendedLesson = recommendedCourse?.starterLessons.find((lesson) => lesson.id === recommended?.lessonId);
+  const recommendedReward = recommendedLesson ? learningCompletionReward(recommendedLesson) : null;
+  const recommendedExperiences = recommendedLesson ? lessonExperienceLabels(recommendedLesson) : [];
+  const sessionMessage = recommendedSessionMessage(session);
+  const recentCourse = courses.find((course) => course.id === state.recentCourseId) ?? courses[0];
 
-  return <View>
-    <Text style={styles.eyebrow}>APPRENTISSAGE ADAPTATIF</Text><Text style={styles.title}>Ton prochain meilleur pas.</Text><Text style={styles.lead}>NexCode privilégie les lacunes, les révisions dues et la pratique réelle avant de pousser de nouvelles notions.</Text>
-    <Card tone="primary" style={styles.sessionCard}><View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.kicker}>SESSION RECOMMANDÉE</Text><Text style={styles.cardTitle}>{session.estimatedMinutes || budget} min • {session.activities.length} activité{session.activities.length > 1 ? 's' : ''}</Text></View><Pill label={`${session.skillCoverage.length} compétences`} tone="primary" /></View><Text style={styles.body}>{recommendedSessionMessage(session)}</Text><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{budgets.map((item) => <Pressable key={item} onPress={() => setBudget(item)} style={[styles.chip, budget === item && styles.chipActive]}><Text style={[styles.chipText, budget === item && styles.chipTextActive]}>{item} min</Text></Pressable>)}</ScrollView>{session.activities[0] ? <PrimaryButton label="Commencer la session recommandée" onPress={() => { const item=session.activities[0]!; const course=courses.find((candidate)=>candidate.id===item.courseId); const lesson=course?.starterLessons.find((candidate)=>candidate.id===item.lessonId); if(course&&lesson) onOpenLesson(course,lesson); }} /> : null}</Card>
-    <SectionHeader title="Trouver une activité" action={`${courses.reduce((sum, course) => sum + course.lessons, 0)} activités`} /><View style={styles.searchRow}><TextInput value={query} onChangeText={setQuery} placeholder="Rechercher : webhook, flexbox, SQL…" placeholderTextColor={theme.colors.textMuted} style={styles.search} accessibilityLabel="Rechercher dans les activités NexCode" /><Pressable onPress={() => setOnlyDue((value)=>!value)} style={[styles.dueButton,onlyDue&&styles.dueButtonActive]}><Text style={[styles.dueText,onlyDue&&styles.dueTextActive]}>Révisions</Text></Pressable></View>
-    {(query||onlyDue)?<View style={styles.resultList}>{results.length?results.map(({course,lesson,chapterId})=><Pressable key={`${course.id}:${lesson.id}`} onPress={()=>onOpenLesson(course,lesson)} style={styles.resultPressable}><Card style={styles.resultCard}><View style={styles.rowBetween}><Pill label={course.language} tone="primary" /><Text style={styles.meta}>{lesson.durationMin} min</Text></View><Text style={styles.resultTitle}>{lesson.title}</Text><Text style={styles.meta}>{chapterId.replace(`${course.id}.`,'').replace(/-/g,' ')} • {lesson.activityKind??'learn'}</Text></Card></Pressable>):<Text style={styles.empty}>{learningEmptyState({query,onlyDueReview:onlyDue||undefined})}</Text>}</View>:null}
-    <SectionHeader title="Parcours" action="12 complets" />{courses.map((course)=>{const summary=courseNavigationSummary(course,state.completedLessons,state.mastery);return <Pressable key={course.id} onPress={()=>setSelectedCourseId(course.id)} style={styles.coursePressable}><Card><View style={styles.rowBetween}><View style={styles.courseIdentity}><View style={[styles.badge,{borderColor:course.color,backgroundColor:`${course.color}18`}]}><Text style={[styles.badgeText,{color:course.color}]}>{course.icon}</Text></View><View style={styles.flex}><Text style={styles.cardTitle}>{course.title}</Text><Text style={styles.meta}>{course.chapters.length} chapitres • {course.lessons} activités • ~{course.estimatedHours} h</Text></View></View><Text style={styles.chevron}>›</Text></View><Text style={styles.body}>{course.description}</Text><View style={styles.metricRow}><Pill label={`${summary.mastery}% maîtrise`} tone={summary.mastery>=70?'success':'primary'} /><Pill label={`${summary.dueForReview} révisions`} tone={summary.dueForReview?'warning':'neutral'} /><Text style={styles.progressText}>{summary.progress}% terminé</Text></View><ProgressBar value={summary.progress} /></Card></Pressable>})}
-  </View>;
+  return (
+    <View>
+      <View style={styles.heroRow}>
+        <View style={styles.flex}><Text style={styles.eyebrow}>APPRENDRE</Text><Text style={styles.title}>Continue ton chemin.</Text><Text style={styles.lead}>Une étape courte, du vrai code, puis un projet qui prouve ce que tu sais faire.</Text></View>
+        <View style={styles.nexOrb} accessibilityLabel="Nex, mentor NexCode"><View style={styles.nexFace}><View style={styles.nexEye} /><View style={styles.nexEye} /></View><Text style={styles.nexLabel}>NEX</Text></View>
+      </View>
+
+      <DailyMomentumCard state={state} />
+      <SessionLengthPicker value={sessionMinutes} onChange={setSessionMinutes} />
+
+      {recommendedCourse && recommendedLesson && recommended && recommendedReward ? (
+        <Card tone="primary" style={styles.recommended}>
+          <View style={styles.rowBetween}><View style={styles.recommendationPills}><Pill label="Prochaine étape" tone="primary" /><Pill label={modeLabels[recommended.mode]} tone={modeTone(recommended.mode)} /></View><Text style={styles.mini}>{session.estimatedMinutes || sessionMinutes} min</Text></View>
+          <Text style={styles.recommendedTitle}>{recommendedLesson.title}</Text>
+          <Text style={styles.meta}>{recommendedCourse.title} • +{recommendedReward.xp} XP • +{recommendedReward.nexCoins} NexCoins</Text>
+          {recommendedExperiences.length > 0 ? <View style={styles.recommendationPills} accessibilityLabel={`Expérience pédagogique : ${recommendedExperiences.join(', ')}`}>{recommendedExperiences.map((label) => <Pill key={label} label={label} tone="success" />)}</View> : null}
+          <View style={styles.whyCard}><Text style={styles.whyKicker}>POURQUOI NEX TE PROPOSE ÇA</Text><Text style={styles.whyText}>{recommended.reason}</Text><Text style={styles.sessionText}>{sessionMessage}</Text></View>
+          <View style={styles.sessionStats}>
+            <View style={styles.sessionStat}><Text style={styles.sessionStatValue}>{session.activities.length}</Text><Text style={styles.sessionStatLabel}>activité{session.activities.length > 1 ? 's' : ''}</Text></View>
+            <View style={styles.sessionStatDivider} />
+            <View style={styles.sessionStat}><Text style={styles.sessionStatValue}>{session.skillCoverage.length}</Text><Text style={styles.sessionStatLabel}>compétence{session.skillCoverage.length > 1 ? 's' : ''}</Text></View>
+            <View style={styles.sessionStatDivider} />
+            <View style={styles.sessionStat}><Text style={styles.sessionStatValue}>{session.courseCoverage.length}</Text><Text style={styles.sessionStatLabel}>parcours</Text></View>
+          </View>
+          <PrimaryButton icon="▶" label={recommended.mode === 'repair' ? 'Réparer cette notion' : recommended.mode === 'review' ? 'Faire la révision' : 'Continuer'} onPress={() => onOpenLesson(recommendedCourse, recommendedLesson)} />
+        </Card>
+      ) : (
+        <Card style={styles.emptySessionCard}>
+          <View style={styles.rowBetween}><Pill label="Séance à ajuster" tone="warning" /><Text style={styles.mini}>{sessionMinutes} min</Text></View>
+          <Text style={styles.emptySessionTitle}>Ton créneau est trop court pour la prochaine étape.</Text>
+          <Text style={styles.emptySessionText}>{sessionMessage}</Text>
+          <Text style={styles.emptySessionHint}>Nex préfère te faire choisir un créneau réaliste plutôt que de cacher une réparation importante ou de te pousser une nouvelle notion trop tôt.</Text>
+          <PrimaryButton icon="↗" label={sessionMinutes < 20 ? 'Passer à 20 min' : 'Voir le parcours'} onPress={() => sessionMinutes < 20 ? setSessionMinutes(20) : recentCourse && setSelectedCourseId(recentCourse.id)} />
+        </Card>
+      )}
+
+      <SectionHeader title="Parcours" action={`${courses.length}`} />
+      <View style={styles.courseGrid}>
+        {courses.map((course) => {
+          const summary = courseNavigationSummary(course, state.completedLessons, state.mastery);
+          return (
+            <Pressable key={course.id} accessibilityRole="button" accessibilityLabel={`Ouvrir ${course.title}`} onPress={() => setSelectedCourseId(course.id)} style={({ pressed }) => [styles.courseTile, pressed && styles.pressed]}>
+              <View style={[styles.courseBadge, { borderColor: `${course.color}66`, backgroundColor: `${course.color}12` }]}><Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text></View>
+              <Text style={styles.courseTitle} numberOfLines={2}>{course.title}</Text><Text style={styles.courseMeta}>{summary.progress}% terminé</Text><ProgressBar value={summary.progress} />
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
 }
 
-function CourseJourney({ course, state, packKind, onPackKind, onBack, onOpenLesson, onToggleChapterOffline }: { course:Course; state:LocalState; packKind:OfflinePackKind; onPackKind:(kind:OfflinePackKind)=>void; onBack:()=>void; onOpenLesson:(lesson:Lesson)=>void; onToggleChapterOffline:(chapterId:string,kind:OfflinePackKind)=>void }) {
-  const summary=courseNavigationSummary(course,state.completedLessons,state.mastery); const firstNext=course.starterLessons.find((lesson)=>!state.completedLessons.includes(lesson.id))??course.starterLessons[0];
-  return <View><Pressable onPress={onBack} accessibilityRole="button"><Text style={styles.back}>‹ Tous les parcours</Text></Pressable><Text style={styles.eyebrow}>{course.category.toUpperCase()}</Text><Text style={styles.title}>{course.title}</Text><Text style={styles.lead}>{course.description}</Text><Card tone="primary" style={styles.summaryCard}><View style={styles.metricGrid}><Metric label="Maîtrise" value={`${summary.mastery}%`} /><Metric label="Progression" value={`${summary.progress}%`} /><Metric label="À revoir" value={`${summary.dueForReview}`} /></View><ProgressBar value={summary.progress} />{firstNext?<PrimaryButton label={`Continuer • ${firstNext.title}`} onPress={()=>onOpenLesson(firstNext)} />:null}</Card>
-    <SectionHeader title="Offline par chapitre" action={packKind.toUpperCase()} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>{(['lite','standard','full'] as const).map((kind)=><Pressable key={kind} onPress={()=>onPackKind(kind)} style={[styles.chip,packKind===kind&&styles.chipActive]}><Text style={[styles.chipText,packKind===kind&&styles.chipTextActive]}>{kind==='lite'?'Lite':kind==='standard'?'Standard':'Full'}</Text></Pressable>)}</ScrollView>
-    <SectionHeader title="Chapitres" action={`${course.chapters.length}`} />{summary.chapters.map((chapterSummary,index)=>{const chapter=course.chapters.find((candidate)=>candidate.id===chapterSummary.id)!; const pack=buildChapterOfflinePack(course,chapter.id,packKind); const installed=state.installedOfflinePacks.some((candidate)=>candidate.courseId===course.id&&candidate.kind===packKind&&candidate.curriculumVersion===course.curriculumVersion&&candidate.chapterIds.includes(chapter.id)); const older=state.installedOfflinePacks.some((candidate)=>candidate.courseId===course.id&&candidate.chapterIds.includes(chapter.id)&&candidate.curriculumVersion<course.curriculumVersion); const nextLesson=chapterSummary.nextLessonId?course.starterLessons.find((candidate)=>candidate.id===chapterSummary.nextLessonId):undefined; return <Card key={chapter.id} style={styles.chapterCard}><View style={styles.rowBetween}><View style={styles.flex}><Text style={styles.chapterNumber}>CHAPITRE {index+1}</Text><Text style={styles.chapterTitle}>{chapter.title}</Text><Text style={styles.meta}>{chapter.units.length} unités • {chapter.lessonIds.length} activités • ~{chapter.estimatedMinutes} min</Text></View><Pill label={`${chapterSummary.progress}%`} tone={chapterSummary.progress>=80?'success':'primary'} /></View><View style={styles.spacer10}/><ProgressBar value={chapterSummary.progress}/><View style={styles.chapterFlags}>{chapterSummary.hasLab?<Pill label="Lab" tone="success"/>:null}{chapterSummary.hasCheckpoint?<Pill label="Checkpoint" tone="warning"/>:null}<Pill label={`${pack?.estimatedMb??0} Mo ${packKind}`}/>{older?<Pill label="Mise à jour disponible" tone="warning"/>:null}</View>{nextLesson?<Pressable onPress={()=>onOpenLesson(nextLesson)} style={styles.nextLesson}><View style={styles.flex}><Text style={styles.nextLabel}>PROCHAINE ACTIVITÉ</Text><Text style={styles.nextTitle}>{nextLesson.title}</Text><Text style={styles.meta}>{nextLesson.activityKind??'learn'} • difficulté {nextLesson.difficulty??1}/5</Text></View><Text style={styles.chevron}>›</Text></Pressable>:<Text style={styles.done}>Chapitre terminé ✓</Text>}<Pressable onPress={()=>onToggleChapterOffline(chapter.id,packKind)} style={[styles.offlineButton,installed&&styles.offlineButtonInstalled]}><Text style={[styles.offlineButtonText,installed&&styles.offlineButtonTextInstalled]}>{installed?`✓ Pack ${packKind} v${course.curriculumVersion} installé`:`↓ Télécharger ${packKind} (${pack?.estimatedMb??0} Mo)`}</Text></Pressable></Card>})}
-  </View>;
+function CourseJourney({ course, state, onBack, onOpenLesson, onToggleChapterOffline }: { course: Course; state: LocalState; onBack: () => void; onOpenLesson: (lesson: Lesson) => void; onToggleChapterOffline: (chapterId: string, kind: OfflinePackKind) => void }) {
+  const summary = courseNavigationSummary(course, state.completedLessons, state.mastery);
+  const ordered = course.chapters.flatMap((chapter) => chapter.lessonIds.map((id) => course.starterLessons.find((lesson) => lesson.id === id)).filter((lesson): lesson is Lesson => Boolean(lesson)));
+  const fallback = course.starterLessons.filter((lesson) => !ordered.some((item) => item.id === lesson.id));
+  const lessons = [...ordered, ...fallback];
+  const rawIncompleteIndex = lessons.findIndex((lesson) => !state.completedLessons.includes(lesson.id));
+  const firstIncompleteIndex = rawIncompleteIndex === -1 ? Math.max(0, lessons.length - 1) : rawIncompleteIndex;
+
+  return (
+    <View>
+      <View style={styles.journeyHeader}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Retour aux parcours" onPress={onBack} style={styles.backButton}><Text style={styles.backIcon}>‹</Text></Pressable>
+        <View style={styles.flex}><Text style={styles.journeyKicker}>{course.category.toUpperCase()}</Text><Text style={styles.journeyTitle}>{course.title}</Text></View>
+        <View style={[styles.courseBadgeSmall, { borderColor: `${course.color}66` }]}><Text style={[styles.courseBadgeText, { color: course.color }]}>{course.icon}</Text></View>
+      </View>
+
+      <GlassCard>
+        <View style={styles.rowBetween}><View><Text style={styles.progressLabel}>Progression du parcours</Text><Text style={styles.progressHint}>{state.completedLessons.filter((id) => lessons.some((lesson) => lesson.id === id)).length} étapes terminées</Text></View><Text style={styles.progressValue}>{summary.progress}%</Text></View>
+        <ProgressBar value={summary.progress} />
+      </GlassCard>
+
+      <SectionHeader title="Disponible hors ligne" action={`${state.downloadedChapters.filter((chapterId) => course.chapters.some((chapter) => chapter.id === chapterId)).length}/${course.chapters.length}`} />
+      <View style={styles.offlineList}>
+        {course.chapters.slice(0, 4).map((chapter) => {
+          const installedPack = state.installedOfflinePacks.find((pack) => pack.courseId === course.id && pack.chapterIds.includes(chapter.id));
+          const installedKind = installedPack?.kind;
+          const installedOption = OFFLINE_PACK_OPTIONS.find((option) => option.kind === installedKind);
+          return (
+            <Card key={chapter.id} style={styles.offlineCard}>
+              <View style={styles.rowBetween}>
+                <View style={styles.offlineCopy}><Text style={styles.offlineTitle} numberOfLines={1}>{chapter.title}</Text><Text style={styles.offlineMeta}>{chapter.estimatedMinutes} min · {chapter.lessonIds.length} étapes</Text></View>
+                <Pill label={installedOption ? installedOption.label : 'Cloud'} tone={installedOption ? 'success' : undefined} />
+              </View>
+              <View style={styles.offlineActions} accessibilityRole="radiogroup" accessibilityLabel={`Qualité hors ligne pour ${chapter.title}`}>
+                {OFFLINE_PACK_OPTIONS.map((option) => {
+                  const active = installedKind === option.kind;
+                  return (
+                    <Pressable
+                      key={option.kind}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: active, checked: active }}
+                      accessibilityLabel={`${active ? 'Retirer' : 'Télécharger'} ${chapter.title} en pack ${option.accessibilityLabel}`}
+                      onPress={() => onToggleChapterOffline(chapter.id, option.kind)}
+                      style={({ pressed }) => [styles.offlineAction, active && styles.offlineActionActive, pressed && styles.pressed]}
+                    >
+                      <Text style={[styles.offlineActionText, active && styles.offlineActionTextActive]}>{active ? `Retirer ${option.label}` : option.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </Card>
+          );
+        })}
+      </View>
+
+      <SectionHeader title="Chemin d’apprentissage" action={`${lessons.length} étapes`} />
+      <View style={styles.pathWrap}>
+        {lessons.map((lesson, index) => {
+          const isCompleted = state.completedLessons.includes(lesson.id);
+          const unlocked = index <= firstIncompleteIndex || isCompleted;
+          const next = !isCompleted && index === firstIncompleteIndex;
+          const nodeState: LearningPathNodeState = isCompleted ? 'done' : next ? 'current' : unlocked ? 'available' : 'locked';
+          const meta = `${lesson.module} · ${lesson.durationMin} min`;
+          return (
+            <LearningPathNode
+              key={lesson.id}
+              title={lesson.title}
+              meta={meta}
+              icon={course.icon}
+              state={nodeState}
+              offset={index % 2 === 0 ? 0 : 22}
+              showConnector={index < lessons.length - 1}
+              onPress={() => { if (unlocked) onOpenLesson(lesson); }}
+            />
+          );
+        })}
+      </View>
+    </View>
+  );
 }
-function Metric({label,value}:{label:string;value:string}){return <View style={styles.metric}><Text style={styles.metricValue}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>}
-const styles=StyleSheet.create({flex:{flex:1},eyebrow:{color:'#8A98FF',fontSize:11,fontWeight:'800',letterSpacing:1.2,marginTop:8,marginBottom:8},title:{color:theme.colors.text,fontSize:30,fontWeight:'900',lineHeight:36},lead:{color:theme.colors.textSecondary,fontSize:14,lineHeight:21,marginTop:7,marginBottom:14},sessionCard:{marginTop:8},kicker:{color:'#96A3FF',fontSize:10,fontWeight:'900',letterSpacing:1},cardTitle:{color:theme.colors.text,fontSize:16,fontWeight:'800',marginTop:4},body:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,marginTop:8},rowBetween:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',gap:10},chipRow:{gap:8,paddingVertical:12},chip:{paddingHorizontal:13,paddingVertical:9,borderRadius:999,borderWidth:1,borderColor:theme.colors.border,backgroundColor:theme.colors.surfaceSoft},chipActive:{backgroundColor:theme.colors.primary,borderColor:theme.colors.primary},chipText:{color:theme.colors.textSecondary,fontSize:12,fontWeight:'700'},chipTextActive:{color:'#fff'},searchRow:{flexDirection:'row',gap:8},search:{flex:1,minHeight:46,borderRadius:14,borderWidth:1,borderColor:theme.colors.border,backgroundColor:theme.colors.surface,color:theme.colors.text,paddingHorizontal:14},dueButton:{minHeight:46,justifyContent:'center',paddingHorizontal:12,borderRadius:14,borderWidth:1,borderColor:theme.colors.border},dueButtonActive:{backgroundColor:'#2B2413',borderColor:'#624F1D'},dueText:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},dueTextActive:{color:theme.colors.warning},resultList:{gap:8,marginTop:10},resultPressable:{marginBottom:4},resultCard:{padding:13},resultTitle:{color:theme.colors.text,fontSize:15,fontWeight:'800',marginTop:9,marginBottom:4},empty:{color:theme.colors.textSecondary,fontSize:13,lineHeight:20,paddingVertical:22},coursePressable:{marginBottom:10},courseIdentity:{flex:1,flexDirection:'row',alignItems:'center',gap:11},badge:{width:46,height:46,borderRadius:15,borderWidth:1,alignItems:'center',justifyContent:'center'},badgeText:{fontWeight:'900',fontSize:13},chevron:{color:theme.colors.textMuted,fontSize:26},meta:{color:theme.colors.textMuted,fontSize:11,lineHeight:16,marginTop:3},metricRow:{flexDirection:'row',alignItems:'center',gap:7,marginTop:13,marginBottom:10,flexWrap:'wrap'},progressText:{marginLeft:'auto',color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},back:{color:'#9DA8FF',fontSize:13,fontWeight:'800',paddingVertical:10},summaryCard:{marginTop:10},metricGrid:{flexDirection:'row',gap:8,marginBottom:14},metric:{flex:1},metricValue:{color:theme.colors.text,fontSize:20,fontWeight:'900'},metricLabel:{color:theme.colors.textMuted,fontSize:10,marginTop:3},chapterCard:{marginBottom:10},chapterNumber:{color:'#7E8CFF',fontSize:9,fontWeight:'900',letterSpacing:1},chapterTitle:{color:theme.colors.text,fontSize:17,fontWeight:'800',marginTop:3},spacer10:{height:10},chapterFlags:{flexDirection:'row',gap:7,flexWrap:'wrap',marginTop:11},nextLesson:{flexDirection:'row',alignItems:'center',marginTop:12,padding:12,borderRadius:13,backgroundColor:theme.colors.surfaceSoft,borderWidth:1,borderColor:theme.colors.border},nextLabel:{color:'#8C98FF',fontSize:9,fontWeight:'900',letterSpacing:.8},nextTitle:{color:theme.colors.text,fontSize:14,fontWeight:'800',marginTop:3},done:{color:theme.colors.success,fontSize:12,fontWeight:'800',marginTop:12},offlineButton:{marginTop:10,minHeight:42,borderRadius:12,borderWidth:1,borderColor:theme.colors.borderStrong,alignItems:'center',justifyContent:'center',paddingHorizontal:10},offlineButtonInstalled:{borderColor:'#235A40',backgroundColor:theme.colors.successSoft},offlineButtonText:{color:theme.colors.textSecondary,fontSize:11,fontWeight:'800'},offlineButtonTextInstalled:{color:theme.colors.success}});
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: theme.space.sm },
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space.lg, marginBottom: theme.space.lg },
+  eyebrow: { fontSize: theme.type.caption, fontWeight: '900', letterSpacing: 1.6, color: theme.colors.primary },
+  title: { fontSize: theme.type.display, lineHeight: 38, fontWeight: '900', color: theme.colors.text, marginTop: 4 },
+  lead: { fontSize: theme.type.body, lineHeight: 21, color: theme.colors.textMuted, marginTop: 8 },
+  nexOrb: { width: 68, height: 68, borderRadius: 34, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primaryBorder, alignItems: 'center', justifyContent: 'center' },
+  nexFace: { flexDirection: 'row', gap: 8, marginBottom: 5 },
+  nexEye: { width: 7, height: 7, borderRadius: 4, backgroundColor: theme.colors.primary },
+  nexLabel: { fontSize: theme.type.caption, fontWeight: '900', letterSpacing: 1.2, color: theme.colors.primary },
+  momentumCard: { marginBottom: theme.space.md },
+  momentumKicker: { fontSize: theme.type.caption, fontWeight: '900', letterSpacing: 1.2, color: theme.colors.success },
+  momentumTitle: { fontSize: theme.type.title, lineHeight: 23, fontWeight: '900', color: theme.colors.text, marginTop: 4 },
+  streakBadge: { flexDirection: 'row', alignItems: 'baseline', gap: 3, backgroundColor: theme.colors.surfaceRaised, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.pill, paddingHorizontal: 12, paddingVertical: 8 },
+  streakIcon: { fontSize: 12, color: theme.colors.warning },
+  streakValue: { fontSize: theme.type.title, fontWeight: '900', color: theme.colors.text },
+  streakUnit: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.textMuted },
+  momentumProgress: { marginTop: theme.space.md },
+  momentumProgressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 7 },
+  momentumProgressLabel: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.text },
+  momentumProgressValue: { fontSize: theme.type.caption, fontWeight: '900', color: theme.colors.success },
+  momentumStats: { flexDirection: 'row', alignItems: 'stretch', marginTop: theme.space.md, paddingTop: theme.space.md, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  momentumStat: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  momentumStatValue: { fontSize: theme.type.title, fontWeight: '900', color: theme.colors.text },
+  momentumStatLabel: { fontSize: theme.type.caption, lineHeight: 14, fontWeight: '700', color: theme.colors.textMuted, marginTop: 3, textAlign: 'center' },
+  momentumStatDivider: { width: 1, backgroundColor: theme.colors.border },
+  goalRewardRow: { flexDirection: 'row', alignItems: 'center', gap: theme.space.sm, marginTop: theme.space.md },
+  goalRewardText: { fontSize: theme.type.caption, fontWeight: '900', color: theme.colors.success },
+  momentumHint: { fontSize: theme.type.caption, lineHeight: 18, color: theme.colors.textMuted, marginTop: theme.space.md },
+  sessionLengthCard: { flexDirection: 'row', alignItems: 'center', gap: theme.space.md, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.radius.lg, padding: theme.space.md, marginBottom: theme.space.md },
+  sessionLengthKicker: { fontSize: theme.type.caption, fontWeight: '900', letterSpacing: 1.1, color: theme.colors.textMuted },
+  sessionLengthHint: { fontSize: theme.type.caption, lineHeight: 17, color: theme.colors.textMuted, marginTop: 3 },
+  sessionLengthOptions: { flexDirection: 'row', gap: 6 },
+  sessionLengthOption: { minHeight: 44, minWidth: 54, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  sessionLengthOptionSelected: { borderColor: theme.colors.primaryBorder, backgroundColor: theme.colors.primarySoft },
+  sessionLengthOptionPressed: { opacity: 0.72 },
+  sessionLengthOptionText: { fontSize: theme.type.caption, fontWeight: '900', color: theme.colors.textMuted },
+  sessionLengthOptionTextSelected: { color: theme.colors.primary },
+  recommended: { marginBottom: theme.space.lg },
+  recommendationPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  recommendedTitle: { fontSize: theme.type.titleLarge, lineHeight: 28, fontWeight: '900', color: theme.colors.text, marginTop: theme.space.md },
+  meta: { fontSize: theme.type.caption, color: theme.colors.textMuted, marginTop: 7, marginBottom: theme.space.sm },
+  mini: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.textMuted },
+  whyCard: { borderRadius: theme.radius.md, backgroundColor: theme.colors.primarySoft, borderWidth: 1, borderColor: theme.colors.primaryBorder, padding: theme.space.md, marginVertical: theme.space.md },
+  whyKicker: { fontSize: theme.type.caption, fontWeight: '900', letterSpacing: 1.1, color: theme.colors.primary },
+  whyText: { fontSize: theme.type.body, lineHeight: 21, fontWeight: '700', color: theme.colors.text, marginTop: 5 },
+  sessionText: { fontSize: theme.type.caption, lineHeight: 18, color: theme.colors.textMuted, marginTop: 6 },
+  sessionStats: { flexDirection: 'row', alignItems: 'stretch', borderTopWidth: 1, borderTopColor: theme.colors.border, paddingTop: theme.space.md, marginBottom: theme.space.md },
+  sessionStat: { flex: 1, alignItems: 'center' },
+  sessionStatValue: { fontSize: theme.type.title, fontWeight: '900', color: theme.colors.text },
+  sessionStatLabel: { fontSize: theme.type.caption, color: theme.colors.textMuted, fontWeight: '700', marginTop: 2 },
+  sessionStatDivider: { width: 1, backgroundColor: theme.colors.border },
+  emptySessionCard: { marginBottom: theme.space.lg },
+  emptySessionTitle: { fontSize: theme.type.title, lineHeight: 23, fontWeight: '900', color: theme.colors.text, marginTop: theme.space.md },
+  emptySessionText: { fontSize: theme.type.body, lineHeight: 21, color: theme.colors.text, marginTop: 8 },
+  emptySessionHint: { fontSize: theme.type.caption, lineHeight: 18, color: theme.colors.textMuted, marginTop: 8, marginBottom: theme.space.md },
+  courseGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.space.sm },
+  courseTile: { width: '48%', minHeight: 154, padding: theme.space.md, borderRadius: theme.radius.lg, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, gap: 9 },
+  courseBadge: { width: 40, height: 40, borderRadius: theme.radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  courseBadgeSmall: { width: 40, height: 40, borderRadius: theme.radius.md, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  courseBadgeText: { fontSize: 20, fontWeight: '900' },
+  courseTitle: { fontSize: theme.type.body, lineHeight: 20, fontWeight: '900', color: theme.colors.text },
+  courseMeta: { fontSize: theme.type.caption, color: theme.colors.textMuted },
+  pressed: { opacity: 0.72 },
+  journeyHeader: { flexDirection: 'row', alignItems: 'center', gap: theme.space.md, marginBottom: theme.space.md },
+  backButton: { width: 48, height: 48, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  backIcon: { fontSize: 30, lineHeight: 34, color: theme.colors.text },
+  journeyKicker: { fontSize: theme.type.caption, letterSpacing: 1.1, fontWeight: '900', color: theme.colors.textMuted },
+  journeyTitle: { fontSize: theme.type.titleLarge, lineHeight: 28, fontWeight: '900', color: theme.colors.text, marginTop: 2 },
+  progressLabel: { fontSize: theme.type.body, fontWeight: '900', color: theme.colors.text },
+  progressHint: { fontSize: theme.type.caption, color: theme.colors.textMuted, marginTop: 3, marginBottom: theme.space.md },
+  progressValue: { fontSize: theme.type.titleLarge, fontWeight: '900', color: theme.colors.primary },
+  offlineList: { gap: theme.space.sm },
+  offlineCard: { gap: theme.space.sm },
+  offlineCopy: { flex: 1, paddingRight: theme.space.sm },
+  offlineTitle: { fontSize: theme.type.body, fontWeight: '900', color: theme.colors.text },
+  offlineMeta: { fontSize: theme.type.caption, color: theme.colors.textMuted, marginTop: 3 },
+  offlineActions: { flexDirection: 'row', gap: 8 },
+  offlineAction: { flex: 1, minHeight: 44, borderRadius: theme.radius.md, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
+  offlineActionActive: { borderColor: theme.colors.primaryBorder, backgroundColor: theme.colors.primarySoft },
+  offlineActionText: { fontSize: theme.type.caption, fontWeight: '800', color: theme.colors.text },
+  offlineActionTextActive: { color: theme.colors.primary },
+  pathWrap: { paddingVertical: theme.space.md, paddingHorizontal: 4 },
+});
