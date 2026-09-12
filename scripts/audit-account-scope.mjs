@@ -43,13 +43,14 @@ requirePattern(
   'Owner-binding metadata lookup must fail closed when the filesystem cannot prove account ownership state.',
 );
 requirePattern(
-  /export function bindLocalStateOwner\(userId: string\): void \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return;[\s\S]*ownerBoundMarker\.write\('1'\);[\s\S]*ownerFile\.write\(normalized\);/,
-  'Binding must persist the fail-closed initialized marker before owner identity so interrupted writes cannot reopen legacy state adoption.',
+  /export function bindLocalStateOwner\(userId: string\): boolean \{[\s\S]*const normalized = normalizeAccountId\(userId\);[\s\S]*if \(!normalized\) return false;[\s\S]*ownerBoundMarker\.write\('1'\);[\s\S]*ownerFile\.write\(normalized\);[\s\S]*return ownerBindingWasInitialized\(\) && readOwnerId\(\) === normalized;[\s\S]*catch \{[\s\S]*return false;/,
+  'Binding must report verified durable ownership and fail closed when owner metadata cannot be committed or re-read.',
 );
 const markerWriteIndex = source.indexOf("ownerBoundMarker.write('1')");
 const ownerWriteIndex = source.indexOf('ownerFile.write(normalized)');
-if (markerWriteIndex < 0 || ownerWriteIndex < 0 || markerWriteIndex >= ownerWriteIndex) {
-  throw new Error('Owner binding must commit the initialized marker before writing owner identity.');
+const ownerVerificationIndex = source.indexOf('return ownerBindingWasInitialized() && readOwnerId() === normalized');
+if (markerWriteIndex < 0 || ownerWriteIndex < 0 || ownerVerificationIndex < 0 || markerWriteIndex >= ownerWriteIndex || ownerWriteIndex >= ownerVerificationIndex) {
+  throw new Error('Owner binding must commit the initialized marker, write owner identity, then verify both before reporting success.');
 }
 requirePattern(
   /import \{ sanitizeLocalState, type LocalState \} from '\.\/localState';/,
@@ -64,8 +65,8 @@ requirePattern(
   'Valid owner handoffs must re-sanitize retained local state so malformed restored XP, streak, Lab or mastery data cannot bypass startup guards.',
 );
 requirePattern(
-  /if \(!ownerId\) \{[\s\S]*const ownershipEvidenceExists = ownerMetadataExists\(\) \|\| ownerBindingWasInitialized\(\);[\s\S]*if \(ownershipEvidenceExists\) return freshState\(\);[\s\S]*bindLocalStateOwner\(normalized\);[\s\S]*return safeLocal;[\s\S]*\}/,
-  'Legacy migration must fail closed when ownership evidence exists and must bind the authenticated owner in the same decision that adopts a genuine legacy snapshot.',
+  /if \(!ownerId\) \{[\s\S]*const ownershipEvidenceExists = ownerMetadataExists\(\) \|\| ownerBindingWasInitialized\(\);[\s\S]*if \(ownershipEvidenceExists\) return freshState\(\);[\s\S]*if \(!bindLocalStateOwner\(normalized\)\) return freshState\(\);[\s\S]*return safeLocal;[\s\S]*\}/,
+  'Legacy migration must expose retained progression only after the authenticated owner binding has been durably verified.',
 );
 requirePattern(
   /return ownerId === normalized \? safeLocal : freshState\(\);/,
@@ -80,5 +81,8 @@ if (/ownerId === normalized \? local : freshState\(\)/.test(source) || /\? fresh
 if (/return ownershipEvidenceExists \? freshState\(\) : safeLocal;/.test(source)) {
   throw new Error('Legacy progression adoption must not remain unbound after the ownership scope decision.');
 }
+if (/bindLocalStateOwner\(normalized\);\s*return safeLocal;/.test(source)) {
+  throw new Error('Legacy progression must not be returned after a fire-and-forget owner binding attempt.');
+}
 
-console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, the nil UUID sentinel is rejected, retained snapshots are re-sanitized at the ownership boundary, genuine legacy migration is atomically claimed by the authenticated owner, and cross-account resets share canonical local defaults.');
+console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, owner binding is verified before legacy progression is exposed, retained snapshots are re-sanitized at the ownership boundary, and cross-account resets share canonical local defaults.');
