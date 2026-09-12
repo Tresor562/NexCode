@@ -15,6 +15,7 @@ import { LabWorkspaceScreen } from './LabWorkspaceScreen';
 import { ProjectPortfolioScreen } from './ProjectPortfolioScreen';
 import { Card, GlassCard, Pill, ProgressBar, SectionHeader, StatTile } from './components';
 import { NavGlyph, NavGlyphName } from './NavGlyph';
+import { useMotionPreferences } from './motionPreferences';
 import { theme } from './theme';
 
 type Tab = 'Accueil' | 'Apprendre' | 'Lab' | 'Projets' | 'Profil';
@@ -98,8 +99,19 @@ export default function NexCodeApp() {
 }
 
 function Home({ state, session, onOpenLesson, onOpenLearn, onOpenLab }: { state: LocalState; session: ReturnType<typeof planPracticeSession>; onOpenLesson: (course: Course, lesson: Lesson) => void; onOpenLearn: () => void; onOpenLab: () => void }) {
-  const entrance = useRef(new Animated.Value(0)).current;
-  useEffect(() => { Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true }).start(); }, [entrance]);
+  const { reduceMotion, appActive } = useMotionPreferences();
+  const entranceEnabled = useRef(appActive && !reduceMotion).current;
+  const entrance = useRef(new Animated.Value(entranceEnabled ? 0 : 1)).current;
+  useEffect(() => {
+    entrance.stopAnimation();
+    if (!entranceEnabled || reduceMotion || !appActive) {
+      entrance.setValue(1);
+      return;
+    }
+    const animation = Animated.timing(entrance, { toValue: 1, duration: 360, useNativeDriver: true });
+    animation.start();
+    return () => animation.stop();
+  }, [appActive, entrance, entranceEnabled, reduceMotion]);
   const progress = Math.min(100, Math.round((state.dailyCompleted / Math.max(1, state.dailyGoal)) * 100));
   const next = session.activities[0];
   const nextCourse = next ? courses.find((course) => course.id === next.courseId) : undefined;
