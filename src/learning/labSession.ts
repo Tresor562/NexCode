@@ -160,11 +160,11 @@ function previewPathDepth(path: string) {
 }
 
 function previewEntryPath(draft: LabDraft) {
-  const rootEntry = resolvePreviewWorkspaceFile(draft, 'index.html');
-  if (rootEntry) return rootEntry;
-
   const activeEntry = Object.keys(draft.files).find((filename) => filename === draft.activeFile && filename.toLowerCase().endsWith('.html'));
   if (activeEntry) return activeEntry;
+
+  const rootEntry = resolvePreviewWorkspaceFile(draft, 'index.html');
+  if (rootEntry) return rootEntry;
 
   const htmlFiles = Object.keys(draft.files)
     .filter((filename) => filename.toLowerCase().endsWith('.html'))
