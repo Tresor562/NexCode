@@ -62,17 +62,17 @@ function resolveHtmlEntry(draft: LabDraft): string {
   });
   if (rootIndex) return rootIndex[1] ?? '';
 
-  const nestedIndex = entries.find(([filename]) => {
-    const key = portableWorkspaceKey(filename).replace(/\\/g, '/');
-    return key.endsWith('/index.html') || key.endsWith('/index.htm');
-  });
-  if (nestedIndex) return nestedIndex[1] ?? '';
-
   const activeKey = portableWorkspaceKey(draft.activeFile ?? '').replace(/\\/g, '/');
   if (/\.html?$/i.test(activeKey)) {
     const activeHtml = entries.find(([filename]) => portableWorkspaceKey(filename).replace(/\\/g, '/') === activeKey);
     if (activeHtml) return activeHtml[1] ?? '';
   }
+
+  const nestedIndex = entries.find(([filename]) => {
+    const key = portableWorkspaceKey(filename).replace(/\\/g, '/');
+    return key.endsWith('/index.html') || key.endsWith('/index.htm');
+  });
+  if (nestedIndex) return nestedIndex[1] ?? '';
 
   const firstHtml = entries.find(([filename]) => /\.html?$/i.test(portableWorkspaceKey(filename).replace(/\\/g, '/')));
   return firstHtml?.[1] ?? '';
