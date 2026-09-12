@@ -49,9 +49,9 @@ function ownerBindingWasInitialized(): boolean {
   }
 }
 
-export function bindLocalStateOwner(userId: string): void {
+export function bindLocalStateOwner(userId: string): boolean {
   const normalized = normalizeAccountId(userId);
-  if (!normalized) return;
+  if (!normalized) return false;
   try {
     // Persist the fail-closed marker before the identity itself. A crash or storage
     // failure between these two writes must never make a partially initialized
@@ -62,9 +62,14 @@ export function bindLocalStateOwner(userId: string): void {
 
     if (!ownerFile.exists) ownerFile.create();
     ownerFile.write(normalized);
+
+    // A write call completing is not enough to authorize reuse of legacy progress.
+    // Re-read both ownership signals and only report success when this exact learner
+    // can be proven as the durable owner. Storage failures therefore fail closed in
+    // the same session instead of exposing a snapshot before ownership is committed.
+    return ownerBindingWasInitialized() && readOwnerId() === normalized;
   } catch {
-    // Cloud hydration can still continue. Because the initialized marker is written
-    // first, a missing/corrupt owner file fails closed on the next scope decision.
+    return false;
   }
 }
 
@@ -98,11 +103,10 @@ export function scopeLocalStateForUser(local: LocalState, userId: string): Local
     if (ownershipEvidenceExists) return freshState();
 
     // Claim a genuine legacy snapshot in the same scope decision that authorizes
-    // its reuse. Waiting for a later caller to bind ownership leaves a crash/race
-    // window where a second account could also adopt the same XP, drafts or mastery.
-    // bindLocalStateOwner writes the fail-closed marker first, so even an interrupted
-    // migration cannot reopen legacy adoption on the next authenticated session.
-    bindLocalStateOwner(normalized);
+    // its reuse. If durable owner binding cannot be verified, do not expose the
+    // legacy XP, drafts or mastery even temporarily: the same unclaimed snapshot
+    // must never be reusable by two authenticated learners.
+    if (!bindLocalStateOwner(normalized)) return freshState();
     return safeLocal;
   }
 
