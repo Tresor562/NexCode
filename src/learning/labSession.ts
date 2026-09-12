@@ -145,6 +145,11 @@ function normalizePreviewAssetPath(rawReference: string, sourcePath?: string) {
   return normalized.join('/');
 }
 
+function previewSvgFragment(rawReference: string) {
+  const match = rawReference.trim().match(/#([A-Za-z_][\w:.-]*)$/);
+  return match?.[1] ? `#${match[1]}` : '';
+}
+
 function resolvePreviewWorkspaceFile(draft: LabDraft, normalizedPath: string) {
   const collisionKey = workspaceCollisionKey(normalizedPath);
   return Object.keys(draft.files).find((filename) => workspaceCollisionKey(filename) === collisionKey);
@@ -180,7 +185,7 @@ function inlineLocalSvgCssUrls(source: string, draft: LabDraft, stylesheetPath: 
     if (!path) return match;
     const svg = draft.files[path];
     if (svg === undefined) return match;
-    return `url("${svgPreviewDataUri(svg)}")`;
+    return `url("${svgPreviewDataUri(svg)}${previewSvgFragment(reference)}")`;
   });
 }
 
@@ -194,7 +199,7 @@ function inlineLocalPreviewImages(document: string, draft: LabDraft, documentPat
     if (!path) return tag;
     const source = draft.files[path];
     if (source === undefined) return tag;
-    const dataUri = escapeHtmlAttribute(svgPreviewDataUri(source));
+    const dataUri = escapeHtmlAttribute(`${svgPreviewDataUri(source)}${previewSvgFragment(src)}`);
     return tag.replace(/(\bsrc\s*=\s*)(?:"[^"]*"|'[^']*'|[^\s>]+)/i, `$1"${dataUri}"`);
   });
 }
