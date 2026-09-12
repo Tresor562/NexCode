@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 
 const source = fs.readFileSync(new URL('../src/ui/motionPreferences.ts', import.meta.url), 'utf8');
+const appSource = fs.readFileSync(new URL('../src/ui/NexCodeApp.tsx', import.meta.url), 'utf8');
 
 const checks = [
   ['shared external store', source.includes('useSyncExternalStore')],
@@ -33,6 +34,10 @@ const checks = [
   ['listener teardown invalidates cached preference', source.includes('reduceMotionKnown = false;\n  clearHydrationRetry();\n  nativeSubscriptions.forEach')],
   ['listener-free remount stays fail-safe', source.includes("publish({ reduceMotion: true, appActive: AppState.currentState === 'active' });")],
   ['native subscriptions removed when unused', source.includes('subscription.remove()')],
+  ['home consumes shared motion preference', appSource.includes("import { useMotionPreferences } from './motionPreferences';") && appSource.includes('const { reduceMotion, appActive } = useMotionPreferences();')],
+  ['home entrance is disabled when motion is reduced or app inactive', appSource.includes('if (!entranceEnabled || reduceMotion || !appActive) {') && appSource.includes('entrance.setValue(1);')],
+  ['home entrance initial state fails safe when motion is unavailable', appSource.includes('const entranceEnabled = useRef(appActive && !reduceMotion).current;') && appSource.includes('new Animated.Value(entranceEnabled ? 0 : 1)')],
+  ['home entrance animation is cancellable on lifecycle or preference changes', appSource.includes('entrance.stopAnimation();') && appSource.includes('return () => animation.stop();')],
 ];
 
 const failed = checks.filter(([, ok]) => !ok).map(([name]) => name);
