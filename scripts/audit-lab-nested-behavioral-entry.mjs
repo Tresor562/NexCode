@@ -19,7 +19,7 @@ const requireStub = (id) => {
   if (id.endsWith('/workspaceSafety') || id === '../lib/workspaceSafety') {
     return {
       containsLikelyWorkspaceSecret: () => false,
-      workspaceCollisionKey: (path) => path.normalize('NFC').replace(/\\/g, '/').toLocaleLowerCase('en-US'),
+      workspaceCollisionKey: (filename) => filename.normalize('NFC').replace(/\\/g, '/').toLocaleLowerCase('en-US'),
     };
   }
   return {};
