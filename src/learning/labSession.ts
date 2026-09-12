@@ -293,7 +293,8 @@ function previewHeadMarkup(styleTag: string) {
 
 export function webPreviewDocument(draft: LabDraft) {
   const entryPath = previewEntryPath(draft);
-  const sourceHtml = (entryPath ? draft.files[entryPath] : undefined)?.trim() || '<main></main>';
+  if (!entryPath) return undefined;
+  const sourceHtml = draft.files[entryPath]?.trim() || '<main></main>';
   const inlined = inlineLocalPreviewAssets(sourceHtml, draft, entryPath);
   const fallbackCssReference = normalizePreviewAssetPath('styles.css', entryPath) ?? 'styles.css';
   const fallbackJsReference = normalizePreviewAssetPath('script.js', entryPath) ?? 'script.js';
