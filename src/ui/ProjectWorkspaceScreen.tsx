@@ -289,30 +289,72 @@ function resolvePreviewHtmlEntry(files: Record<string, string>, activeFile?: str
   return nestedIndex ?? htmlFiles[0] ?? '';
 }
 
+function resolvePreviewAssetPath(files: Record<string, string>, htmlName: string, reference: string) {
+  const clean = reference.trim().replace(/\\/g, '/').split(/[?#]/, 1)[0] ?? '';
+  if (!clean || clean.startsWith('//') || /^[a-z][a-z0-9+.-]*:/i.test(clean)) return '';
+
+  const segments = clean.startsWith('/') ? [] : htmlName.split('/').slice(0, -1);
+  for (const segment of clean.replace(/^\/+/, '').split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!segments.length) return '';
+      segments.pop();
+      continue;
+    }
+    segments.push(segment);
+  }
+  const candidate = segments.join('/');
+  return Object.prototype.hasOwnProperty.call(files, candidate) ? candidate : '';
+}
+
+function conventionalPreviewAsset(files: Record<string, string>, htmlName: string, basename: string) {
+  const directory = htmlName.split('/').slice(0, -1).join('/');
+  const candidate = directory ? `${directory}/${basename}` : basename;
+  return Object.prototype.hasOwnProperty.call(files, candidate) ? candidate : '';
+}
+
 function buildPreview(files: Record<string, string>, activeFile?: string) {
   const htmlName = resolvePreviewHtmlEntry(files, activeFile);
   if (!htmlName) return '';
 
-  const css = Object.entries(files)
-    .filter(([name]) => name.toLowerCase().endsWith('.css'))
-    .map(([, value]) => value)
-    .join('\n');
-  const js = Object.entries(files)
-    .filter(([name]) => name.toLowerCase().endsWith('.js'))
-    .map(([, value]) => value)
-    .join('\n');
-
   let html = (files[htmlName] ?? '').trim();
   if (!html) html = '<main></main>';
+
+  let linkedCss = 0;
+  html = html.replace(/<link\b[^>]*>/gi, (tag) => {
+    const rel = tag.match(/\brel\s*=\s*["']([^"']*)["']/i)?.[1] ?? '';
+    const href = tag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1] ?? '';
+    if (!/\bstylesheet\b/i.test(rel) || !href) return tag;
+    const asset = resolvePreviewAssetPath(files, htmlName, href);
+    if (!asset || !asset.toLowerCase().endsWith('.css')) return tag;
+    linkedCss += 1;
+    return `<style data-nexcode-source="${escapeHtml(asset)}">${escapeInlineStyle(files[asset] ?? '')}</style>`;
+  });
+
+  let linkedJs = 0;
+  html = html.replace(/<script\b([^>]*)\bsrc\s*=\s*["']([^"']+)["']([^>]*)>\s*<\/script>/gi, (tag, _before, src) => {
+    const asset = resolvePreviewAssetPath(files, htmlName, src);
+    if (!asset || !asset.toLowerCase().endsWith('.js')) return tag;
+    linkedJs += 1;
+    return `<script data-nexcode-source="${escapeHtml(asset)}">${escapeInlineScript(files[asset] ?? '')}<\/script>`;
+  });
+
   html = injectIntoHead(html, `${PREVIEW_SECURITY_META}${PREVIEW_VIEWPORT_META}${PREVIEW_CONSOLE_BRIDGE}`);
 
-  if (css) {
-    const style = `<style>${escapeInlineStyle(css)}</style>`;
-    html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : injectIntoHead(html, style);
+  if (linkedCss === 0) {
+    const fallbackCss = conventionalPreviewAsset(files, htmlName, 'style.css');
+    if (fallbackCss) {
+      const style = `<style data-nexcode-source="${escapeHtml(fallbackCss)}">${escapeInlineStyle(files[fallbackCss] ?? '')}</style>`;
+      html = /<\/head>/i.test(html) ? html.replace(/<\/head>/i, `${style}</head>`) : injectIntoHead(html, style);
+    }
   }
-  if (js) {
-    const script = `<script>${escapeInlineScript(js)}<\/script>`;
-    html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}</body>`) : `${html}${script}`;
+
+  if (linkedJs === 0) {
+    const fallbackJs = conventionalPreviewAsset(files, htmlName, 'script.js');
+    if (fallbackJs) {
+      const script = `<script data-nexcode-source="${escapeHtml(fallbackJs)}">${escapeInlineScript(files[fallbackJs] ?? '')}<\/script>`;
+      html = /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}</body>`) : `${html}${script}`;
+    }
   }
   return html;
 }
