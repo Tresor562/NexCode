@@ -54,6 +54,30 @@ function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
   return actualName ? draft.files[actualName] ?? '' : '';
 }
 
+function resolveHtmlEntry(draft: LabDraft): string {
+  const entries = Object.entries(draft.files);
+  const rootIndex = entries.find(([filename]) => {
+    const key = portableWorkspaceKey(filename);
+    return key === 'index.html' || key === 'index.htm';
+  });
+  if (rootIndex) return rootIndex[1] ?? '';
+
+  const nestedIndex = entries.find(([filename]) => {
+    const key = portableWorkspaceKey(filename).replace(/\\/g, '/');
+    return key.endsWith('/index.html') || key.endsWith('/index.htm');
+  });
+  if (nestedIndex) return nestedIndex[1] ?? '';
+
+  const activeKey = portableWorkspaceKey(draft.activeFile ?? '').replace(/\\/g, '/');
+  if (/\.html?$/i.test(activeKey)) {
+    const activeHtml = entries.find(([filename]) => portableWorkspaceKey(filename).replace(/\\/g, '/') === activeKey);
+    if (activeHtml) return activeHtml[1] ?? '';
+  }
+
+  const firstHtml = entries.find(([filename]) => /\.html?$/i.test(portableWorkspaceKey(filename).replace(/\\/g, '/')));
+  return firstHtml?.[1] ?? '';
+}
+
 function hasCssRule(draft: LabDraft): boolean {
   const cssRule = /[^{}]+\{[^}]+\}/;
   for (const [filename, content] of Object.entries(draft.files)) {
@@ -153,7 +177,7 @@ export function defaultBehavioralTests(mission: LabMission): BehavioralTest[] {
   ];
   if (language === 'HTML/CSS') {
     tests.push(
-      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolvePortableDraftFile(draft, 'index.html')) },
+      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolveHtmlEntry(draft)) },
       { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: hasCssRule },
     );
   } else if (language === 'JavaScript') {
