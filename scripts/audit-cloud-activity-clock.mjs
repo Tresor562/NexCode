@@ -22,6 +22,7 @@ const requireStub = (id) => {
       loadCloudSession: () => null,
       pullCloudState: async (_session, state) => ({ session: _session, state }),
       pushCloudState: async (session) => session,
+      refreshCloudSession: async (session) => session,
     };
   }
   return {};
@@ -103,6 +104,6 @@ assert.equal(
 assert.match(source, /MAX_CLOUD_DATE_LEAD_MS\s*=\s*36\s*\*\s*60\s*\*\s*60\s*\*\s*1000/, 'the cross-timezone cloud clock tolerance must remain explicit and reviewable');
 assert.match(source, /bestStreak:\s*Math\.max\(local\.bestStreak,\s*local\.streak\)/, 'poisoned clock repair must restore bestStreak from trusted local streak history');
 assert.match(source, /sanitizeReconciledCloudActivityClock\(reconciled\.state, snapshot\.state\)/, 'every background reconciliation must pass through the cloud activity clock boundary before upload');
-assert.match(source, /pushCloudState\(currentBeforePush, safeReconciledState\)/, 'the repaired state, not the poisoned reconciliation, must be persisted back to Supabase');
+assert.match(source, /pushCloudState\(verifiedWriteSession, safeReconciledState\)/, 'the repaired state must be persisted only through the refreshed and re-verified Supabase session');
 
-console.log('Cloud activity clock audit OK: impossible future streak/daily dates and forged best-streak records fail closed without discarding legitimate monotonic XP or NexCoins reconciliation.');
+console.log('Cloud activity clock audit OK: impossible future streak/daily dates and forged best-streak records fail closed without discarding legitimate monotonic XP or NexCoins reconciliation, and repaired state writes keep the verified session handoff.');
