@@ -111,6 +111,8 @@ const mastery = (confidence, overrides = {}) => ({
 {
   const snapshot = masterySnapshot('dom', mastery(90), new Date(Number.NaN));
   assert.equal(snapshot.effectiveScore, 0, 'an invalid runtime clock must fail closed instead of granting fresh retention');
+  assert.deepEqual(snapshot.evidenceKinds, [], 'an invalid runtime clock must also invalidate restored mastery evidence');
+  assert.equal(snapshot.independentEvidence, false, 'an invalid runtime clock must not preserve independent proof');
 }
 
 {
@@ -133,6 +135,58 @@ const mastery = (confidence, overrides = {}) => ({
 }
 
 {
+  const futureEvidence = [
+    evidence[0],
+    {
+      lessonId: 'checkpoint-from-future',
+      activityKind: 'checkpoint',
+      correct: true,
+      scoreDelta: 24,
+      at: '2026-09-23T10:00:00.000Z',
+    },
+    {
+      lessonId: 'project-from-future',
+      activityKind: 'project',
+      correct: true,
+      scoreDelta: 30,
+      at: '2026-09-23T10:00:00.000Z',
+    },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: futureEvidence }), now);
+  assert.deepEqual(snapshot.evidenceKinds, ['lab'], 'future proof must not inflate the mastery evidence-kind summary');
+  assert.equal(snapshot.independentEvidence, false, 'future independent proof must not satisfy the two-context mastery requirement');
+  const result = evaluateSkillGate(['dom'], mastery(90, { evidence: futureEvidence }), 70, now);
+  assert.equal(result.passed, false, 'future transfer proof must not unlock a skill gate');
+  assert.deepEqual(result.missingIndependentEvidence, ['dom']);
+}
+
+{
+  const invalidClockEvidence = [
+    evidence[0],
+    {
+      lessonId: 'boss-invalid-clock',
+      activityKind: 'boss',
+      correct: true,
+      scoreDelta: 28,
+      at: 'not-a-date',
+    },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: invalidClockEvidence }), now);
+  assert.equal(snapshot.independentEvidence, false, 'invalid evidence timestamps must fail closed for independent mastery proof');
+  assert.deepEqual(snapshot.evidenceKinds, ['lab']);
+}
+
+{
+  const futureErrorEvidence = [
+    ...evidence,
+    { lessonId: 'practice-future-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-09-23T10:30:00.000Z', errorTag: 'dom-future' },
+    { lessonId: 'practice-future-2', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-09-23T10:31:00.000Z', errorTag: 'dom-future' },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: futureErrorEvidence }), now);
+  assert.deepEqual(snapshot.recurringErrors, [], 'future failed attempts must not manufacture recurring-error diagnostics');
+}
+
+{
   const restoredEvidence = [
     ...evidence,
     { lessonId: 'practice-bad-1', activityKind: 'practice', correct: false, scoreDelta: -18, at: '2026-08-23T10:30:00.000Z', errorTag: 42 },
@@ -147,5 +201,8 @@ const mastery = (confidence, overrides = {}) => ({
 assert.match(source, /function boundedPercent\(value: unknown, fallback = 0\)/, 'mastery percentages must share one bounded normalization boundary');
 assert.match(source, /const normalizedRequired = boundedPercent\(required, 100\)/, 'invalid gate thresholds must fall back to the strictest requirement');
 assert.match(source, /candidate\.errorTag === undefined \|\| typeof candidate\.errorTag === 'string'/, 'restored mastery evidence must reject non-string error tags before diagnostics');
+assert.match(source, /function temporallyValidEvidence\(state: SkillMastery, now: Date\)/, 'all restored mastery proof must cross a shared evidence-clock boundary');
+assert.match(source, /Number\.isFinite\(ageDays\(attempt\.at, now\)\)/, 'future or malformed evidence clocks must fail closed before they affect mastery');
+assert.match(source, /independentEvidenceContextCount\(state, now\) >= 2/, 'independent mastery proof must use time-validated evidence');
 
-console.log('Mastery gate audit OK: score, confidence, thresholds, corrupted clocks and malformed restored error tags all fail closed while valid evidence remains usable.');
+console.log('Mastery gate audit OK: score, confidence, thresholds, runtime clocks, evidence clocks and malformed restored error tags all fail closed while valid evidence remains usable.');
