@@ -44,6 +44,15 @@ const draft = (files) => ({
 
 {
   const output = webPreviewDocument(draft({
+    'index.html': '<html><body><img src="assets/sprite.svg#nex-mark" alt="Nex mark"></body></html>',
+    'assets/sprite.svg': '<svg xmlns="http://www.w3.org/2000/svg"><symbol id="nex-mark" viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></symbol></svg>',
+  }));
+  assert.match(output, /src="data:image\/svg\+xml;charset=utf-8,[^"]*#nex-mark"/i, 'HTML SVG sprite references must preserve their local fragment after inlining');
+  assert.doesNotMatch(output, /src="assets\/sprite\.svg#nex-mark"/i, 'HTML SVG sprite references must not keep a dead workspace URL');
+}
+
+{
+  const output = webPreviewDocument(draft({
     'index.html': '<html><body><img src="ASSETS/CAFÉ.SVG"></body></html>',
     'assets/Cafe\u0301.svg': '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h1v1H0z"/></svg>',
   }));
@@ -54,9 +63,9 @@ const draft = (files) => ({
   const output = webPreviewDocument(draft({
     'index.html': '<html><head><link rel="stylesheet" href="styles/theme.css"></head><body><main class="hero"></main></body></html>',
     'styles/theme.css': '.hero { background-image: url("../assets/grid.svg#dots"); }',
-    'assets/grid.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>',
+    'assets/grid.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><pattern id="dots" width="2" height="2"><circle cx="1" cy="1" r="1"/></pattern></svg>',
   }));
-  assert.match(output, /background-image:\s*url\("data:image\/svg\+xml;charset=utf-8,/i, 'linked CSS must inline local SVG url() assets');
+  assert.match(output, /background-image:\s*url\("data:image\/svg\+xml;charset=utf-8,[^"]*#dots"\)/i, 'linked CSS must inline local SVG url() assets and preserve sprite fragments');
   assert.doesNotMatch(output, /\.\.\/assets\/grid\.svg#dots/i, 'CSS-relative SVG references must resolve from the stylesheet directory');
 }
 
@@ -83,4 +92,4 @@ const draft = (files) => ({
   assert.doesNotMatch(output, /data:image\/svg\+xml;charset=utf-8,/i, 'unsafe SVG references must not be inlined');
 }
 
-console.log('Lab SVG preview audit OK: local portable SVG assets render offline from HTML and CSS while external and traversal references remain blocked.');
+console.log('Lab SVG preview audit OK: local portable SVG assets and sprite fragments render offline from HTML and CSS while external and traversal references remain blocked.');
