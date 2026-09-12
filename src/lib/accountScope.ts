@@ -95,7 +95,15 @@ export function scopeLocalStateForUser(local: LocalState, userId: string): Local
   // NexCoins, projects or mastery into the next authenticated account.
   if (!ownerId) {
     const ownershipEvidenceExists = ownerMetadataExists() || ownerBindingWasInitialized();
-    return ownershipEvidenceExists ? freshState() : safeLocal;
+    if (ownershipEvidenceExists) return freshState();
+
+    // Claim a genuine legacy snapshot in the same scope decision that authorizes
+    // its reuse. Waiting for a later caller to bind ownership leaves a crash/race
+    // window where a second account could also adopt the same XP, drafts or mastery.
+    // bindLocalStateOwner writes the fail-closed marker first, so even an interrupted
+    // migration cannot reopen legacy adoption on the next authenticated session.
+    bindLocalStateOwner(normalized);
+    return safeLocal;
   }
 
   // Once an owner is known, never merge that learner's local XP, projects,
