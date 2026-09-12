@@ -50,6 +50,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const [answer, setAnswer] = useState<number | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [recorded, setRecorded] = useState(false);
+  const [quizRetryCount, setQuizRetryCount] = useState(0);
   const [predictionDraft, setPredictionDraft] = useState('');
   const [recallDraft, setRecallDraft] = useState('');
   const [recallRevealed, setRecallRevealed] = useState(false);
@@ -72,6 +73,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   const mastery = snapshots.length ? Math.round(snapshots.reduce((sum, item) => sum + item.effectiveScore, 0) / snapshots.length) : 0;
   const progress = Math.round(((stepIndex + 1) / steps.length) * 100);
   const exampleFilename = lessonExampleFilename(course.language);
+  const revealQuizSolution = submitted && (correct || quizRetryCount >= 1);
 
   useEffect(() => {
     if (appActive && !reduceMotion) return;
@@ -86,6 +88,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
     setAnswer(null);
     setSubmitted(false);
     setRecorded(false);
+    setQuizRetryCount(0);
     setPredictionDraft('');
     setRecallDraft('');
     setRecallRevealed(false);
@@ -168,7 +171,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
   function retry() {
     setAnswer(null);
     setSubmitted(false);
-    setRecorded(false);
+    setQuizRetryCount((value) => value + 1);
     setQuizReflection('');
   }
 
@@ -303,7 +306,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
           <View style={styles.choices}>
             {lesson.choices.map((choice, index) => {
               const selected = answer === index;
-              const revealCorrect = submitted && index === lesson.correctIndex;
+              const revealCorrect = revealQuizSolution && index === lesson.correctIndex;
               const revealWrong = submitted && selected && !correct;
               return (
                 <Pressable
@@ -324,8 +327,8 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
           {!submitted ? <PrimaryButton label="Vérifier" disabled={answer === null} onPress={submit} /> : null}
           {submitted ? (
             <View style={[styles.feedback, correct ? styles.feedbackGood : styles.feedbackBad]} accessibilityLiveRegion="polite">
-              <Text style={styles.feedbackTitle}>{correct ? 'Excellent !' : 'Presque.'}</Text>
-              <Text style={styles.feedbackText}>{lesson.explanation}</Text>
+              <Text style={styles.feedbackTitle}>{correct ? 'Excellent !' : quizRetryCount === 0 ? 'Pas encore.' : 'Regarde le repère.'}</Text>
+              <Text style={styles.feedbackText}>{correct || quizRetryCount >= 1 ? lesson.explanation : `Reviens à l’idée-clé : ${lesson.concept}`}</Text>
               {correct ? (
                 <>
                   <View style={styles.quizReflection}>
@@ -347,7 +350,7 @@ export function LessonFlowScreen({ course, lesson, state, onRecord, onOpenLab, o
                   </View>
                   <PrimaryButton label="Étape suivante" icon="→" disabled={!quizReflectionReady} onPress={next} />
                 </>
-              ) : <PrimaryButton label="Réessayer" onPress={retry} />}
+              ) : <PrimaryButton label={quizRetryCount === 0 ? 'Réessayer sans la réponse' : 'Réessayer avec ce repère'} onPress={retry} />}
             </View>
           ) : null}
         </View>
