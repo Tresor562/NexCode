@@ -198,11 +198,37 @@ const mastery = (confidence, overrides = {}) => ({
   assert.deepEqual(snapshot.recurringErrors, ['dom-query'], 'non-string restored error tags must be discarded before recurring-error ranking');
 }
 
+{
+  const forgedIdentityEvidence = [
+    { lessonId: '   ', activityKind: 'project', correct: true, scoreDelta: 30, at: '2026-08-23T10:00:00.000Z' },
+    { lessonId: '\u0000\u0007', activityKind: 'boss', correct: true, scoreDelta: 30, at: '2026-08-23T10:01:00.000Z' },
+    { lessonId: 'valid-context', activityKind: 'instant-master', correct: true, scoreDelta: 99, at: '2026-08-23T10:02:00.000Z' },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: forgedIdentityEvidence }), now);
+  assert.deepEqual(snapshot.evidenceKinds, [], 'blank contexts and unknown activity kinds must not enter restored mastery evidence');
+  assert.equal(snapshot.independentEvidence, false, 'forged evidence identity must not manufacture independent mastery proof');
+  const result = evaluateSkillGate(['dom'], mastery(90, { evidence: forgedIdentityEvidence }), 70, now);
+  assert.equal(result.passed, false, 'forged restored evidence identity must never unlock a skill gate');
+  assert.deepEqual(result.missingIndependentEvidence, ['dom']);
+}
+
+{
+  const canonicalizedEvidence = [
+    { lessonId: ' lab-dom-1 ', activityKind: 'lab', correct: true, scoreDelta: 20, at: '2026-08-23T09:00:00.000Z' },
+    { lessonId: '\u0000checkpoint-dom-2\u0007', activityKind: 'checkpoint', correct: true, scoreDelta: 24, at: '2026-08-23T10:00:00.000Z' },
+  ];
+  const snapshot = masterySnapshot('dom', mastery(90, { evidence: canonicalizedEvidence }), now);
+  assert.deepEqual(snapshot.evidenceKinds, ['lab', 'checkpoint'], 'valid restored contexts should survive canonical whitespace/control cleanup');
+  assert.equal(snapshot.independentEvidence, true, 'two legitimate canonicalized contexts should still satisfy independent evidence');
+}
+
 assert.match(source, /function boundedPercent\(value: unknown, fallback = 0\)/, 'mastery percentages must share one bounded normalization boundary');
 assert.match(source, /const normalizedRequired = boundedPercent\(required, 100\)/, 'invalid gate thresholds must fall back to the strictest requirement');
-assert.match(source, /candidate\.errorTag === undefined \|\| typeof candidate\.errorTag === 'string'/, 'restored mastery evidence must reject non-string error tags before diagnostics');
+assert.match(source, /function canonicalEvidenceContext\(value: unknown\)/, 'restored mastery evidence must canonicalize its context identity before use');
+assert.match(source, /VALID_EVIDENCE_KINDS\.has\(candidate\.activityKind\)/, 'restored mastery evidence must reject unknown activity kinds');
+assert.match(source, /candidate\.errorTag !== undefined && typeof candidate\.errorTag !== 'string'/, 'restored mastery evidence must reject non-string error tags before diagnostics');
 assert.match(source, /function temporallyValidEvidence\(state: SkillMastery, now: Date\)/, 'all restored mastery proof must cross a shared evidence-clock boundary');
 assert.match(source, /Number\.isFinite\(ageDays\(attempt\.at, now\)\)/, 'future or malformed evidence clocks must fail closed before they affect mastery');
 assert.match(source, /independentEvidenceContextCount\(state, now\) >= 2/, 'independent mastery proof must use time-validated evidence');
 
-console.log('Mastery gate audit OK: score, confidence, thresholds, runtime clocks, evidence clocks and malformed restored error tags all fail closed while valid evidence remains usable.');
+console.log('Mastery gate audit OK: score, confidence, thresholds, runtime clocks, evidence clocks, canonical context identity and activity kinds all fail closed while valid evidence remains usable.');
