@@ -38,6 +38,7 @@ export type MasteryMap = Record<string, SkillMastery>;
 
 const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
 const MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS = 5 * 60_000;
+const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60_000;
 
 export function masteryBand(score: number): MasteryBand {
   if (score >= 85) return 'mastered';
@@ -131,6 +132,14 @@ function canonicalEvidenceContext(value: unknown) {
   const context = value.replace(/[\u0000-\u001F\u007F]/g, '').trim();
   if (!context || context.length > MAX_EVIDENCE_CONTEXT_LENGTH) return null;
   return context;
+}
+
+function evidenceTimeIsValid(value: unknown, now: Date) {
+  if (typeof value !== 'string') return false;
+  const nowMs = now.getTime();
+  const evidenceMs = new Date(value).getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(evidenceMs)) return false;
+  return evidenceMs <= nowMs + MAX_FUTURE_EVIDENCE_SKEW_MS;
 }
 
 function usableAttemptTime(now: Date) {
@@ -238,12 +247,12 @@ export function missingPrerequisites(node: SkillNode, mastery: MasteryMap) {
   return node.prerequisiteIds.filter((id) => boundedScore(mastery[id]?.score) < requiredScore);
 }
 
-export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap) {
+export function skillNeedsEvidence(node: SkillNode, mastery: MasteryMap, now = new Date()) {
   const state = mastery[node.id];
   if (!state || boundedScore(state.score) < 55) return true;
   const contexts = new Set(
     usableEvidence(state.evidence)
-      .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind))
+      .filter((item) => item.correct && ['lab', 'checkpoint', 'boss', 'project'].includes(item.activityKind) && evidenceTimeIsValid(item.at, now))
       .map((item) => {
         const context = canonicalEvidenceContext(item.lessonId);
         return context ? `${item.activityKind}:${context}` : null;
