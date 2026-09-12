@@ -46,7 +46,7 @@ assert.match(source, /disabled=\{!transferAttemptReady\}/, 'Lab transition must 
 
 assert.match(source, /const revealQuizSolution = submitted && \(correct \|\| quizRetryCount >= 1\);/, 'a first wrong answer must not reveal the correct option immediately');
 assert.match(source, /const revealCorrect = revealQuizSolution && index === lesson\.correctIndex;/, 'quiz option styling must obey the delayed solution reveal gate');
-assert.match(source, /correct \|\| quizRetryCount >= 1 \? lesson\.explanation : `Reviens à l’idée-clé:/, 'first-error feedback must scaffold from the concept instead of leaking the full explanation');
+assert.match(source, /correct \|\| quizRetryCount >= 1 \? lesson\.explanation : `Reviens à l’idée-clé\s*:/, 'first-error feedback must scaffold from the concept instead of leaking the full explanation');
 assert.match(source, /function retry\(\)[\s\S]*setQuizRetryCount\(\(value\) => value \+ 1\);[\s\S]*setQuizReflection\(''\);[\s\S]*\}/, 'quiz retries must advance scaffold depth and clear stale reflection');
 const retryBody = source.match(/function retry\(\) \{([\s\S]*?)\n  \}/)?.[1] ?? '';
 assert.doesNotMatch(retryBody, /setRecorded\(false\)/, 'a scaffolded retry must not become a second independent mastery attempt');
