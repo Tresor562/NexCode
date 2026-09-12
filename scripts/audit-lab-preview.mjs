@@ -4,6 +4,12 @@ import ts from 'typescript';
 
 const sourceUrl = new URL('../src/learning/labSession.ts', import.meta.url);
 const source = fs.readFileSync(sourceUrl, 'utf8');
+const workspaceScreenSource = fs.readFileSync(new URL('../src/ui/LabWorkspaceScreen.tsx', import.meta.url), 'utf8');
+assert.match(
+  workspaceScreenSource,
+  /useMemo\(\(\) => webPreviewDocument\(draft\), \[draft\.files, draft\.activeFile\]\)/,
+  'Lab preview memoization must react when the active HTML entry changes without a file-content mutation',
+);
 const compiled = ts.transpileModule(source, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -214,4 +220,4 @@ function assertPreviewPolicy(output) {
   assert.match(output, /<body>\s*<main><\/main>/i, 'empty HTML must fall back to a stable preview scaffold');
 }
 
-console.log('Lab audit OK: return routing, mobile viewport, offline CSP sandbox, portable entry/fallback files, portable multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
+console.log('Lab audit OK: return routing, active-entry preview reactivity, mobile viewport, offline CSP sandbox, portable entry/fallback files, portable multi-file local assets, asset semantics, document structure, inline closing tags and empty fallback are protected.');
