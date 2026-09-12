@@ -1,5 +1,5 @@
 import type { LocalState } from './localState';
-import { isCloudConfigured, loadCloudSession, pullCloudState, pushCloudState } from './cloudAccount';
+import { isCloudConfigured, loadCloudSession, pullCloudState, pushCloudState, refreshCloudSession } from './cloudAccount';
 
 type PendingCloudState = {
   userId: string;
@@ -150,8 +150,21 @@ async function performLatestStateFlush(): Promise<boolean> {
       throw new Error('Cloud account changed during reconciliation.');
     }
 
+    // Refreshing a Supabase token is itself asynchronous. The learner can sign out
+    // or switch account while that request is in flight. Re-verify the persisted
+    // refresh-token generation after it settles before any progress write begins.
+    const verifiedWriteSession = await refreshCloudSession(currentBeforePush);
+    const currentAfterRefresh = loadCloudSession();
+    if (
+      !currentAfterRefresh
+      || currentAfterRefresh.user.id !== snapshot.userId
+      || currentAfterRefresh.refreshToken !== verifiedWriteSession.refreshToken
+    ) {
+      throw new Error('Cloud account changed during session refresh.');
+    }
+
     const safeReconciledState = sanitizeReconciledCloudActivityClock(reconciled.state, snapshot.state);
-    await pushCloudState(currentBeforePush, safeReconciledState);
+    await pushCloudState(verifiedWriteSession, safeReconciledState);
     resetRetryBackoff();
     return true;
   } catch {
