@@ -64,8 +64,8 @@ requirePattern(
   'Valid owner handoffs must re-sanitize retained local state so malformed restored XP, streak, Lab or mastery data cannot bypass startup guards.',
 );
 requirePattern(
-  /if \(!ownerId\) \{[\s\S]*const ownershipEvidenceExists = ownerMetadataExists\(\) \|\| ownerBindingWasInitialized\(\);[\s\S]*return ownershipEvidenceExists \? freshState\(\) : safeLocal;[\s\S]*\}/,
-  'Legacy migration must occur only when both the owner file and initialization marker are genuinely absent; corrupt owner metadata must fail closed.',
+  /if \(!ownerId\) \{[\s\S]*const ownershipEvidenceExists = ownerMetadataExists\(\) \|\| ownerBindingWasInitialized\(\);[\s\S]*if \(ownershipEvidenceExists\) return freshState\(\);[\s\S]*bindLocalStateOwner\(normalized\);[\s\S]*return safeLocal;[\s\S]*\}/,
+  'Legacy migration must fail closed when ownership evidence exists and must bind the authenticated owner in the same decision that adopts a genuine legacy snapshot.',
 );
 requirePattern(
   /return ownerId === normalized \? safeLocal : freshState\(\);/,
@@ -77,5 +77,8 @@ if (/function freshState\(\)[\s\S]*xp: 0,[\s\S]*nexCoins: 0,[\s\S]*projectDrafts
 if (/ownerId === normalized \? local : freshState\(\)/.test(source) || /\? freshState\(\) : local/.test(source)) {
   throw new Error('Account scope must never return a retained snapshot without passing it through sanitizeLocalState first.');
 }
+if (/return ownershipEvidenceExists \? freshState\(\) : safeLocal;/.test(source)) {
+  throw new Error('Legacy progression adoption must not remain unbound after the ownership scope decision.');
+}
 
-console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, the nil UUID sentinel is rejected, retained snapshots are re-sanitized at the ownership boundary, legacy migration stays one-time, and cross-account resets share canonical local defaults.');
+console.log('Account scope audit OK: ownership initialization and corrupt owner metadata fail closed, Supabase UUIDs are canonicalized, the nil UUID sentinel is rejected, retained snapshots are re-sanitized at the ownership boundary, genuine legacy migration is atomically claimed by the authenticated owner, and cross-account resets share canonical local defaults.');
