@@ -44,7 +44,7 @@ export function LabWorkspaceScreen({ lesson, stored, onSave, onComplete, onBack 
   const content = draft.files[draft.activeFile] ?? '';
   const secrets = secretSafetyIssues(draft);
   const progress = Math.round(((draft.passedCriteria?.length ?? 0) / Math.max(1, mission.successCriteria.length)) * 100);
-  const htmlPreview = useMemo(() => webPreviewDocument(draft), [draft.files]);
+  const htmlPreview = useMemo(() => webPreviewDocument(draft), [draft.files, draft.activeFile]);
 
   function save(next: LabDraft) {
     setDraft(next);
