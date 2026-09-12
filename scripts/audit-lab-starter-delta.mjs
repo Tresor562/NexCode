@@ -43,7 +43,9 @@ const { runBehavioralSuite } = behavioralExports;
 
 assert.equal(typeof runBehavioralSuite, 'function', 'runBehavioralSuite must stay exported');
 assert.match(behavioralSource, /return workspaceCollisionKey\(filename\);/, 'starter delta paths must reuse the shared portable workspace identity policy');
-assert.match(behavioralSource, /resolvePortableDraftFile\(draft, 'index\.html'\)/, 'HTML checks must resolve portable workspace paths');
+assert.match(behavioralSource, /function resolveHtmlEntry\(draft: LabDraft\): string/, 'HTML checks must resolve the same real Web entry used by multi-file validation');
+assert.match(behavioralSource, /const rootIndex = entries\.find/, 'HTML entry resolution must keep a canonical root index preference');
+assert.match(behavioralSource, /const activeKey = portableWorkspaceKey\(draft\.activeFile \?\? ''\)/, 'HTML entry resolution must honor the active preview document after the canonical root entry');
 assert.match(behavioralSource, /function hasCssRule\(draft: LabDraft\): boolean/, 'CSS checks must inspect the complete multi-file workspace');
 assert.match(behavioralSource, /normalizedName\.endsWith\('\.css'\)/, 'CSS checks must accept portable stylesheet paths instead of hard-coding styles.css');
 assert.match(behavioralSource, /stored === undefined\) return false/, 'missing starter files must fail learning evidence');
