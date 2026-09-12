@@ -73,6 +73,10 @@ function ageDays(iso: string | undefined, now: Date) {
   return Math.max(0, (nowMs - practicedMs) / 86_400_000);
 }
 
+function temporallyValidEvidence(state: SkillMastery, now: Date) {
+  return usableEvidence(state.evidence).filter((attempt) => Number.isFinite(ageDays(attempt.at, now)));
+}
+
 function retentionFactor(state: SkillMastery, now: Date) {
   const days = ageDays(state.lastPracticedAt, now);
   if (!Number.isFinite(days)) return 0;
@@ -84,9 +88,9 @@ function retentionFactor(state: SkillMastery, now: Date) {
   return 0.7;
 }
 
-function recurringErrorTags(state: SkillMastery) {
+function recurringErrorTags(state: SkillMastery, now: Date) {
   const counts = new Map<string, number>();
-  for (const attempt of usableEvidence(state.evidence).slice(-12)) {
+  for (const attempt of temporallyValidEvidence(state, now).slice(-12)) {
     if (attempt.correct || !attempt.errorTag) continue;
     counts.set(attempt.errorTag, (counts.get(attempt.errorTag) ?? 0) + 1);
   }
@@ -105,9 +109,9 @@ function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
   return timestamp <= nowMs;
 }
 
-function independentEvidenceContextCount(state: SkillMastery) {
+function independentEvidenceContextCount(state: SkillMastery, now: Date) {
   const contexts = new Set<string>();
-  for (const evidence of usableEvidence(state.evidence)) {
+  for (const evidence of temporallyValidEvidence(state, now)) {
     if (!evidence.correct || !['lab', 'checkpoint', 'boss', 'project'].includes(evidence.activityKind)) continue;
     contexts.add(`${evidence.activityKind}:${evidence.lessonId}`);
   }
@@ -136,9 +140,10 @@ export function masterySnapshot(skillId: string, mastery: MasteryMap, now = new 
   const rawScore = boundedPercent(state.score);
   const confidence = boundedPercent(state.confidence);
   const effectiveScore = Math.round(rawScore * retentionFactor(state, now));
-  const evidenceKinds = [...new Set(usableEvidence(state.evidence).filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
-  const recurringErrors = recurringErrorTags(state);
-  const independentEvidence = independentEvidenceContextCount(state) >= 2;
+  const validEvidence = temporallyValidEvidence(state, now);
+  const evidenceKinds = [...new Set(validEvidence.filter((item) => item.correct).map((item) => item.activityKind as MasteryEvidenceKind))];
+  const recurringErrors = recurringErrorTags(state, now);
+  const independentEvidence = independentEvidenceContextCount(state, now) >= 2;
   const due = reviewIsDue(state.nextReviewAt, now);
   return {
     skillId,
