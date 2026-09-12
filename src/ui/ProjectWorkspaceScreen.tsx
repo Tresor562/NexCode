@@ -68,7 +68,7 @@ export function ProjectWorkspaceScreen({ project, stored, onSave, onBack }: {
   const [previewRunId, setPreviewRunId] = useState(0);
   const files = Object.keys(draft.files);
   const content = draft.files[draft.activeFile] ?? '';
-  const preview = useMemo(() => buildPreview(draft.files), [draft.files]);
+  const preview = useMemo(() => buildPreview(draft.files, draft.activeFile), [draft.files, draft.activeFile]);
 
   function save(next: LabDraft) {
     setDraft(next);
@@ -274,8 +274,23 @@ function appendPreviewConsoleLine(current: string, line: string) {
   return lines.join('\n').slice(-MAX_PREVIEW_CONSOLE_CHARS);
 }
 
-function buildPreview(files: Record<string, string>) {
-  const htmlName = Object.keys(files).find((name) => name.toLowerCase().endsWith('.html'));
+function resolvePreviewHtmlEntry(files: Record<string, string>, activeFile?: string) {
+  const htmlFiles = Object.keys(files).filter((name) => /\.html?$/i.test(name));
+  if (!htmlFiles.length) return '';
+
+  const rootIndex = htmlFiles.find((name) => /^index\.html?$/i.test(name));
+  if (rootIndex) return rootIndex;
+
+  if (activeFile && /\.html?$/i.test(activeFile) && Object.prototype.hasOwnProperty.call(files, activeFile)) {
+    return activeFile;
+  }
+
+  const nestedIndex = htmlFiles.find((name) => /(^|\/)index\.html?$/i.test(name));
+  return nestedIndex ?? htmlFiles[0] ?? '';
+}
+
+function buildPreview(files: Record<string, string>, activeFile?: string) {
+  const htmlName = resolvePreviewHtmlEntry(files, activeFile);
   if (!htmlName) return '';
 
   const css = Object.entries(files)
