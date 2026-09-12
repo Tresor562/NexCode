@@ -7,7 +7,7 @@ const source = fs.readFileSync(sourceUrl, 'utf8');
 
 const constantsStart = source.indexOf('const PREVIEW_SECURITY_META');
 const constantsEnd = source.indexOf('export function ProjectWorkspaceScreen');
-const helpersStart = source.indexOf('function escapeInlineStyle');
+const helpersStart = source.indexOf('function escapeHtml');
 const helpersEnd = source.indexOf('function runtimeMessage');
 assert.ok(
   constantsStart >= 0 && constantsEnd > constantsStart && helpersStart >= 0 && helpersEnd > helpersStart,
