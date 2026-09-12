@@ -64,6 +64,21 @@ const activeHtmlDraft = {
 };
 assert.equal(htmlStructureTest.run(activeHtmlDraft), true, 'an active HTML document must validate when no index.html exists');
 
+const activePreviewPriorityDraft = {
+  ...nestedDraft,
+  files: {
+    'portfolio/index.html': 'not html structure',
+    'demo/page.html': '<article><h2>Active learner preview</h2></article>',
+    'demo/styles.css': 'article { display: grid; gap: 12px; }',
+  },
+  activeFile: 'demo/page.html',
+};
+assert.equal(
+  htmlStructureTest.run(activePreviewPriorityDraft),
+  true,
+  'behavioral validation must follow the active HTML preview before an unrelated nested index.html',
+);
+
 const rootPreferredDraft = {
   ...nestedDraft,
   files: {
@@ -75,4 +90,4 @@ const rootPreferredDraft = {
 };
 assert.equal(htmlStructureTest.run(rootPreferredDraft), true, 'root index.html must remain the preferred behavioral entry');
 
-console.log('Lab nested behavioral entry audit OK: behavioral validation follows real multi-file Web project entry points without depending on the active editor tab.');
+console.log('Lab nested behavioral entry audit OK: behavioral validation follows the same real multi-file Web entry priority as the learner preview.');
