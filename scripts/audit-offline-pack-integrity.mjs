@@ -7,6 +7,10 @@ const source = fs.readFileSync('src/learning/offlineEngine.ts', 'utf8');
 const required = [
   'export function offlinePackIntegrityIssue',
   'function isOfflinePackKind(value: unknown)',
+  'function packIdentityMatchesMetadata(pack: OfflinePack)',
+  'const prefix = `${pack.courseId}:`',
+  'const suffix = `:${pack.kind}:v${pack.curriculumVersion}`',
+  'if (!packIdentityMatchesMetadata(pack))',
   'if (!isOfflinePackKind(kind)) return undefined',
   'if (!isOfflinePackKind(pack.kind))',
   'Number.isFinite(pack.estimatedMb)',
@@ -49,7 +53,13 @@ const compiled = ts.transpileModule(source, {
 const exports = {};
 const module = { exports };
 new Function('require', 'exports', 'module', compiled)(() => ({}), exports, module);
-const { buildChapterOfflinePack, buildStageOfflinePack, offlinePackIntegrityIssue } = module.exports;
+const {
+  buildChapterOfflinePack,
+  buildStageOfflinePack,
+  estimateOfflineStorage,
+  offlinePackIntegrityIssue,
+  offlineUpdatePlan,
+} = module.exports;
 
 const course = {
   id: 'web',
@@ -71,6 +81,26 @@ for (const kind of ['lite', 'standard', 'full']) {
   assert.equal(offlinePackIntegrityIssue(pack), undefined);
 }
 
+const stagePack = buildStageOfflinePack(course, 'foundation', 'standard');
+assert.ok(stagePack, 'valid stage packs must remain accepted by the stronger identity contract');
+assert.equal(offlinePackIntegrityIssue(stagePack), undefined);
+
+const canonical = buildChapterOfflinePack(course, 'basics', 'standard');
+assert.ok(canonical);
+const forgedCourseId = { ...canonical, courseId: 'javascript' };
+const forgedKindId = { ...canonical, kind: 'lite', includes: ['content', 'examples'] };
+const forgedVersionId = { ...canonical, curriculumVersion: canonical.curriculumVersion + 1 };
+
+for (const forged of [forgedCourseId, forgedKindId, forgedVersionId]) {
+  assert.equal(
+    offlinePackIntegrityIssue(forged),
+    'Identité du pack incohérente avec ses métadonnées.',
+    'restored metadata must not be allowed to reuse an id minted for another course/kind/version',
+  );
+  assert.equal(estimateOfflineStorage([forged]), 0, 'forged pack identities must never affect storage accounting');
+  assert.equal(offlineUpdatePlan([forged], [course])[0]?.action, 'remove', 'forged pack identities must be removed before update planning');
+}
+
 assert.equal(
   buildChapterOfflinePack(course, 'basics', 'light'),
   undefined,
@@ -82,4 +112,4 @@ assert.equal(
   'stage builders must reject malformed runtime variants before constructing child packs',
 );
 
-console.log('Offline pack integrity audit passed: runtime variant boundaries, restored-pack integrity and storage accounting are protected.');
+console.log('Offline pack integrity audit passed: runtime variants, metadata-bound identities, restored-pack integrity and storage accounting are protected.');
