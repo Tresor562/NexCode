@@ -7,7 +7,7 @@ import {
 } from './workspaceSafety';
 
 const TEXT_EXTENSIONS = new Set([
-  'html','htm','css','scss','sass','less','js','jsx','mjs','cjs','ts','tsx','json','py','sql','md','txt','xml','yaml','yml','toml','ini','sh','bash','ps1','java','kt','kts','c','h','cpp','hpp','cs','go','rs','php','rb','dart','swift','vue','svelte','graphql','gql','csv','gitignore','dockerfile',
+  'html','htm','css','scss','sass','less','js','jsx','mjs','cjs','ts','tsx','json','py','sql','md','txt','xml','svg','yaml','yml','toml','ini','sh','bash','ps1','java','kt','kts','c','h','cpp','hpp','cs','go','rs','php','rb','dart','swift','vue','svelte','graphql','gql','csv','gitignore','dockerfile',
 ]);
 const IGNORED_DIRECTORIES = new Set([
   '.git','.hg','.svn','node_modules','vendor','dist','build','.next','.expo','.turbo','.cache','coverage','pods','deriveddata',
