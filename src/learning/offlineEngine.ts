@@ -37,12 +37,35 @@ function packIncludes(kind: OfflinePackKind): OfflinePack['includes'] {
       : ['content', 'examples', 'exercise-assets', 'lab-starters', 'media'];
 }
 
-function packIdentityMatchesMetadata(pack: OfflinePack) {
+function packIdentityScope(pack: OfflinePack) {
   const prefix = `${pack.courseId}:`;
   const suffix = `:${pack.kind}:v${pack.curriculumVersion}`;
-  if (!pack.id.startsWith(prefix) || !pack.id.endsWith(suffix)) return false;
+  if (!pack.id.startsWith(prefix) || !pack.id.endsWith(suffix)) return undefined;
   const scope = pack.id.slice(prefix.length, pack.id.length - suffix.length);
-  return Boolean(scope) && !scope.startsWith(':') && !scope.endsWith(':');
+  return scope && !scope.startsWith(':') && !scope.endsWith(':') ? scope : undefined;
+}
+
+function packIdentityMatchesMetadata(pack: OfflinePack) {
+  return Boolean(packIdentityScope(pack));
+}
+
+function sameChapterSet(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  const rightSet = new Set(right);
+  return left.every((chapterId) => rightSet.has(chapterId));
+}
+
+function packIdentityMatchesCourseStructure(pack: OfflinePack, course: Course) {
+  const scope = packIdentityScope(pack);
+  if (!scope) return false;
+
+  const chapter = course.chapters.find((item) => item.id === scope);
+  if (chapter) return pack.chapterIds.length === 1 && pack.chapterIds[0] === chapter.id;
+
+  const stage = course.stages.find((item) => item.id === scope);
+  if (!stage) return false;
+  const stageChapterIds = [...new Set(stage.chapterIds)];
+  return sameChapterSet(pack.chapterIds, stageChapterIds);
 }
 
 export function buildChapterOfflinePack(course: Course, chapterId: string, kind: OfflinePackKind = 'standard'): OfflinePack | undefined {
@@ -118,6 +141,9 @@ export function offlineUpdatePlan(installed: OfflinePack[], courses: Course[]) {
 
     const course = byCourse.get(pack.courseId);
     if (!course) return { packId: pack.id, action: 'remove' as const, reason: 'Parcours introuvable dans ce curriculum.' };
+    if (!packIdentityMatchesCourseStructure(pack, course)) {
+      return { packId: pack.id, action: 'remove' as const, reason: 'Identité du pack inconnue dans la structure actuelle du parcours.' };
+    }
 
     const knownChapterIds = new Set(course.chapters.map((chapter) => chapter.id));
     const hasUnknownChapter = pack.chapterIds.some((chapterId) => !knownChapterIds.has(chapterId));
