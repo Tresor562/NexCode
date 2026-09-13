@@ -72,12 +72,12 @@ function draft(files, activeFile) {
 
 {
   const output = webPreviewDocument(draft({
-    'index.html': '<main>Root wins</main>',
-    'portfolio/index.html': '<main>Nested should not override root</main>',
+    'index.html': '<main>Root fallback</main>',
+    'portfolio/index.html': '<main>Nested active page</main>',
   }, 'portfolio/index.html'));
 
-  assert.match(output, /<main>Root wins<\/main>/, 'root index.html must remain the canonical preview entry when present');
-  assert.doesNotMatch(output, /Nested should not override root/, 'nested active HTML must not unexpectedly replace an explicit root app entry');
+  assert.match(output, /<main>Nested active page<\/main>/, 'an explicitly active nested HTML page must override the root fallback in a multi-page workspace');
+  assert.doesNotMatch(output, /Root fallback/, 'root index.html must not mask the HTML page the learner explicitly selected');
 }
 
-console.log('Nested Lab preview audit OK: imported folder entries, relative CSS/JS/SVG assets and sibling fallbacks stay functional.');
+console.log('Nested Lab preview audit OK: imported folder entries, relative CSS/JS/SVG assets, sibling fallbacks and explicit active multi-page entries stay functional.');
