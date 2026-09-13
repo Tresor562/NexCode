@@ -79,15 +79,35 @@ assert.equal(
   'behavioral validation must follow the active HTML preview before an unrelated nested index.html',
 );
 
-const rootPreferredDraft = {
+const activeOverRootDraft = {
   ...nestedDraft,
   files: {
-    'index.html': '<main></main>',
+    'index.html': '<main>Root fallback is valid</main>',
     'demo/index.html': 'not html structure',
     'styles.css': 'main { min-height: 100vh; }',
   },
   activeFile: 'demo/index.html',
 };
-assert.equal(htmlStructureTest.run(rootPreferredDraft), true, 'root index.html must remain the preferred behavioral entry');
+assert.equal(
+  htmlStructureTest.run(activeOverRootDraft),
+  false,
+  'behavioral validation must evaluate the explicitly active HTML page even when a valid root index exists',
+);
 
-console.log('Lab nested behavioral entry audit OK: behavioral validation follows the same real multi-file Web entry priority as the learner preview.');
+const nonHtmlRootFallbackDraft = {
+  ...activeOverRootDraft,
+  activeFile: 'styles.css',
+};
+assert.equal(
+  htmlStructureTest.run(nonHtmlRootFallbackDraft),
+  true,
+  'root index.html must remain the stable behavioral fallback while the learner edits a non-HTML file',
+);
+
+assert.match(
+  source,
+  /const activeKey =[\s\S]*?if \(activeHtml\) return activeHtml\[1\] \?\? '';[\s\S]*?const rootIndex = entries\.find/,
+  'behavioral HTML entry resolution must keep active-page priority aligned with the preview engine',
+);
+
+console.log('Lab nested behavioral entry audit OK: behavioral validation follows the active HTML page, falls back to root index for non-HTML edits, and stays aligned with the learner preview.');
