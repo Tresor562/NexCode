@@ -54,41 +54,86 @@ function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
   return actualName ? draft.files[actualName] ?? '' : '';
 }
 
-function resolveHtmlEntry(draft: LabDraft): string {
+type HtmlEntry = { filename: string; content: string };
+
+function resolveHtmlEntryRecord(draft: LabDraft): HtmlEntry | undefined {
   const entries = Object.entries(draft.files);
   const activeKey = portableWorkspaceKey(draft.activeFile ?? '').replace(/\\/g, '/');
   if (/\.html?$/i.test(activeKey)) {
     const activeHtml = entries.find(([filename]) => portableWorkspaceKey(filename).replace(/\\/g, '/') === activeKey);
-    if (activeHtml) return activeHtml[1] ?? '';
+    if (activeHtml) return { filename: activeHtml[0], content: activeHtml[1] ?? '' };
   }
 
   const rootIndex = entries.find(([filename]) => {
     const key = portableWorkspaceKey(filename);
     return key === 'index.html' || key === 'index.htm';
   });
-  if (rootIndex) return rootIndex[1] ?? '';
+  if (rootIndex) return { filename: rootIndex[0], content: rootIndex[1] ?? '' };
 
   const nestedIndex = entries.find(([filename]) => {
     const key = portableWorkspaceKey(filename).replace(/\\/g, '/');
     return key.endsWith('/index.html') || key.endsWith('/index.htm');
   });
-  if (nestedIndex) return nestedIndex[1] ?? '';
+  if (nestedIndex) return { filename: nestedIndex[0], content: nestedIndex[1] ?? '' };
 
   const firstHtml = entries.find(([filename]) => /\.html?$/i.test(portableWorkspaceKey(filename).replace(/\\/g, '/')));
-  return firstHtml?.[1] ?? '';
+  return firstHtml ? { filename: firstHtml[0], content: firstHtml[1] ?? '' } : undefined;
+}
+
+function resolveHtmlEntry(draft: LabDraft): string {
+  return resolveHtmlEntryRecord(draft)?.content ?? '';
+}
+
+function normalizeRelativeWorkspacePath(rawReference: string, sourcePath: string): string | undefined {
+  const trimmed = rawReference.trim();
+  if (!trimmed || /^(?:[a-z][a-z\d+.-]*:|\/\/|\/|#)/i.test(trimmed)) return undefined;
+  const withoutQuery = trimmed.split(/[?#]/, 1)[0] ?? '';
+  let decoded = withoutQuery;
+  try {
+    decoded = decodeURIComponent(withoutQuery);
+  } catch {
+    return undefined;
+  }
+  const normalized: string[] = sourcePath.replace(/\\/g, '/').split('/').slice(0, -1).filter(Boolean);
+  for (const segment of decoded.replace(/\\/g, '/').split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!normalized.length) return undefined;
+      normalized.pop();
+      continue;
+    }
+    normalized.push(segment);
+  }
+  return normalized.join('/');
+}
+
+function htmlAttribute(tag: string, name: string): string | undefined {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+  return match ? (match[1] ?? match[2] ?? match[3] ?? '') : undefined;
 }
 
 function hasCssRule(draft: LabDraft): boolean {
   const cssRule = /[^{}]+\{[^}]+\}/;
-  for (const [filename, content] of Object.entries(draft.files)) {
-    const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
-    if (normalizedName.endsWith('.css') && cssRule.test(content)) return true;
-    if (/\.html?$/i.test(normalizedName)) {
-      const inlineStyles = content.match(/<style\b[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
-      if (inlineStyles.some((styleBlock) => cssRule.test(styleBlock.replace(/^<style\b[^>]*>|<\/style>$/gi, '')))) return true;
-    }
+  const entry = resolveHtmlEntryRecord(draft);
+  if (!entry) return false;
+
+  const inlineStyles = entry.content.match(/<style\b[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
+  if (inlineStyles.some((styleBlock) => cssRule.test(styleBlock.replace(/^<style\b[^>]*>|<\/style>$/gi, '')))) return true;
+
+  const linkedStyles = entry.content.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of linkedStyles) {
+    const rel = htmlAttribute(tag, 'rel')?.toLowerCase().split(/\s+/) ?? [];
+    const href = htmlAttribute(tag, 'href');
+    if (!href || !rel.includes('stylesheet')) continue;
+    const normalizedPath = normalizeRelativeWorkspacePath(href, entry.filename);
+    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.css')) continue;
+    const content = resolvePortableDraftFile(draft, normalizedPath);
+    if (content && cssRule.test(content)) return true;
   }
-  return false;
+
+  const fallbackPath = normalizeRelativeWorkspacePath('styles.css', entry.filename);
+  const fallbackCss = fallbackPath ? resolvePortableDraftFile(draft, fallbackPath) : '';
+  return Boolean(fallbackCss && cssRule.test(fallbackCss));
 }
 
 function starterFilenameFor(language: LabMission['language']): string {
