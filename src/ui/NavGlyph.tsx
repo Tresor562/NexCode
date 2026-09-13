@@ -137,6 +137,8 @@ const styles = StyleSheet.create({
     top: 2,
     bottom: 2,
     borderRadius: 9,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryBorderStrong,
     backgroundColor: theme.colors.primarySurface,
   },
   activeMarker: {
