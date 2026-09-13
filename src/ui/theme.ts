@@ -118,11 +118,14 @@ export const theme = {
     // Keep its emphasis restrained and centralize the spring so every glyph feels
     // like the same product instead of carrying component-local animation tuning.
     navInactiveOpacity: 0.82,
-    navActiveScale: 1.06,
-    navHaloRestScale: 0.76,
-    navSpringDamping: 18,
-    navSpringStiffness: 230,
-    navSpringMass: 0.65,
+    navActiveScale: 1.045,
+    navHaloRestScale: 0.86,
+    navMarkerRestScale: 0.45,
+    navMarkerActiveScale: 1,
+    navMarkerOffset: 2,
+    navSpringDamping: 20,
+    navSpringStiffness: 245,
+    navSpringMass: 0.62,
     // Learning-path motion follows one compact vocabulary: a short arrival,
     // restrained finite emphasis, and a quick completion confirmation. Keeping
     // these values here prevents individual nodes from drifting into a different
