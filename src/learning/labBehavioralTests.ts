@@ -56,17 +56,17 @@ function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
 
 function resolveHtmlEntry(draft: LabDraft): string {
   const entries = Object.entries(draft.files);
-  const rootIndex = entries.find(([filename]) => {
-    const key = portableWorkspaceKey(filename);
-    return key === 'index.html' || key === 'index.htm';
-  });
-  if (rootIndex) return rootIndex[1] ?? '';
-
   const activeKey = portableWorkspaceKey(draft.activeFile ?? '').replace(/\\/g, '/');
   if (/\.html?$/i.test(activeKey)) {
     const activeHtml = entries.find(([filename]) => portableWorkspaceKey(filename).replace(/\\/g, '/') === activeKey);
     if (activeHtml) return activeHtml[1] ?? '';
   }
+
+  const rootIndex = entries.find(([filename]) => {
+    const key = portableWorkspaceKey(filename);
+    return key === 'index.html' || key === 'index.htm';
+  });
+  if (rootIndex) return rootIndex[1] ?? '';
 
   const nestedIndex = entries.find(([filename]) => {
     const key = portableWorkspaceKey(filename).replace(/\\/g, '/');
