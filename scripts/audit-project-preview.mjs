@@ -90,8 +90,20 @@ function assertPreviewPolicy(output) {
     'portfolio/index.html': '<main>NESTED INDEX</main>',
     'demo/page.html': '<main>ACTIVE PAGE</main>',
   };
-  assert.equal(resolvePreviewHtmlEntry(files, 'demo/page.html'), 'index.html', 'A root index must remain the canonical project entry when it exists');
-  assert.match(buildPreview(files, 'demo/page.html'), /ROOT ENTRY/, 'Project preview must keep root index priority over a secondary active page');
+  assert.equal(resolvePreviewHtmlEntry(files, 'demo/page.html'), 'demo/page.html', 'An explicitly selected HTML page must drive the Project preview even when a root index exists');
+  const output = buildPreview(files, 'demo/page.html');
+  assert.match(output, /ACTIVE PAGE/, 'Project preview must render the HTML page the learner selected');
+  assert.doesNotMatch(output, /ROOT ENTRY/, 'Root index must not overwrite an explicitly selected secondary Project page');
+}
+
+{
+  const files = {
+    'index.html': '<main>ROOT ENTRY</main>',
+    'demo/page.html': '<main>SECONDARY PAGE</main>',
+    'script.js': 'console.log("root")',
+  };
+  assert.equal(resolvePreviewHtmlEntry(files, 'script.js'), 'index.html', 'A non-HTML active file must keep the root index as the stable Project preview entry');
+  assert.match(buildPreview(files, 'script.js'), /ROOT ENTRY/, 'Editing JavaScript must keep the canonical root page visible');
 }
 
 {
