@@ -5,7 +5,7 @@ import { theme } from './theme';
 
 export type NavGlyphName = 'home' | 'learn' | 'lab' | 'projects' | 'profile';
 
-function GlyphBox({ children, style, haloStyle, coreStyle }: { children: React.ReactNode; style?: object; haloStyle?: object; coreStyle?: object }) {
+function GlyphBox({ children, style, haloStyle, coreStyle, markerStyle }: { children: React.ReactNode; style?: object; haloStyle?: object; coreStyle?: object; markerStyle?: object }) {
   return (
     <Animated.View
       accessible={false}
@@ -17,6 +17,7 @@ function GlyphBox({ children, style, haloStyle, coreStyle }: { children: React.R
       <Animated.View pointerEvents="none" style={[styles.activeHalo, haloStyle]} />
       <Animated.View pointerEvents="none" style={[styles.activeCore, coreStyle]} />
       {children}
+      <Animated.View pointerEvents="none" style={[styles.activeMarker, markerStyle]} />
     </Animated.View>
   );
 }
@@ -47,20 +48,27 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   const motionStyle = {
     opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.navInactiveOpacity, 1], extrapolate: 'clamp' }),
-    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, theme.motion.navActiveScale], extrapolate: 'clamp' }) }],
+    transform: [
+      { translateY: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, -theme.motion.navMarkerOffset], extrapolate: 'clamp' }) },
+      { scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [1, theme.motion.navActiveScale], extrapolate: 'clamp' }) },
+    ],
   };
   const haloStyle = {
-    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, 1], extrapolate: 'clamp' }),
+    opacity: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0, 0.82], extrapolate: 'clamp' }),
     transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.navHaloRestScale, 1], extrapolate: 'clamp' }) }],
   };
   const coreStyle = {
-    opacity: emphasis.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, 0.28, 0.72], extrapolate: 'clamp' }),
-    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1], extrapolate: 'clamp' }) }],
+    opacity: emphasis.interpolate({ inputRange: [0, 0.45, 1], outputRange: [0, 0.14, 0.38], extrapolate: 'clamp' }),
+    transform: [{ scale: emphasis.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1], extrapolate: 'clamp' }) }],
+  };
+  const markerStyle = {
+    opacity: emphasis.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 0.45, 1], extrapolate: 'clamp' }),
+    transform: [{ scaleX: emphasis.interpolate({ inputRange: [0, 1], outputRange: [theme.motion.navMarkerRestScale, theme.motion.navMarkerActiveScale], extrapolate: 'clamp' }) }],
   };
 
   if (name === 'home') {
     return (
-      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle} markerStyle={markerStyle}>
         <View style={[styles.roofLeft, colorStyle]} />
         <View style={[styles.roofRight, colorStyle]} />
         <View style={[styles.homeBody, colorStyle]} />
@@ -71,7 +79,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'learn') {
     return (
-      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle} markerStyle={markerStyle}>
         <View style={[styles.bookLeft, colorStyle]} />
         <View style={[styles.bookRight, colorStyle]} />
         <View style={[styles.bookSpine, active ? styles.spineActive : styles.spineInactive]} />
@@ -81,7 +89,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'lab') {
     return (
-      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle} markerStyle={markerStyle}>
         <View style={[styles.chevLeftA, colorStyle]} />
         <View style={[styles.chevLeftB, colorStyle]} />
         <View style={[styles.chevRightA, colorStyle]} />
@@ -93,7 +101,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
 
   if (name === 'projects') {
     return (
-      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle}>
+      <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle} markerStyle={markerStyle}>
         <View style={[styles.folderBack, colorStyle]} />
         <View style={[styles.folderTab, colorStyle]} />
         <View style={[styles.folderFront, colorStyle]} />
@@ -102,7 +110,7 @@ export const NavGlyph = memo(function NavGlyph({ name, active }: { name: NavGlyp
   }
 
   return (
-    <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle}>
+    <GlyphBox style={motionStyle} haloStyle={haloStyle} coreStyle={coreStyle} markerStyle={markerStyle}>
       <View style={[styles.head, colorStyle]} />
       <View style={[styles.shoulders, colorStyle]} />
     </GlyphBox>
@@ -113,25 +121,32 @@ const styles = StyleSheet.create({
   box: { width: 28, height: 28, position: 'relative' },
   activeHalo: {
     position: 'absolute',
-    left: -5,
-    right: -5,
-    top: -5,
-    bottom: -5,
-    borderRadius: 19,
+    left: -4,
+    right: -4,
+    top: -3,
+    bottom: -3,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.colors.primaryBorder,
     backgroundColor: theme.colors.primaryGlass,
   },
   activeCore: {
     position: 'absolute',
-    left: 1,
-    right: 1,
-    top: 1,
-    bottom: 1,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryBorderStrong,
+    left: 2,
+    right: 2,
+    top: 2,
+    bottom: 2,
+    borderRadius: 9,
     backgroundColor: theme.colors.primarySurface,
+  },
+  activeMarker: {
+    position: 'absolute',
+    width: 13,
+    height: 3,
+    borderRadius: 3,
+    left: 7.5,
+    bottom: -7,
+    backgroundColor: theme.colors.primaryBright,
   },
   active: { borderColor: theme.colors.primaryBright, backgroundColor: theme.colors.primaryBright },
   inactive: { borderColor: theme.colors.textMuted, backgroundColor: theme.colors.textMuted },
