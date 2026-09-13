@@ -1,6 +1,6 @@
 import { Course, Lesson } from '../data/curriculumCore';
 import { missionForLesson } from './labEngine';
-import { MasteryMap, SkillNode, prerequisitesReady, skillNeedsEvidence } from './skillGraph';
+import { MasteryMap, SkillMastery, SkillNode, prerequisitesReady, skillNeedsEvidence } from './skillGraph';
 
 export type PracticeReason =
   | 'due-review'
@@ -24,6 +24,22 @@ function isDue(iso: string | undefined, now: Date) {
   return Boolean(iso && new Date(iso).getTime() <= now.getTime());
 }
 
+function recurringMisconception(states: SkillMastery[]): { tag: string; count: number } | undefined {
+  const counts = new Map<string, number>();
+  for (const state of states) {
+    // Evidence preserves repeated attempts while errorTags is intentionally unique.
+    // Look only at recent failures so an old mistake does not dominate forever.
+    for (const item of state.evidence.slice(-12)) {
+      if (item.correct || !item.errorTag) continue;
+      counts.set(item.errorTag, (counts.get(item.errorTag) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([tag, count]) => ({ tag, count }))[0];
+}
+
 function recommendationForLesson(
   course: Course,
   lesson: Lesson,
@@ -34,22 +50,22 @@ function recommendationForLesson(
 ): PracticeRecommendation | undefined {
   const skills = lesson.skillIds ?? [];
   const completed = completedLessonIds.includes(lesson.id);
-  const skillStates = skills.map((id) => mastery[id]).filter(Boolean);
-  const due = skillStates.some((state) => isDue(state?.nextReviewAt, now));
-  const weakest = skillStates.length ? Math.min(...skillStates.map((state) => state?.score ?? 0)) : 0;
-  const hasRecurringError = skillStates.some((state) => (state?.errorTags?.length ?? 0) >= 2);
+  const skillStates = skills.map((id) => mastery[id]).filter((state): state is SkillMastery => Boolean(state));
+  const due = skillStates.some((state) => isDue(state.nextReviewAt, now));
+  const weakest = skillStates.length ? Math.min(...skillStates.map((state) => state.score)) : 0;
+  const recurringError = recurringMisconception(skillStates);
   const lessonNodes = skills.map((id) => graphById.get(id)).filter((node): node is SkillNode => Boolean(node));
   const prereqsReady = lessonNodes.every((node) => prerequisitesReady(node, mastery));
   const needsEvidence = lessonNodes.some((node) => skillNeedsEvidence(node, mastery));
   const kind = lesson.activityKind ?? 'learn';
 
-  if (completed && hasRecurringError) {
+  if (completed && recurringError) {
     return {
       lesson,
       courseId: course.id,
       reason: 'repair-misconception',
-      priority: 118 - weakest,
-      message: 'Réparation ciblée : une erreur revient plusieurs fois. Reprends une variante plutôt que relire passivement.',
+      priority: 118 - weakest + Math.min(12, (recurringError.count - 2) * 3),
+      message: 'Réparation ciblée : la même erreur revient. Reprends une variante et explique ton choix avant de valider.',
       skillIds: skills,
     };
   }
@@ -124,7 +140,7 @@ export function recommendPractice(
   );
 
   const deduped = new Map<string, PracticeRecommendation>();
-  for (const item of candidates.sort((a, b) => b.priority - a.priority)) {
+  for (const item of candidates.sort((a, b) => b.priority - a.priority || a.lesson.id.localeCompare(b.lesson.id))) {
     if (!deduped.has(item.lesson.id)) deduped.set(item.lesson.id, item);
   }
 
@@ -166,6 +182,6 @@ export function nextSessionPlan(recommendations: PracticeRecommendation[], minut
     'repair-misconception', 'due-review', 'weak-skill', 'lab-transfer', 'checkpoint', 'new-skill', 'interleaving',
   ];
   return [...recommendations]
-    .sort((a, b) => orderedReasons.indexOf(a.reason) - orderedReasons.indexOf(b.reason) || b.priority - a.priority)
+    .sort((a, b) => orderedReasons.indexOf(a.reason) - orderedReasons.indexOf(b.reason) || b.priority - a.priority || a.lesson.id.localeCompare(b.lesson.id))
     .slice(0, targetItems);
 }

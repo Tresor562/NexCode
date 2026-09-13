@@ -113,9 +113,11 @@ for (const primitive of ['labDrafts', 'downloadedChapters', 'lessonAttempts', 'l
   if (!localStateSource.includes(primitive)) throw new Error(`Missing persisted learning-state primitive: ${primitive}`);
 }
 for (const primitive of [
-  'targetActivitiesPerCourse: 500', "kind: 'lab'", "kind: 'review'", "kind: 'checkpoint'", "kind: 'boss'", 'masteryGate',
+  'targetActivitiesPerCourse: 180', 'preferredChapterCount: { min: 12, max: 18 }',
+  'preferredActivitiesPerChapter: { min: 9, max: 16 }', "kind: 'lab'", "kind: 'review'",
+  "kind: 'checkpoint'", "kind: 'boss'", 'masteryGate', 'Aucune activité ne doit exister uniquement pour atteindre un quota',
 ]) {
-  if (!pedagogySource.includes(primitive)) throw new Error(`Missing deep-course pedagogy primitive: ${primitive}`);
+  if (!pedagogySource.includes(primitive)) throw new Error(`Missing compact premium pedagogy primitive: ${primitive}`);
 }
 
 console.log(

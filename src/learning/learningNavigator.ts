@@ -1,5 +1,5 @@
 import { ActivityKind, Course, Lesson } from '../data/curriculumCore';
-import { MasteryMap } from './skillGraph';
+import { MasteryMap, SkillMastery } from './skillGraph';
 import { courseMasterySnapshot } from './masteryEngine';
 
 export type LearningFilter = {
@@ -19,8 +19,214 @@ export type LearningSearchResult = {
   score: number;
 };
 
+const PROGRAMMING_IDENTITY_ALIASES = new Map([
+  ['js', 'javascript'],
+  ['ts', 'typescript'],
+]);
+
+const PROGRAMMING_IDENTITY_TERMS = new Set([
+  'c',
+  'c++',
+  'c#',
+  'dart',
+  'go',
+  'java',
+  'javascript',
+  'kotlin',
+  'python',
+  'r',
+  'rust',
+  'swift',
+  'typescript',
+]);
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const MAX_REVIEW_URGENCY_BONUS = 35;
+const MAX_DUE_SKILL_BREADTH_BONUS = 12;
+const RECOMMENDATION_PREREQUISITE_GATE = 55;
+const MAX_PREREQUISITE_PENALTY = 90;
+const COMPLETED_NOT_DUE_PENALTY = 80;
+const RETRIEVAL_PRACTICE_BONUS = 4;
+const TRANSFER_PRACTICE_BONUS = 5;
+const HANDS_ON_LAB_BONUS = 7;
+const MAX_EXPERIENTIAL_DEPTH_BONUS = 16;
+const MAX_COMPLETION_ID_CHARS = 160;
+const MAX_SKILL_ID_CHARS = 160;
+
 function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function completedLessonSet(completedLessonIds: string[]) {
+  const completed = new Set<string>();
+  for (const rawId of completedLessonIds) {
+    if (typeof rawId !== 'string') continue;
+    const lessonId = rawId.trim();
+    if (!lessonId || lessonId.length > MAX_COMPLETION_ID_CHARS || /[\u0000-\u001f\u007f]/.test(lessonId)) continue;
+    completed.add(lessonId);
+  }
+  return completed;
+}
+
+function canonicalSkillIds(rawSkillIds: readonly string[] | undefined) {
+  const skillIds = new Set<string>();
+  for (const rawId of rawSkillIds ?? []) {
+    if (typeof rawId !== 'string') continue;
+    const skillId = rawId.trim();
+    if (!skillId || skillId.length > MAX_SKILL_ID_CHARS || /[\u0000-\u001f\u007f]/.test(skillId)) continue;
+    skillIds.add(skillId);
+  }
+  return [...skillIds];
+}
+
+function canonicalSearchToken(token: string) {
+  return PROGRAMMING_IDENTITY_ALIASES.get(token) ?? token;
+}
+
+function tokenizeSearch(value: string) {
+  return [...new Set(
+    normalize(value)
+      .split(/[^\p{L}\p{N}+#._-]+/u)
+      .map((token) => canonicalSearchToken(token.trim()))
+      .filter(Boolean),
+  )];
+}
+
+function fieldMatchesTerm(value: string, term: string) {
+  if (!PROGRAMMING_IDENTITY_TERMS.has(term)) return value.includes(term);
+  return tokenizeSearch(value).includes(term);
+}
+
+function reviewIsDue(nextReviewAt: string | undefined, now: Date) {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return false;
+  if (!nextReviewAt) return true;
+  const nextReviewMs = Date.parse(nextReviewAt);
+  if (!Number.isFinite(nextReviewMs)) return true;
+  return nextReviewMs <= nowMs;
+}
+
+function reviewUrgencyBonus(nextReviewAt: string | undefined, now: Date) {
+  const nowMs = now.getTime();
+  if (!Number.isFinite(nowMs)) return 0;
+  if (!nextReviewAt) return 12;
+  const nextReviewMs = Date.parse(nextReviewAt);
+  if (!Number.isFinite(nextReviewMs)) return 12;
+  if (nextReviewMs > nowMs) return 0;
+
+  const overdueDays = Math.max(0, Math.floor((nowMs - nextReviewMs) / DAY_MS));
+  return Math.min(MAX_REVIEW_URGENCY_BONUS, 12 + Math.floor(Math.log2(overdueDays + 1) * 6));
+}
+
+function dueSkillBreadthBonus(dueSkillCount: number) {
+  if (!Number.isFinite(dueSkillCount) || dueSkillCount <= 1) return 0;
+  return Math.min(MAX_DUE_SKILL_BREADTH_BONUS, (Math.floor(dueSkillCount) - 1) * 4);
+}
+
+function boundedMasteryScore(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value))
+    : 0;
+}
+
+function experientialDepthBonus(lesson: Lesson) {
+  let bonus = 0;
+  if (lesson.retrievalPrompt?.trim()) bonus += RETRIEVAL_PRACTICE_BONUS;
+  if (lesson.transferPrompt?.trim()) bonus += TRANSFER_PRACTICE_BONUS;
+  if (lesson.labMission?.instructions?.trim() || lesson.labMission?.successCriteria?.length) bonus += HANDS_ON_LAB_BONUS;
+  return Math.min(MAX_EXPERIENTIAL_DEPTH_BONUS, bonus);
+}
+
+function prerequisiteReadinessPenalty(lesson: Lesson, mastery: MasteryMap) {
+  const prerequisites = canonicalSkillIds(lesson.prerequisiteSkillIds);
+  if (!prerequisites.length) return 0;
+
+  let penalty = 0;
+  for (const skillId of prerequisites) {
+    const state = mastery[skillId];
+    if (!state) {
+      penalty += 40;
+      continue;
+    }
+
+    const score = boundedMasteryScore(state.score);
+    if (score < RECOMMENDATION_PREREQUISITE_GATE) {
+      const readinessGap = RECOMMENDATION_PREREQUISITE_GATE - score;
+      penalty += 20 + Math.ceil((readinessGap / RECOMMENDATION_PREREQUISITE_GATE) * 25);
+    }
+  }
+
+  return Math.min(MAX_PREREQUISITE_PENALTY, penalty);
+}
+
+function learningPriorityScore(lesson: Lesson, completed: Set<string>, mastery: MasteryMap, now: Date) {
+  const skillStates = canonicalSkillIds(lesson.skillIds)
+    .map((skillId) => mastery[skillId])
+    .filter((state): state is SkillMastery => Boolean(state));
+  const dueStates = skillStates.filter((state) => reviewIsDue(state.nextReviewAt, now));
+  const dueReview = dueStates.length > 0;
+  const isCompleted = completed.has(lesson.id);
+  const weakestSkill = skillStates.length
+    ? Math.min(...skillStates.map((state) => boundedMasteryScore(state.score)))
+    : 0;
+  const reviewUrgency = dueStates.length
+    ? Math.max(...dueStates.map((state) => reviewUrgencyBonus(state.nextReviewAt, now)))
+    : 0;
+  const dueBreadth = dueSkillBreadthBonus(dueStates.length);
+
+  let score = 1;
+  if (!isCompleted) score += 45;
+  if (dueReview) score += 70 + reviewUrgency + dueBreadth;
+  if (isCompleted && !dueReview) score -= COMPLETED_NOT_DUE_PENALTY;
+  score += Math.round((100 - weakestSkill) * 0.2);
+
+  const kind = lesson.activityKind ?? 'learn';
+  if (kind === 'review') score += dueReview ? 18 : 0;
+  else if (kind === 'practice') score += 10;
+  else if (kind === 'lab') score += 8;
+  else if (kind === 'checkpoint' || kind === 'boss') score += 5;
+
+  // Prefer lessons that close the learning loop: recall from memory, transfer the
+  // concept to a fresh context, then build something concrete. The bonus stays
+  // deliberately smaller than review urgency and prerequisite penalties so it
+  // improves pedagogical quality without overriding what the learner needs next.
+  score += experientialDepthBonus(lesson);
+
+  // Prerequisites should sequence unseen material, not suppress spaced repetition for
+  // a lesson the learner has already completed. Once learned, a due review remains
+  // actionable even if an upstream mastery score later decays below the new-content gate.
+  if (!isCompleted) score -= prerequisiteReadinessPenalty(lesson, mastery);
+  return score;
+}
+
+function weightedSearchScore(
+  terms: string[],
+  phrase: string,
+  fields: Array<{ value: string; weight: number }>,
+) {
+  if (!terms.length) return 1;
+  const normalizedFields = fields.map(({ value, weight }) => ({ value: normalize(value), weight }));
+  if (!terms.every((term) => normalizedFields.some((field) => fieldMatchesTerm(field.value, term)))) return 0;
+
+  let score = 0;
+  for (const term of terms) {
+    let bestWeight = 0;
+    for (const field of normalizedFields) {
+      if (fieldMatchesTerm(field.value, term)) bestWeight = Math.max(bestWeight, field.weight);
+    }
+    score += bestWeight;
+  }
+
+  const combined = normalizedFields.map((field) => field.value).join(' ');
+  if (phrase && normalizedFields[0]?.value.includes(phrase)) score += 80;
+  else if (phrase && combined.includes(phrase)) score += 35;
+
+  return score;
 }
 
 export function searchLearningActivities(
@@ -30,46 +236,64 @@ export function searchLearningActivities(
   mastery: MasteryMap,
   now = new Date(),
 ): LearningSearchResult[] {
-  const query = normalize(filter.query?.trim() ?? '');
-  const results: LearningSearchResult[] = [];
+  const query = filter.query?.trim() ?? '';
+  const terms = tokenizeSearch(query);
+  const phrase = terms.join(' ');
+  const completed = completedLessonSet(completedLessonIds);
+  const results: Array<LearningSearchResult & { curriculumOrder: number }> = [];
+  let curriculumOrder = 0;
+
   for (const course of courses) {
     if (filter.courseIds?.length && !filter.courseIds.includes(course.id)) continue;
+    const lessonsById = new Map(course.starterLessons.map((lesson) => [lesson.id, lesson]));
     for (const chapter of course.chapters) {
       for (const unit of chapter.units) {
         for (const lessonId of unit.lessonIds) {
-          const lesson = course.starterLessons.find((item) => item.id === lessonId);
+          const lessonOrder = curriculumOrder++;
+          const lesson = lessonsById.get(lessonId);
           if (!lesson) continue;
-          if (filter.onlyIncomplete && completedLessonIds.includes(lesson.id)) continue;
+          if (filter.onlyIncomplete && completed.has(lesson.id)) continue;
           if (filter.kinds?.length && !filter.kinds.includes(lesson.activityKind ?? 'learn')) continue;
           if (filter.difficulty?.length && !filter.difficulty.includes(lesson.difficulty ?? 1)) continue;
           if (filter.onlyDueReview) {
-            const due = (lesson.skillIds ?? []).some((skillId) => {
-              const next = mastery[skillId]?.nextReviewAt;
-              return Boolean(next && new Date(next).getTime() <= now.getTime());
+            const due = canonicalSkillIds(lesson.skillIds).some((skillId) => {
+              const state = mastery[skillId];
+              return state ? reviewIsDue(state.nextReviewAt, now) : false;
             });
             if (!due) continue;
           }
-          const haystack = normalize(`${course.title} ${course.language} ${chapter.title} ${unit.title} ${lesson.title} ${lesson.concept} ${(lesson.skillIds ?? []).join(' ')}`);
-          if (query && !haystack.includes(query)) continue;
-          const score = query
-            ? (normalize(lesson.title).includes(query) ? 50 : 0)
-              + (normalize(chapter.title).includes(query) ? 20 : 0)
-              + (normalize(course.title).includes(query) ? 10 : 0)
-            : 1;
-          results.push({ course, lesson, chapterId: chapter.id, unitId: unit.id, score });
+
+          const searchScore = weightedSearchScore(terms, phrase, [
+            { value: lesson.title, weight: 60 },
+            { value: lesson.concept, weight: 45 },
+            { value: canonicalSkillIds(lesson.skillIds).join(' '), weight: 40 },
+            { value: unit.title, weight: 28 },
+            { value: chapter.title, weight: 20 },
+            { value: course.title, weight: 16 },
+            { value: course.language, weight: 12 },
+          ]);
+          if (terms.length && searchScore <= 0) continue;
+          const score = terms.length
+            ? searchScore
+            : learningPriorityScore(lesson, completed, mastery, now);
+          results.push({ course, lesson, chapterId: chapter.id, unitId: unit.id, score, curriculumOrder: lessonOrder });
         }
       }
     }
   }
-  return results.sort((a, b) => b.score - a.score || a.lesson.title.localeCompare(b.lesson.title));
+
+  return results
+    .sort((a, b) => b.score - a.score || a.curriculumOrder - b.curriculumOrder)
+    .map(({ curriculumOrder: _curriculumOrder, ...result }) => result);
 }
 
 export function courseNavigationSummary(course: Course, completedLessonIds: string[], mastery: MasteryMap) {
   const masterySnapshot = courseMasterySnapshot(course, mastery);
-  const completed = course.starterLessons.filter((lesson) => completedLessonIds.includes(lesson.id)).length;
+  const completedSet = completedLessonSet(completedLessonIds);
+  const completed = course.starterLessons.filter((lesson) => completedSet.has(lesson.id)).length;
   const chapters = course.chapters.map((chapter) => {
-    const chapterCompleted = chapter.lessonIds.filter((id) => completedLessonIds.includes(id)).length;
-    const nextLessonId = chapter.lessonIds.find((id) => !completedLessonIds.includes(id));
+    const chapterCompleted = chapter.lessonIds.filter((id) => completedSet.has(id)).length;
+    const nextLessonId = chapter.lessonIds.find((id) => !completedSet.has(id));
     return {
       id: chapter.id,
       title: chapter.title,

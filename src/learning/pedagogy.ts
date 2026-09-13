@@ -17,9 +17,12 @@ export type CourseDepthPolicy = {
 };
 
 export const beginnerCourseDepthPolicy: CourseDepthPolicy = {
-  targetActivitiesPerCourse: 500,
-  preferredChapterCount: { min: 20, max: 35 },
-  preferredActivitiesPerChapter: { min: 15, max: 30 },
+  // Premium-first: the target is deliberately compact enough that every authored
+  // activity can justify its place. Breadth comes from additional courses and
+  // projects, not from inflating one path with hundreds of near-duplicate screens.
+  targetActivitiesPerCourse: 180,
+  preferredChapterCount: { min: 12, max: 18 },
+  preferredActivitiesPerChapter: { min: 9, max: 16 },
   phases: [
     { kind: 'learn', purpose: 'Introduire une seule nouvelle notion avec modèle mental et exemple minimal.', minOccurrences: 1 },
     { kind: 'practice', purpose: 'Rappeler immédiatement la notion sans recopier la solution.', minOccurrences: 2 },
@@ -31,6 +34,7 @@ export const beginnerCourseDepthPolicy: CourseDepthPolicy = {
   ],
   rules: [
     'Une activité doit introduire, pratiquer, réviser, combiner ou évaluer une compétence identifiable.',
+    'Aucune activité ne doit exister uniquement pour atteindre un quota, allonger artificiellement un cours ou répéter une consigne sans nouveau défi cognitif.',
     'Aucun compteur de leçons ne doit être saisi manuellement : il dérive du contenu réel.',
     'Une nouvelle notion ne doit pas être débloquée si ses prérequis essentiels sont faibles.',
     'Chaque compétence importante doit réapparaître dans un autre contexte plus tard dans le parcours.',
@@ -41,7 +45,17 @@ export const beginnerCourseDepthPolicy: CourseDepthPolicy = {
   ],
 };
 
+function finitePositiveInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.floor(value);
+}
+
 export function estimatedConceptCapacity(policy = beginnerCourseDepthPolicy) {
-  const activitiesPerConcept = policy.phases.reduce((sum, phase) => sum + phase.minOccurrences, 0);
-  return Math.floor(policy.targetActivitiesPerCourse / activitiesPerConcept);
+  const targetActivities = finitePositiveInteger(policy.targetActivitiesPerCourse);
+  const activitiesPerConcept = policy.phases.reduce(
+    (sum, phase) => sum + finitePositiveInteger(phase?.minOccurrences),
+    0,
+  );
+  if (!targetActivities || !activitiesPerConcept) return 0;
+  return Math.floor(targetActivities / activitiesPerConcept);
 }

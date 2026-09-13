@@ -1,5 +1,6 @@
 import { LabMission } from '../data/curriculumCore';
 import { LabDraft } from '../lib/localState';
+import { containsLikelyWorkspaceSecret, workspaceCollisionKey } from '../lib/workspaceSafety';
 
 export type BehavioralTest = {
   id: string;
@@ -16,17 +17,185 @@ export type BehavioralSuiteResult = {
   hint?: string;
 };
 
-const secretPatterns = [
-  /(?:bot[_-]?token|api[_-]?key|client[_-]?secret|private[_-]?key)\s*[=:]\s*["']?(?!replace|example|test|your|changeme)[A-Za-z0-9_\-.]{12,}/i,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-];
+function normalizeSource(content: string): string {
+  return content
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/g, ''))
+    .join('\n')
+    .replace(/\n+$/g, '');
+}
+
+function meaningfulEvidenceSource(content: string, filename: string): string {
+  const normalizedName = filename.normalize('NFC').toLocaleLowerCase('en-US');
+  const supportsHashComments = /\.(?:py|pyw|sh|bash|zsh|fish|ya?ml|toml|ini|cfg|conf)$/i.test(normalizedName);
+  const supportsSqlComments = /\.sql$/i.test(normalizedName);
+  return normalizeSource(content)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => {
+      if (/^\s*\/\/(?:\s|$)/.test(line)) return false;
+      if (supportsHashComments && /^\s*#(?:\s|$)/.test(line)) return false;
+      if (supportsSqlComments && /^\s*--(?:\s|$)/.test(line)) return false;
+      return true;
+    })
+    .join('\n')
+    .replace(/\s+/g, '');
+}
+
+function portableWorkspaceKey(filename: string): string {
+  return workspaceCollisionKey(filename);
+}
+
+function resolvePortableDraftFile(draft: LabDraft, filename: string): string {
+  const key = portableWorkspaceKey(filename);
+  const actualName = Object.keys(draft.files).find((candidate) => portableWorkspaceKey(candidate) === key);
+  return actualName ? draft.files[actualName] ?? '' : '';
+}
+
+type HtmlEntry = { filename: string; content: string };
+
+function resolveHtmlEntryRecord(draft: LabDraft): HtmlEntry | undefined {
+  const entries = Object.entries(draft.files);
+  const activeKey = portableWorkspaceKey(draft.activeFile ?? '').replace(/\\/g, '/');
+  if (/\.html?$/i.test(activeKey)) {
+    const activeHtml = entries.find(([filename]) => portableWorkspaceKey(filename).replace(/\\/g, '/') === activeKey);
+    if (activeHtml) return { filename: activeHtml[0], content: activeHtml[1] ?? '' };
+  }
+
+  const rootIndex = entries.find(([filename]) => {
+    const key = portableWorkspaceKey(filename);
+    return key === 'index.html' || key === 'index.htm';
+  });
+  if (rootIndex) return { filename: rootIndex[0], content: rootIndex[1] ?? '' };
+
+  const nestedIndex = entries.find(([filename]) => {
+    const key = portableWorkspaceKey(filename).replace(/\\/g, '/');
+    return key.endsWith('/index.html') || key.endsWith('/index.htm');
+  });
+  if (nestedIndex) return { filename: nestedIndex[0], content: nestedIndex[1] ?? '' };
+
+  const firstHtml = entries.find(([filename]) => /\.html?$/i.test(portableWorkspaceKey(filename).replace(/\\/g, '/')));
+  return firstHtml ? { filename: firstHtml[0], content: firstHtml[1] ?? '' } : undefined;
+}
+
+function resolveHtmlEntry(draft: LabDraft): string {
+  return resolveHtmlEntryRecord(draft)?.content ?? '';
+}
+
+function normalizeRelativeWorkspacePath(rawReference: string, sourcePath: string): string | undefined {
+  const trimmed = rawReference.trim();
+  if (!trimmed || /^(?:[a-z][a-z\d+.-]*:|\/\/|\/|#)/i.test(trimmed)) return undefined;
+  const withoutQuery = trimmed.split(/[?#]/, 1)[0] ?? '';
+  let decoded = withoutQuery;
+  try {
+    decoded = decodeURIComponent(withoutQuery);
+  } catch {
+    return undefined;
+  }
+  const normalized: string[] = sourcePath.replace(/\\/g, '/').split('/').slice(0, -1).filter(Boolean);
+  for (const segment of decoded.replace(/\\/g, '/').split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      if (!normalized.length) return undefined;
+      normalized.pop();
+      continue;
+    }
+    normalized.push(segment);
+  }
+  return normalized.join('/');
+}
+
+function htmlAttribute(tag: string, name: string): string | undefined {
+  const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'));
+  return match ? (match[1] ?? match[2] ?? match[3] ?? '') : undefined;
+}
+
+function hasCssRule(draft: LabDraft): boolean {
+  const cssRule = /[^{}]+\{[^}]+\}/;
+  const entry = resolveHtmlEntryRecord(draft);
+  if (!entry) return false;
+
+  const inlineStyles = entry.content.match(/<style\b[^>]*>([\s\S]*?)<\/style>/gi) ?? [];
+  if (inlineStyles.some((styleBlock) => cssRule.test(styleBlock.replace(/^<style\b[^>]*>|<\/style>$/gi, '')))) return true;
+
+  const linkedStyles = entry.content.match(/<link\b[^>]*>/gi) ?? [];
+  for (const tag of linkedStyles) {
+    const rel = htmlAttribute(tag, 'rel')?.toLowerCase().split(/\s+/) ?? [];
+    const href = htmlAttribute(tag, 'href');
+    if (!href || !rel.includes('stylesheet')) continue;
+    const normalizedPath = normalizeRelativeWorkspacePath(href, entry.filename);
+    if (!normalizedPath || !normalizedPath.toLowerCase().endsWith('.css')) continue;
+    const content = resolvePortableDraftFile(draft, normalizedPath);
+    if (content && cssRule.test(content)) return true;
+  }
+
+  const fallbackPath = normalizeRelativeWorkspacePath('styles.css', entry.filename);
+  const fallbackCss = fallbackPath ? resolvePortableDraftFile(draft, fallbackPath) : '';
+  return Boolean(fallbackCss && cssRule.test(fallbackCss));
+}
+
+function starterFilenameFor(language: LabMission['language']): string {
+  if (language === 'Python') return 'main.py';
+  if (language === 'SQL') return 'query.sql';
+  if (language === 'Git') return 'commands.txt';
+  if (language === 'Node/API') return 'server.js';
+  if (language === 'Bots') return 'bot.js';
+  if (language === 'HTML/CSS') return 'index.html';
+  return 'main.js';
+}
+
+function hasMeaningfulStarterDelta(mission: LabMission, draft: LabDraft): boolean {
+  const starterFiles = mission.starterFiles ?? {};
+  const starterEntries = Object.entries(starterFiles);
+
+  if (starterEntries.length) {
+    const draftByKey = new Map(
+      Object.entries(draft.files).map(([filename, content]) => [portableWorkspaceKey(filename), { filename, content }]),
+    );
+
+    for (const [filename, starterContent] of starterEntries) {
+      const stored = draftByKey.get(portableWorkspaceKey(filename));
+      if (stored === undefined) return false;
+      if (normalizeSource(starterContent).trim().length > 0 && normalizeSource(stored.content).trim().length === 0) return false;
+    }
+
+    for (const [filename, content] of Object.entries(draft.files)) {
+      const key = portableWorkspaceKey(filename);
+      const starterEntry = starterEntries.find(([starterFilename]) => portableWorkspaceKey(starterFilename) === key);
+      if (!starterEntry) {
+        if (meaningfulEvidenceSource(content, filename).length >= 12) return true;
+        continue;
+      }
+
+      if (meaningfulEvidenceSource(content, filename) !== meaningfulEvidenceSource(starterEntry[1], starterEntry[0])) return true;
+    }
+
+    return false;
+  }
+
+  const starterCode = mission.starterCode;
+  if (typeof starterCode === 'string' && starterCode.length) {
+    const starterFilename = starterFilenameFor(mission.language);
+    const meaningfulStarter = meaningfulEvidenceSource(starterCode, starterFilename);
+    const substantiveFiles = Object.entries(draft.files)
+      .map(([filename, content]) => meaningfulEvidenceSource(content, filename))
+      .filter((content) => content.length > 0);
+    if (!substantiveFiles.length) return false;
+    if (substantiveFiles.length === 1) return substantiveFiles[0] !== meaningfulStarter;
+    return substantiveFiles.some((content) => content !== meaningfulStarter);
+  }
+
+  return Object.entries(draft.files)
+    .map(([filename, content]) => meaningfulEvidenceSource(content, filename))
+    .join('').length >= 60;
+}
 
 export function secretSafetyIssues(draft: LabDraft) {
   const issues: string[] = [];
   for (const [filename, content] of Object.entries(draft.files)) {
-    for (const pattern of secretPatterns) {
-      if (pattern.test(content)) issues.push(`${filename}: secret potentiel détecté`);
-    }
+    if (containsLikelyWorkspaceSecret(content)) issues.push(`${filename}: secret potentiel détecté`);
   }
   return issues;
 }
@@ -44,12 +213,17 @@ export function defaultBehavioralTests(mission: LabMission): BehavioralTest[] {
       label: 'Le workspace contient un travail non vide et explicable',
       run: (draft) => Object.values(draft.files).some((content) => content.trim().length >= 20),
     },
+    {
+      id: 'starter-delta',
+      label: 'Le travail contient une modification réelle par rapport au code de départ',
+      hidden: true,
+      run: (draft) => hasMeaningfulStarterDelta(mission, draft),
+    },
   ];
   if (language === 'HTML/CSS') {
     tests.push(
-      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(draft.files['index.html'] ?? '') },
-      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: (draft) => /[^{}]+\{[^}]+\}/.test(draft.files['styles.css'] ?? '') },
-      { id: 'web-change', label: 'Le HTML ou CSS a été réellement modifié', hidden: true, run: (draft) => Object.values(draft.files).join('\n').trim().length >= 60 },
+      { id: 'html-structure', label: 'Le document contient une structure HTML', run: (draft) => /<\w+[^>]*>[\s\S]*<\/\w+>/i.test(resolveHtmlEntry(draft)) },
+      { id: 'css-rule', label: 'Au moins une règle CSS est présente', run: hasCssRule },
     );
   } else if (language === 'JavaScript') {
     tests.push({ id: 'js-logic', label: 'Le code contient une déclaration ou une fonction', run: (draft) => /\b(const|let|var|function|class)\b/.test(Object.values(draft.files).join('\n')) });
