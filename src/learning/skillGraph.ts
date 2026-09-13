@@ -1,4 +1,4 @@
-import { Course, Lesson, MasteryBand } from '../data/curriculumCore';
+import { ActivityKind, Course, Lesson, MasteryBand } from '../data/curriculumCore';
 import { prerequisiteRuleMap } from './skillPrerequisites';
 
 export type SkillNode = {
@@ -13,7 +13,7 @@ export type SkillNode = {
 
 export type AttemptEvidence = {
   lessonId: string;
-  activityKind: string;
+  activityKind: ActivityKind;
   correct: boolean;
   scoreDelta: number;
   at: string;
@@ -39,6 +39,7 @@ export type MasteryMap = Record<string, SkillMastery>;
 const MAX_EVIDENCE_CONTEXT_LENGTH = 160;
 const MAX_RESTORED_ATTEMPT_CLOCK_SKEW_MS = 5 * 60_000;
 const MAX_FUTURE_EVIDENCE_SKEW_MS = 5 * 60_000;
+const VALID_ACTIVITY_KINDS = new Set<ActivityKind>(['learn', 'practice', 'lab', 'review', 'checkpoint', 'project', 'boss']);
 
 export function masteryBand(score: number): MasteryBand {
   if (score >= 85) return 'mastered';
@@ -118,7 +119,9 @@ function usableEvidence(value: unknown): AttemptEvidence[] {
     const candidate = item as Partial<AttemptEvidence>;
     return (
       typeof candidate.lessonId === 'string' &&
+      canonicalEvidenceContext(candidate.lessonId) !== null &&
       typeof candidate.activityKind === 'string' &&
+      VALID_ACTIVITY_KINDS.has(candidate.activityKind as ActivityKind) &&
       typeof candidate.correct === 'boolean' &&
       typeof candidate.scoreDelta === 'number' &&
       Number.isFinite(candidate.scoreDelta) &&
