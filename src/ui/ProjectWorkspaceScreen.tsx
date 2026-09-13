@@ -278,12 +278,12 @@ function resolvePreviewHtmlEntry(files: Record<string, string>, activeFile?: str
   const htmlFiles = Object.keys(files).filter((name) => /\.html?$/i.test(name));
   if (!htmlFiles.length) return '';
 
-  const rootIndex = htmlFiles.find((name) => /^index\.html?$/i.test(name));
-  if (rootIndex) return rootIndex;
-
   if (activeFile && /\.html?$/i.test(activeFile) && Object.prototype.hasOwnProperty.call(files, activeFile)) {
     return activeFile;
   }
+
+  const rootIndex = htmlFiles.find((name) => /^index\.html?$/i.test(name));
+  if (rootIndex) return rootIndex;
 
   const nestedIndex = htmlFiles.find((name) => /(^|\/)index\.html?$/i.test(name));
   return nestedIndex ?? htmlFiles[0] ?? '';
